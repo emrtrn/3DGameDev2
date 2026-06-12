@@ -1,6 +1,6 @@
 # MEMORY — Oturum Hafızası (3DGameDev / Ev Ustası)
 
-Son güncelleme: 2026-06-12 (Vite + TS proje iskeleti kuruldu)
+Son güncelleme: 2026-06-12 (asset pipeline + Kenney envanteri tamamlandı)
 Amaç: Claude her oturum açılışında bilmesi gerekenleri buradan okur; oturum sonunda günceller. Kalıcı kurallar `CLAUDE.md`'de.
 
 ## Aktif durum
@@ -11,6 +11,7 @@ Amaç: Claude her oturum açılışında bilmesi gerekenleri buradan okur; oturu
 - Agent sistemi kuruldu (2026-06-12): `.claude/agents/` altında 6 dev agent (scene-3d-dev, gameplay-dev, ui-dev, juice-audio-dev, asset-pipeline, qa-poki).
 - **Yol haritası oluşturuldu (2026-06-12): `docs/roadmap.md`** — H1–H13 planı 6 faza ayrıldı; faz başına agent atamaları, geçiş kriterleri ve 7 öneri (git init, perf-log standardı, erken playtest havuzu vb.). Yaşayan doküman; görevler orada `[x]` işaretlenir.
 - **Git deposu başlatıldı (2026-06-12):** `main` dalı, ilk commit `ed0c85f` (GDD + docs + agent sistemi, 22 dosya); `.gitignore` + `.gitattributes` (LF normalize) eklendi. roadmap.md öneri #1 kapandı; öneri #8 (referans cihaz) ve #9 (save şeması H4'te) eklendi.
+- **Asset pipeline kuruldu + Kenney envanteri çıktı (2026-06-12, asset-pipeline):** 4 kit indirildi (`tools/raw-assets/`, git-ignored): Furniture Kit, Modular Buildings, Food Kit, **Blocky Characters v2.0** (18 rigli karakter, `emote-yes`/`emote-no` dahil — müşteri karakteri boşluğunu kapatabilir!). `npm run assets:build` → `tools/process-assets.mjs` (prune+weld+meshopt; KTX2 toktx kurulunca otomatik). 15 GLB işlendi → `public/assets/models/` + manifest (−%46,8). Rapor: `docs/2026-06-12-kenney-inventory.md`. scene-3d-dev notu: GLTFLoader'a MeshoptDecoder şart; `KHR_materials_unlit` ışık testinde doğrulanmalı. Tek kategori boşluğu: Wall Decor.
 - **Motor kararı kesin (2026-06-12, Emre onayladı): Three.js** (`three@0.184.0` pinli; Vite + TS, gltf-transform pipeline). Karar notu: `docs/2026-06-12-engine-decision.md` (H1 görev listesi §5'te). GDD 00-overview açık sorusu kapatıldı, 08-milestones işlendi. Geri dönüş sigortası: M1–M9 motor import etmez, motor teması yalnız `scene/` katmanında.
 
 ## Sıradaki adımlar (sırayla)

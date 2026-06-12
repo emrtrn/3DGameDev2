@@ -1,0 +1,232 @@
+{
+  "version": 1,
+  "generated": "2026-06-12",
+  "ktx2": false,
+  "assets": [
+    {
+      "id": "bed-single",
+      "file": "assets/models/furniture-beds/bedSingle.glb",
+      "type": "model",
+      "category": "beds",
+      "loadGroup": "furniture-beds",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 10172
+    },
+    {
+      "id": "bookcase-open",
+      "file": "assets/models/furniture-storage/bookcaseOpen.glb",
+      "type": "model",
+      "category": "storage",
+      "loadGroup": "furniture-storage",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 4512
+    },
+    {
+      "id": "chair-modern-cushion",
+      "file": "assets/models/furniture-seating/chairModernCushion.glb",
+      "type": "model",
+      "category": "sofas-chairs",
+      "loadGroup": "furniture-seating",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 4056
+    },
+    {
+      "id": "desk",
+      "file": "assets/models/furniture-tables/desk.glb",
+      "type": "model",
+      "category": "tables-desks",
+      "loadGroup": "furniture-tables",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 6332
+    },
+    {
+      "id": "doorway",
+      "file": "assets/models/core/doorway.glb",
+      "type": "model",
+      "category": "room-shell",
+      "loadGroup": "core",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 6432
+    },
+    {
+      "id": "floor-full",
+      "file": "assets/models/core/floorFull.glb",
+      "type": "model",
+      "category": "room-shell",
+      "loadGroup": "core",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 2008
+    },
+    {
+      "id": "lamp-round-floor",
+      "file": "assets/models/furniture-lighting/lampRoundFloor.glb",
+      "type": "model",
+      "category": "lighting",
+      "loadGroup": "furniture-lighting",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 3936
+    },
+    {
+      "id": "lounge-sofa",
+      "file": "assets/models/furniture-seating/loungeSofa.glb",
+      "type": "model",
+      "category": "sofas-chairs",
+      "loadGroup": "furniture-seating",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 4588
+    },
+    {
+      "id": "potted-plant",
+      "file": "assets/models/furniture-plants/pottedPlant.glb",
+      "type": "model",
+      "category": "plants",
+      "loadGroup": "furniture-plants",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 5356
+    },
+    {
+      "id": "rug-rectangle",
+      "file": "assets/models/furniture-rugs/rugRectangle.glb",
+      "type": "model",
+      "category": "rugs",
+      "loadGroup": "furniture-rugs",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 3232
+    },
+    {
+      "id": "side-table",
+      "file": "assets/models/furniture-tables/sideTable.glb",
+      "type": "model",
+      "category": "tables-desks",
+      "loadGroup": "furniture-tables",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 4204
+    },
+    {
+      "id": "table-coffee",
+      "file": "assets/models/furniture-tables/tableCoffee.glb",
+      "type": "model",
+      "category": "tables-desks",
+      "loadGroup": "furniture-tables",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 3064
+    },
+    {
+      "id": "wall",
+      "file": "assets/models/core/wall.glb",
+      "type": "model",
+      "category": "room-shell",
+      "loadGroup": "core",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 4084
+    },
+    {
+      "id": "wall-corner",
+      "file": "assets/models/core/wallCorner.glb",
+      "type": "model",
+      "category": "room-shell",
+      "loadGroup": "core",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 4292
+    },
+    {
+      "id": "wall-window",
+      "file": "assets/models/core/wallWindow.glb",
+      "type": "model",
+      "category": "room-shell",
+      "loadGroup": "core",
+      "source": {
+        "origin": "kenney",
+        "pack": "Furniture Kit",
+        "packVersion": "1.0",
+        "url": "https://kenney.nl/assets/furniture-kit"
+      },
+      "license": "CC0-1.0",
+      "bytes": 7336
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 > Durum: taslak | Versiyon: 0.1 | Tarih: 2026-06-12 | Bağımlı: 02-mechanics.md, 03-economy.md, 08-milestones.md
 
-İçerik listeleri. Kapsam etiketi: **[DD]** = dikey dilim, **[MVP]** = tam MVP, **[KES]** = kesilebilir (08-milestones). Oyun içi tüm adlar İngilizce ve tırnak içinde; bu dosya oyun içi metinlerin tek listesidir (ders L10). Sayısal değerler → `balance/parameters.md`. Asset varsayımı: Kenney Modular Buildings (oda kabukları), Furniture Kit (mobilya), Food Kit (mutfak/masa propları) — kapsam doğrulaması tech-architect envanterinde (00-overview açık sorusu).
+İçerik listeleri. Kapsam etiketi: **[DD]** = dikey dilim, **[MVP]** = tam MVP, **[KES]** = kesilebilir (08-milestones). Oyun içi tüm adlar İngilizce ve tırnak içinde; bu dosya oyun içi metinlerin tek listesidir (ders L10). Sayısal değerler → `balance/parameters.md`. Asset varsayımı (envanterle düzeltildi, Emre onayı 2026-06-12): Kenney Furniture Kit (oda kabukları **ve** mobilya — wall/floor/doorway serisi kitin içinde), Food Kit (mutfak/masa propları). Modular Buildings dış cephe kitidir, iç mekan parçası içermez; yalnız olası dış görünüm/arka plan için not edildi. Envanter: 3DGameDev `docs/2026-06-12-kenney-inventory.md`.
 
 ## 1. Mahalleler ve işler (ev/oda tipleri)
 
@@ -106,8 +106,8 @@ Metin duvarı yok; FTUE araçları (akış 05-ux-ui):
 
 Ayrıntılı liste ve stil kılavuzu GameDesign deposunda `assets-notes/home-makeover-asset-list.md`'ye çıkarılacak (açık iş); nihai envanter tech-architect + bu depodaki `asset-pipeline` agent'ı ile. Kaba kapsam:
 
-- **Kenney'den (CC0, GLB):** oda kabukları/duvar-zemin modülleri (Modular Buildings), mobilya (Furniture Kit), masa/mutfak propları (Food Kit).
-- **Ek üretim (kit dışı):** müşteri karakterleri + emote seti (kritik), kir decal/çöp varyantları, swatch doku/renk varyantları, UI seti (kartlar, Taste Meter, faz sekmeleri, ikon dili: stil/renk etiketleri), "cat bed" gibi quirk özel eşyaları [KES].
+- **Kenney'den (CC0, GLB):** oda kabukları/duvar-zemin modülleri **ve** mobilya (Furniture Kit — düzeltme 2026-06-12: kabuklar bu kitte; Modular Buildings dış cephe kiti, kullanılmıyor), masa/mutfak propları (Food Kit), müşteri karakteri adayı **Blocky Characters v2.0** (emote-yes/emote-no gömülü; stil uyumu H1 render testinde denenecek — Emre kararı 2026-06-12, fallback'ler açık).
+- **Ek üretim (kit dışı):** müşteri karakterleri + emote seti (Blocky denemesi tutmazsa kritik), kir decal/çöp varyantları, swatch doku/renk varyantları, UI seti (kartlar, Taste Meter, faz sekmeleri, ikon dili: stil/renk etiketleri), "cat bed" gibi quirk özel eşyaları [KES].
 - **SFX:** 06-juice-audio tablosundaki olay listesi; OGG+MP3 çifti. Müzik: 1 hafif loop [MVP].
 
 ## Açık sorular

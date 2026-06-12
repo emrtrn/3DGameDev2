@@ -29,8 +29,8 @@
 - [x] Motor kararı onayı (Emre, 2026-06-12): **Three.js kesin** — GDD 00-overview açık sorusu kapatıldı, 08-milestones işlendi
 - [ ] Tasarım kapıları (GameDesign deposunda): `market-analyst` doygunluk taraması + `design-critic` GDD gate → revizyon listesi buraya işlenir
 - [x] Proje iskeleti: Vite + TypeScript, `src/` yapısı (M1–M9 saf TS modülleri + `scene/` orkestratör sınırı) — *gameplay-dev + scene-3d-dev* (2026-06-12: `three@0.184.0` pinli, strict TS, build 126,7 KB gzip — not: `docs/2026-06-12-project-skeleton.md`)
-- [ ] Asset pipeline ilk halkası: `tools/` altında `@gltf-transform/cli` (meshopt + KTX2 + prune), manifest + lisans kaydı şablonu — *asset-pipeline*
-- [ ] Kenney kit envanteri: Modular Buildings + Furniture + Food yeterlilik raporu + eksik asset listesi (öncelik: müşteri karakteri durumu) — *asset-pipeline*
+- [x] Asset pipeline ilk halkası: `tools/` altında `@gltf-transform/cli` (meshopt + KTX2 + prune), manifest + lisans kaydı şablonu — *asset-pipeline* (2026-06-12: `npm run assets:build`, 15 GLB işlendi −%46,8; KTX2 toktx kurulumunu bekliyor — şema: `tools/README.md`)
+- [x] Kenney kit envanteri: Modular Buildings + Furniture + Food yeterlilik raporu + eksik asset listesi (öncelik: müşteri karakteri durumu) — *asset-pipeline* (2026-06-12: `docs/2026-06-12-kenney-inventory.md` — müşteri karakteri için Blocky Characters v2.0 adayı bulundu [emote-yes/no animasyonlu]; Modular Buildings iç mekan için uygun değil, oda kabuğu Furniture Kit'ten)
 - [ ] İlk render testi: 1 oda + ~10 mobilya GLB → sıkıştırma → yükleme → InstancedMesh — *scene-3d-dev*
 - [ ] Teknik spike 1: sürt-sil maskesi (render-target fırça + decal shader) — H3 riskini öne çeker — *scene-3d-dev*
 - [ ] Teknik spike 2: 4 açılı kamera rig'i + duvar saydamlaştırma (dik kadraj okunabilirliği) — *scene-3d-dev*
