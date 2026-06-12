@@ -1,0 +1,22 @@
+{
+  "name": "home-makeover",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Home Makeover - 3D HTML5 home decoration game for Poki (working title: Ev Ustasi)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "0.184.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/three": "^0.184.0",
+    "lil-gui": "^0.20.0",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0"
+  }
+}

@@ -1,11 +1,12 @@
 # MEMORY — Oturum Hafızası (3DGameDev / Ev Ustası)
 
-Son güncelleme: 2026-06-12 (git deposu başlatıldı, ilk commit atıldı)
+Son güncelleme: 2026-06-12 (Vite + TS proje iskeleti kuruldu)
 Amaç: Claude her oturum açılışında bilmesi gerekenleri buradan okur; oturum sonunda günceller. Kalıcı kurallar `CLAUDE.md`'de.
 
 ## Aktif durum
 
-- **Faz: kurulum (H1 öncesi).** Henüz kod yok; `src/` iskeleti motor kararıyla kurulacak.
+- **Faz: H1 (Faz 0) sürüyor.** Proje iskeleti kuruldu; sırada Kenney render testi, asset pipeline ve spike'lar var.
+- **Vite + TS iskeleti kuruldu (2026-06-12, scene-3d-dev):** `src/main.ts` (composition) + `src/core/events.ts` (tipli EventBus, saf TS — M1–M9 köprüsü) + `src/scene/SceneApp.ts` (tek three.js orkestratörü: renderer, sabit kamera, RAF, resize, DPR clamp=2, WebGL2 zorunlu) + `src/scene/debugStats.ts` (`?debug` fps/draw call). Hibrit HTML/CSS overlay (`#ui-overlay` pointer-events:none, `.ui-interactive` opt-in). Build: **126,7 KB gzip JS** (bütçenin ~%2,5'i). Karar notu: `docs/2026-06-12-project-skeleton.md`. Henüz commit'lenmedi.
 - GDD taslak v0.1 GameDesign deposundan buraya taşındı (2026-06-12): `gdd/home-makeover/` (00–08 + balance iskeleti).
 - Agent sistemi kuruldu (2026-06-12): `.claude/agents/` altında 6 dev agent (scene-3d-dev, gameplay-dev, ui-dev, juice-audio-dev, asset-pipeline, qa-poki).
 - **Yol haritası oluşturuldu (2026-06-12): `docs/roadmap.md`** — H1–H13 planı 6 faza ayrıldı; faz başına agent atamaları, geçiş kriterleri ve 7 öneri (git init, perf-log standardı, erken playtest havuzu vb.). Yaşayan doküman; görevler orada `[x]` işaretlenir.
@@ -14,7 +15,7 @@ Amaç: Claude her oturum açılışında bilmesi gerekenleri buradan okur; oturu
 
 ## Sıradaki adımlar (sırayla)
 
-1. **H1 teknik görevleri** (karar notu §5): Vite + TS iskeleti (`src/`), Kenney GLB → gltf-transform sıkıştırma → InstancedMesh render testi, mobil fps/yük ölçümü (qa-poki).
+1. **H1 teknik görevleri** (karar notu §5): ~~Vite + TS iskeleti~~ ✅ → Kenney GLB → gltf-transform sıkıştırma → InstancedMesh render testi, mobil fps/yük ölçümü (qa-poki). İskelet commit'i atılacak.
 2. **Tasarım kapıları (paralel):** `market-analyst` doygunluk taraması + `design-critic` GDD gate'i (GameDesign deposunda koşulur, GDD'yi buradan mutlak yolla okur). Kapılar bitmeden yalnız tema-bağımsız iskelet.
 3. Erken risk spike'ları: sürt-sil maskesi (render-target fırça) + **dik telefon kadrajında 3D oda okunabilirliği** (duvar saydamlaştırma, 4 açılı kamera rig'i).
 

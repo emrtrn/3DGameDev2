@@ -28,7 +28,7 @@
 - [x] Motor analizi: Three.js vs Babylon.js → `docs/2026-06-12-engine-decision.md` (2026-06-12)
 - [x] Motor kararı onayı (Emre, 2026-06-12): **Three.js kesin** — GDD 00-overview açık sorusu kapatıldı, 08-milestones işlendi
 - [ ] Tasarım kapıları (GameDesign deposunda): `market-analyst` doygunluk taraması + `design-critic` GDD gate → revizyon listesi buraya işlenir
-- [ ] Proje iskeleti: Vite + TypeScript, `src/` yapısı (M1–M9 saf TS modülleri + `scene/` orkestratör sınırı) — *gameplay-dev + scene-3d-dev*
+- [x] Proje iskeleti: Vite + TypeScript, `src/` yapısı (M1–M9 saf TS modülleri + `scene/` orkestratör sınırı) — *gameplay-dev + scene-3d-dev* (2026-06-12: `three@0.184.0` pinli, strict TS, build 126,7 KB gzip — not: `docs/2026-06-12-project-skeleton.md`)
 - [ ] Asset pipeline ilk halkası: `tools/` altında `@gltf-transform/cli` (meshopt + KTX2 + prune), manifest + lisans kaydı şablonu — *asset-pipeline*
 - [ ] Kenney kit envanteri: Modular Buildings + Furniture + Food yeterlilik raporu + eksik asset listesi (öncelik: müşteri karakteri durumu) — *asset-pipeline*
 - [ ] İlk render testi: 1 oda + ~10 mobilya GLB → sıkıştırma → yükleme → InstancedMesh — *scene-3d-dev*

@@ -1,0 +1,63 @@
+/*
+ * Global layout for the hybrid canvas + HTML/CSS overlay stack.
+ * Mobile-first: portrait phone is the primary frame (GDD 05).
+ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  /* Block pull-to-refresh / rubber-banding while scrubbing (CLEAN phase). */
+  overscroll-behavior: none;
+  background: #1a1a2e;
+  font-family: system-ui, -apple-system, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Scene layer: single fullscreen WebGL canvas. */
+#game-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* All gestures belong to the game, not the browser (scroll/zoom). */
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * UI layer: HTML/CSS overlay above the canvas (no engine GUI — engine
+ * decision §4). The root is click-through; interactive widgets opt back
+ * in with .ui-interactive so the 3D scene keeps receiving pointer events.
+ */
+#ui-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* Keep HUD clear of notches / home indicator on phones. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+#ui-overlay .ui-interactive {
+  pointer-events: auto;
+}
+
+/* Lightweight perf readout (qa-poki measurement standard). Debug-only. */
+#debug-stats {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 4px);
+  left: 4px;
+  color: #7fff7f;
+  font: 12px/1.4 monospace;
+  text-shadow: 0 0 2px #000;
+  white-space: pre;
+}
