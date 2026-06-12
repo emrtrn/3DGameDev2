@@ -44,6 +44,7 @@
 **Amaç:** Projenin en riskli üç varsayımı oynanır hâle gelir: tek-parmak 3D yerleştirme, sürt-sil hissi, twist okunabilirliği.
 
 ### H2 — Yerleştirme sistemi (en riskli UX)
+
 - [ ] Grid + duvar/yüzey çapaları, hayalet (ghost), snap, döndürme, store mantığı (M4 modülü) — *gameplay-dev*
 - [ ] Raycast + pointer event sarmalayıcısı (Babylon PointerDragBehavior telafisi, bir kez yazılır) — *scene-3d-dev*
 - [ ] 4 açılı kamera + duvar saydamlaştırma entegrasyonu (spike'tan üretime) — *scene-3d-dev*
@@ -51,12 +52,14 @@
 - [ ] Cihaz testi: dik telefonda yerleştirme "iyi hissettiriyor" mu — *qa-poki*
 
 ### H3 — Temizlik
+
 - [ ] Kir maskesi sürt-sil (≤ 1 kare gecikme) + çöp toplama (M2 modülü) — *gameplay-dev + scene-3d-dev*
 - [ ] Faz durum makinesi (clean/paint/furnish/deliver) + faz sekmeleri (01 akışı) — *gameplay-dev + ui-dev*
 - [ ] Sürtme partikülü + ilk SFX entegrasyonu, ses sistemi kararı (Howler.js vs ince WebAudio) — *juice-audio-dev*
 - [ ] Alt segment sürt-sil performans testi (maske çözünürlüğü fallback'i hazır) — *qa-poki*
 
 ### H4 — Twist çekirdeği
+
 - [ ] Etiket sistemi + puan hesabı + Hidden Wish (M5 modülü; sayılar `balance/parameters.md`'den) — *gameplay-dev*
 - [ ] Taste Meter HUD + müşteri kartı + nedenli puan etiketleri — *ui-dev*
 - [ ] Canlı tepki sunumu: 2D emote balon fallback'i + tepki tween'leri — *juice-audio-dev*
@@ -69,12 +72,14 @@
 **Amaç:** Tam iş döngüsü uçtan uca kapanır; dikey dilim dış teste çıkar.
 
 ### H5 — Döngünün kalan halkaları
+
 - [ ] Boya sistemi + yüzeyler (M3) — *gameplay-dev + scene-3d-dev*
 - [ ] Teslim sekansı + yıldız + ödeme (M6) — *gameplay-dev*
 - [ ] Job Board + müşteri kartı akışı (M1) — *gameplay-dev + ui-dev*
 - [ ] Teslim kutlaması juice'u (konfeti, puan uçuşması) — *juice-audio-dev*
 
 ### H6 — Dikey dilim tamamlama
+
 - [ ] Katalog + aletler (M7): Starter Set + 5–8 satın alınabilir eşya — *gameplay-dev + ui-dev*
 - [ ] Save sistemi (M9): sürümlenmiş localStorage JSON + migration alanı — *gameplay-dev*
 - [ ] FTUE ilk 30 sn, 05-ux-ui tablosuna birebir — *ui-dev*
@@ -101,15 +106,18 @@
 **Amaç:** Yayın gereklilikleri (SDK, reklam, görsel kalite, performans bütçesi) kapanır.
 
 ### H9 — Poki SDK
+
 - [ ] Poki SDK entegrasyonu + `commercialBreak` (yalnız teslim sonrası) + adblock/fallback davranışları — *qa-poki + gameplay-dev*
 - [ ] 5 rewarded yerleşim (GDD 07) + opt-in teklif arayüzleri — *ui-dev + gameplay-dev*
 
 ### H10 — Görsel geçiş
+
 - [ ] Işık/palet düzeni + oda set dressing — *scene-3d-dev*
 - [ ] Müşteri karakterleri + emote'lar **veya** fallback kararının kesinleşmesi (kesilebilir #4) — *asset-pipeline + scene-3d-dev*
 - [ ] Placeholder'ların emekli edilmesi — *asset-pipeline*
 
 ### H11 — Juice & performans bütçesi
+
 - [ ] GDD 06 juice/SFX tablosunun tamamı + 1 müzik loop'u — *juice-audio-dev*
 - [ ] GLB sıkıştırma turu, kategori/mahalle lazy-load, FTUE odası minimal paket — *asset-pipeline*
 - [ ] Alt segment cihaz testi: 30 fps taban, ilk paket < 5 MB, ilk ekran < 3 sn — *qa-poki*
@@ -137,7 +145,7 @@ GDD 08 §4'tekiyle aynı; üstteki önce kesilir: Hillside Villas → Cat Person
 
 ## Öneriler (plan dışı, Emre'nin değerlendirmesine)
 
-1. **Git deposu başlatılmalı (Faz 0, hemen).** Klasör henüz git deposu değil; ilk commit GDD + docs + agent kurulumuyla atılırsa kod öncesi tarih de korunur. Haftalık "oynanır build" ritmi tag'lerle izlenebilir.
+1. ~~**Git deposu başlatılmalı (Faz 0, hemen).**~~ ✅ Yapıldı (2026-06-12): `main` dalında ilk commit (`ed0c85f`, 22 dosya) + `.gitignore`/`.gitattributes`. Haftalık "oynanır build" ritmi tag'lerle izlenebilir.
 2. **Performans ölçüm günlüğü standardı:** qa-poki her faz kapanışında aynı şablonla ölçsün (fps, gzip paket boyutu, ilk ekran süresi, draw call) → `docs/perf-log.md`. H11'de sürprizle karşılaşmamanın tek yolu trendi baştan izlemek (L8).
 3. **Kenney envanteri Faz 0'da öne alındı** (GDD'de örtük, burada açık görev): en yüksek asset riski müşteri karakterleri — fallback kararı H10'a kalmadan veri toplanmış olur.
 4. **İngilizce yayın adı araştırması H8–H9 arasına yerleştirilmeli** (MEMORY açık kararı): Poki SDK entegrasyonu ve store metinleri başlamadan ad kesinleşmeli. GameDesign'da market-analyst'e kısa bir ad/doygunluk taraması açılabilir.

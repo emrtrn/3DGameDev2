@@ -1,6 +1,6 @@
 # MEMORY — Oturum Hafızası (3DGameDev / Ev Ustası)
 
-Son güncelleme: 2026-06-12 (motor kararı kesinleşti: Three.js — GDD'ye işlendi)
+Son güncelleme: 2026-06-12 (git deposu başlatıldı, ilk commit atıldı)
 Amaç: Claude her oturum açılışında bilmesi gerekenleri buradan okur; oturum sonunda günceller. Kalıcı kurallar `CLAUDE.md`'de.
 
 ## Aktif durum
@@ -9,6 +9,7 @@ Amaç: Claude her oturum açılışında bilmesi gerekenleri buradan okur; oturu
 - GDD taslak v0.1 GameDesign deposundan buraya taşındı (2026-06-12): `gdd/home-makeover/` (00–08 + balance iskeleti).
 - Agent sistemi kuruldu (2026-06-12): `.claude/agents/` altında 6 dev agent (scene-3d-dev, gameplay-dev, ui-dev, juice-audio-dev, asset-pipeline, qa-poki).
 - **Yol haritası oluşturuldu (2026-06-12): `docs/roadmap.md`** — H1–H13 planı 6 faza ayrıldı; faz başına agent atamaları, geçiş kriterleri ve 7 öneri (git init, perf-log standardı, erken playtest havuzu vb.). Yaşayan doküman; görevler orada `[x]` işaretlenir.
+- **Git deposu başlatıldı (2026-06-12):** `main` dalı, ilk commit `ed0c85f` (GDD + docs + agent sistemi, 22 dosya); `.gitignore` + `.gitattributes` (LF normalize) eklendi. roadmap.md öneri #1 kapandı; öneri #8 (referans cihaz) ve #9 (save şeması H4'te) eklendi.
 - **Motor kararı kesin (2026-06-12, Emre onayladı): Three.js** (`three@0.184.0` pinli; Vite + TS, gltf-transform pipeline). Karar notu: `docs/2026-06-12-engine-decision.md` (H1 görev listesi §5'te). GDD 00-overview açık sorusu kapatıldı, 08-milestones işlendi. Geri dönüş sigortası: M1–M9 motor import etmez, motor teması yalnız `scene/` katmanında.
 
 ## Sıradaki adımlar (sırayla)
