@@ -75,6 +75,13 @@ interface GizmoHandle {
 type Selection =
   | { kind: "instance"; assetId: string; placementIndex: number }
   | { kind: "character"; index: number };
+type InstanceSelection = Extract<Selection, { kind: "instance" }>;
+type CharacterSelection = Extract<Selection, { kind: "character" }>;
+
+interface LinkedMoveStart {
+  selection: Selection;
+  startTransform: EditableTransform;
+}
 
 export interface EditableTransform {
   position: Vec3;
@@ -165,7 +172,8 @@ export class SceneApp {
   private localBounds = new Map<string, Box3>();
   private assetPlacements = new Map<string, EditableAsset["placement"]>();
   private selection: Selection | null = null;
-  private selectionBox: Box3Helper | null = null;
+  private readonly selectedSelections = new Map<string, Selection>();
+  private readonly selectionBoxes: Box3Helper[] = [];
   private readonly gizmoGroup = new Group();
   private readonly gizmoPickables: Object3D[] = [];
   private activeTool: EditorTool = "move";
@@ -189,6 +197,7 @@ export class SceneApp {
         startTransform: EditableTransform;
         startPosition: [number, number, number];
         startClientY: number;
+        linkedTransforms?: LinkedMoveStart[] | undefined;
       }
     | {
         mode: "rotate";
@@ -333,7 +342,7 @@ export class SceneApp {
           rotation: readRotation(placement),
           scale: readScale(placement),
           scaleLocked: placement.scaleLocked ?? false,
-          selected: selectionsEqual(this.selection, selection),
+          selected: this.isSelectionSelected(selection),
           hidden: placement.hidden ?? false,
           locked: placement.locked ?? false,
         });
@@ -351,7 +360,7 @@ export class SceneApp {
         rotation: readRotation(character),
         scale: readScale(character),
         scaleLocked: character.scaleLocked ?? false,
-        selected: selectionsEqual(this.selection, selection),
+        selected: this.isSelectionSelected(selection),
         hidden: character.hidden ?? false,
         locked: character.locked ?? false,
       });
@@ -360,10 +369,29 @@ export class SceneApp {
     return objects;
   }
 
-  selectSceneObject(id: string): void {
+  selectSceneObject(id: string, options: { additive?: boolean } = {}): void {
     const selection = parseSelectionId(id);
     if (!selection || !this.hasSelection(selection)) return;
-    this.select(selection);
+    if (options.additive) this.toggleSelection(selection);
+    else this.select(selection);
+  }
+
+  clearSelection(): void {
+    this.select(null);
+  }
+
+  selectAllObjects(): void {
+    const selections = this.getAllSelections({ includeHidden: false });
+    if (selections.length === 0) {
+      this.onStatus?.("No visible objects to select.", "warning");
+      return;
+    }
+    const active =
+      this.selection && selections.some((selection) => selectionsEqual(selection, this.selection))
+        ? cloneSelection(this.selection)
+        : cloneSelection(selections[0]!);
+    this.selectMany(selections, active);
+    this.onStatus?.(`Selected ${selections.length} objects.`, "info");
   }
 
   renameSceneObject(id: string, name: string): void {
@@ -375,12 +403,20 @@ export class SceneApp {
   setSceneObjectHidden(id: string, hidden: boolean): void {
     const selection = parseSelectionId(id);
     if (!selection || !this.hasSelection(selection)) return;
+    if (this.selectedSelections.size > 1 && this.isSelectionSelected(selection)) {
+      this.setSelectedHidden(hidden);
+      return;
+    }
     this.setSelectionFlag(selection, "hidden", hidden);
   }
 
   setSceneObjectLocked(id: string, locked: boolean): void {
     const selection = parseSelectionId(id);
     if (!selection || !this.hasSelection(selection)) return;
+    if (this.selectedSelections.size > 1 && this.isSelectionSelected(selection)) {
+      this.setSelectedLocked(locked);
+      return;
+    }
     this.setSelectionFlag(selection, "locked", locked);
   }
 
@@ -752,50 +788,108 @@ export class SceneApp {
   }
 
   deleteSelected(): void {
-    if (!this.layout || !this.selection) return;
-    const selection = this.selection;
+    if (!this.layout) return;
+    const selections = this.getSelectedSelections();
+    if (selections.length === 0) return;
 
-    if (selection.kind === "instance") {
-      const instance = this.layout.instances.find((entry) => entry.assetId === selection.assetId);
-      const placement = instance?.placements[selection.placementIndex];
-      if (!placement) return;
-      const snapshot = clonePlacement(placement);
-      this.executeCommand({
-        label: `Delete ${selection.assetId}`,
-        redo: () => {
-          this.removeInstancePlacement(selection.assetId, selection.placementIndex);
-          this.select(null);
-        },
-        undo: () => {
-          this.insertInstancePlacement(selection.assetId, selection.placementIndex, snapshot);
-          this.select(selection);
-        },
-      });
-      return;
+    const instanceDeletes: Array<{ selection: InstanceSelection; snapshot: LayoutPlacement }> = [];
+    const characterDeletes: Array<{ selection: CharacterSelection; snapshot: LayoutCharacter }> = [];
+    for (const selection of selections) {
+      if (selection.kind === "instance") {
+        const instance = this.layout?.instances.find((entry) => entry.assetId === selection.assetId);
+        const placement = instance?.placements[selection.placementIndex];
+        if (placement) {
+          instanceDeletes.push({
+            selection: cloneSelection(selection) as InstanceSelection,
+            snapshot: clonePlacement(placement),
+          });
+        }
+        continue;
+      }
+
+      const character = this.layout?.characters[selection.index];
+      if (character) {
+        characterDeletes.push({
+          selection: cloneSelection(selection) as CharacterSelection,
+          snapshot: cloneCharacter(character),
+        });
+      }
     }
+    if (instanceDeletes.length + characterDeletes.length === 0) return;
 
-    const character = this.layout.characters[selection.index];
-    if (!character) return;
-    const snapshot = cloneCharacter(character);
+    const previousSelections = selections.map(cloneSelection);
+    const previousActive = this.selection ? cloneSelection(this.selection) : null;
     this.executeCommand({
-      label: `Delete ${character.name ?? character.assetId}`,
+      label:
+        selections.length === 1
+          ? `Delete ${this.getSelectionLabel(selections[0]!)}`
+          : `Delete ${selections.length} objects`,
       redo: () => {
-        this.removeCharacterPlacement(selection.index);
+        for (const entry of [...instanceDeletes].sort(compareInstanceDeletes)) {
+          this.removeInstancePlacement(entry.selection.assetId, entry.selection.placementIndex);
+        }
+        for (const entry of [...characterDeletes].sort(compareCharacterDeletes)) {
+          this.removeCharacterPlacement(entry.selection.index);
+        }
         this.select(null);
       },
       undo: () => {
-        this.insertCharacterPlacement(selection.index, snapshot);
-        this.select(selection);
+        for (const entry of [...instanceDeletes].sort(compareInstanceRestores)) {
+          this.insertInstancePlacement(
+            entry.selection.assetId,
+            entry.selection.placementIndex,
+            entry.snapshot,
+          );
+        }
+        for (const entry of [...characterDeletes].sort(compareCharacterRestores)) {
+          this.insertCharacterPlacement(entry.selection.index, entry.snapshot);
+        }
+        this.selectMany(previousSelections, previousActive);
       },
     });
   }
 
   duplicateSelected(): void {
-    if (!this.selection) {
+    const selections = this.getSelectedSelections();
+    if (selections.length === 0) {
       this.onStatus?.("No selected object to duplicate.", "warning");
       return;
     }
-    this.duplicateSelection(this.selection);
+    if (selections.length === 1) {
+      this.duplicateSelection(selections[0]!);
+      return;
+    }
+
+    this.duplicateSelections(selections);
+  }
+
+  hideSelected(): void {
+    this.setSelectedHidden(true);
+  }
+
+  setSelectedHidden(hidden: boolean): void {
+    this.setSelectionsFlag(
+      this.getSelectedSelections(),
+      "hidden",
+      hidden,
+      hidden ? "Hide selected" : "Show selected",
+    );
+  }
+
+  setSelectedLocked(locked: boolean): void {
+    this.setSelectionsFlag(
+      this.getSelectedSelections(),
+      "locked",
+      locked,
+      locked ? "Lock selected" : "Unlock selected",
+    );
+  }
+
+  showHiddenObjects(): void {
+    const hiddenSelections = this
+      .getAllSelections({ includeHidden: true })
+      .filter((selection) => this.getMutableTransform(selection)?.hidden);
+    this.setSelectionsFlag(hiddenSelections, "hidden", false, "Show hidden objects");
   }
 
   addAssetAt(assetId: string, clientX: number, clientY: number): void {
@@ -1108,6 +1202,114 @@ export class SceneApp {
     return duplicateSelection;
   }
 
+  private duplicateSelectionForDrag(selection: Selection): Selection | null {
+    const selections = this.getSelectedSelections();
+    if (selections.length > 1 && selections.some((entry) => selectionsEqual(entry, selection))) {
+      return this.duplicateSelections(selections);
+    }
+    return this.duplicateSelection(selection);
+  }
+
+  private duplicateSelections(selections: Selection[]): Selection | null {
+    if (!this.layout) return null;
+
+    const previousSelections = selections.map(cloneSelection);
+    const previousActive = this.selection ? cloneSelection(this.selection) : null;
+    const inserts: Array<{
+      source: Selection;
+      selection: Selection;
+      snapshot: LayoutPlacement | LayoutCharacter;
+    }> = [];
+
+    const instancesByAsset = new Map<string, Selection[]>();
+    for (const selection of selections) {
+      if (selection.kind !== "instance") continue;
+      const entries = instancesByAsset.get(selection.assetId) ?? [];
+      entries.push(cloneSelection(selection));
+      instancesByAsset.set(selection.assetId, entries);
+    }
+
+    for (const [assetId, entries] of instancesByAsset) {
+      entries.sort((left, right) => {
+        if (left.kind !== "instance" || right.kind !== "instance") return 0;
+        return left.placementIndex - right.placementIndex;
+      });
+      entries.forEach((selection, offset) => {
+        if (selection.kind !== "instance") return;
+        const transform = this.getMutableTransform(selection);
+        if (!transform) return;
+        const duplicateSelection: Selection = {
+          kind: "instance",
+          assetId,
+          placementIndex: selection.placementIndex + offset + 1,
+        };
+        inserts.push({
+          source: cloneSelection(selection),
+          selection: duplicateSelection,
+          snapshot: clonePlacement(transform),
+        });
+      });
+    }
+
+    const characterSelections = selections
+      .filter((selection): selection is CharacterSelection => selection.kind === "character")
+      .map((selection) => cloneSelection(selection) as CharacterSelection)
+      .sort((left, right) => left.index - right.index);
+    characterSelections.forEach((selection, offset) => {
+      const character = this.layout?.characters[selection.index];
+      if (!character) return;
+      inserts.push({
+        source: cloneSelection(selection),
+        selection: { kind: "character", index: selection.index + offset + 1 },
+        snapshot: cloneCharacter(character),
+      });
+    });
+
+    if (inserts.length === 0) return null;
+
+    const duplicateSelections = inserts.map((entry) => cloneSelection(entry.selection));
+    const activeDuplicate =
+      (previousActive &&
+        inserts.find((entry) => selectionsEqual(entry.source, previousActive))?.selection) ??
+      duplicateSelections.at(-1) ??
+      null;
+
+    this.executeCommand({
+      label: `Duplicate ${inserts.length} objects`,
+      redo: () => {
+        for (const entry of inserts) {
+          if (entry.selection.kind === "instance") {
+            this.insertInstancePlacement(
+              entry.selection.assetId,
+              entry.selection.placementIndex,
+              entry.snapshot as LayoutPlacement,
+            );
+          } else {
+            this.insertCharacterPlacement(
+              entry.selection.index,
+              entry.snapshot as LayoutCharacter,
+            );
+          }
+        }
+        this.selectMany(
+          duplicateSelections,
+          activeDuplicate ? cloneSelection(activeDuplicate) : null,
+        );
+      },
+      undo: () => {
+        for (const entry of [...inserts].reverse()) {
+          if (entry.selection.kind === "instance") {
+            this.removeInstancePlacement(entry.selection.assetId, entry.selection.placementIndex);
+          } else {
+            this.removeCharacterPlacement(entry.selection.index);
+          }
+        }
+        this.selectMany(previousSelections, previousActive);
+      },
+    });
+    return activeDuplicate ? cloneSelection(activeDuplicate) : null;
+  }
+
   private renameSelection(selection: Selection, name: string): void {
     const target = this.getMutableTransform(selection);
     if (!target) return;
@@ -1174,10 +1376,50 @@ export class SceneApp {
     });
   }
 
+  private setSelectionsFlag(
+    selections: Selection[],
+    flag: "hidden" | "locked" | "scaleLocked",
+    value: boolean,
+    label: string,
+  ): void {
+    const entries = selections.flatMap((selection) => {
+      const target = this.getMutableTransform(selection);
+      return target
+        ? [{ selection: cloneSelection(selection), previous: Boolean(target[flag]) }]
+        : [];
+    });
+    if (entries.length === 0) {
+      this.onStatus?.("No matching objects.", "warning");
+      return;
+    }
+    if (entries.every((entry) => entry.previous === value)) return;
+
+    const applyEntries = (mode: "redo" | "undo"): void => {
+      for (const entry of entries) {
+        this.applyFlag(
+          entry.selection,
+          flag,
+          mode === "redo" ? value : entry.previous,
+          { notify: false },
+        );
+      }
+      this.updateSelectionBox();
+      this.updateGizmo();
+      this.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label,
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
+    });
+  }
+
   private applyFlag(
     selection: Selection,
     flag: "hidden" | "locked" | "scaleLocked",
     value: boolean,
+    options: { notify?: boolean } = {},
   ): void {
     const target = this.getMutableTransform(selection);
     if (!target) return;
@@ -1185,7 +1427,9 @@ export class SceneApp {
     else delete target[flag];
 
     if (flag === "hidden") this.applyVisibility(selection);
-    this.emitSelectionChanged();
+    this.updateSelectionBox();
+    this.updateGizmo();
+    if (options.notify !== false) this.emitSelectionChanged();
   }
 
   private applyVisibility(selection: Selection): void {
@@ -1249,11 +1493,24 @@ export class SceneApp {
       }
 
       const picked = this.pickSelection(event.clientX, event.clientY);
+      if (event.ctrlKey || event.shiftKey) {
+        if (picked) this.toggleSelection(picked);
+        return;
+      }
+
       let selection = picked ?? (this.activeTool === "select" ? null : this.selection);
+      let linkedTransforms: LinkedMoveStart[] | undefined;
       if (selection) {
-        if (picked) this.select(selection);
         if (event.altKey && this.activeTool === "move") {
-          selection = this.duplicateSelection(selection) ?? selection;
+          if (picked && this.isSelectionSelected(picked)) {
+            this.activateSelection(picked);
+          } else if (picked) {
+            this.select(selection);
+          }
+          selection = this.duplicateSelectionForDrag(selection) ?? selection;
+          linkedTransforms = this.captureLinkedMoveStarts(selection);
+        } else if (picked) {
+          this.select(selection);
         }
         const current = this.getSelected();
         if (!current) return;
@@ -1279,6 +1536,7 @@ export class SceneApp {
               startTransform: selectionToTransform(current),
               startPosition: [...current.position],
               startClientY: event.clientY,
+              linkedTransforms,
             };
             this.canvas.setPointerCapture(event.pointerId);
           }
@@ -1338,7 +1596,11 @@ export class SceneApp {
         const drag = this.pointerDrag;
         this.pointerDrag = null;
         this.canvas.releasePointerCapture(event.pointerId);
-        this.commitTransformChange(drag.selection, drag.startTransform);
+        if (drag.mode === "move" && drag.linkedTransforms?.length) {
+          this.commitLinkedMoveChange(drag);
+        } else {
+          this.commitTransformChange(drag.selection, drag.startTransform);
+        }
       }
     };
     this.canvas.addEventListener("pointerup", clearDrag);
@@ -1457,8 +1719,10 @@ export class SceneApp {
 
   private startGizmoDrag(handle: GizmoHandle, event: PointerEvent): void {
     if (!this.selection) return;
+    let linkedTransforms: LinkedMoveStart[] | undefined;
     if (event.altKey && handle.tool === "move") {
-      this.duplicateSelection(this.selection);
+      const selection = this.duplicateSelectionForDrag(this.selection);
+      if (selection) linkedTransforms = this.captureLinkedMoveStarts(selection);
     }
     const selected = this.getSelected();
     if (!selected) return;
@@ -1480,6 +1744,7 @@ export class SceneApp {
           : new Vector3(),
         startPosition: [...selected.position],
         startClientY: event.clientY,
+        linkedTransforms,
       };
     } else if (handle.tool === "rotate") {
       this.pointerDrag = {
@@ -1518,7 +1783,7 @@ export class SceneApp {
         this.snapSettings.move,
         this.snapSettings.moveEnabled,
       );
-      this.updateSelectedTransform({ position });
+      this.updateMoveDragPosition(position);
       return;
     }
 
@@ -1545,7 +1810,7 @@ export class SceneApp {
       );
       position[0] = round(this.pointerDrag.startPosition[0] + dirX * distance);
       position[2] = round(this.pointerDrag.startPosition[2] + dirZ * distance);
-      this.updateSelectedTransform({ position });
+      this.updateMoveDragPosition(position);
       return;
     }
 
@@ -1564,7 +1829,38 @@ export class SceneApp {
       );
     }
 
-    this.updateSelectedTransform({ position });
+    this.updateMoveDragPosition(position);
+  }
+
+  private updateMoveDragPosition(position: Vec3): void {
+    if (!this.pointerDrag || this.pointerDrag.mode !== "move") return;
+    const drag = this.pointerDrag;
+    const activeTransform = this.getMutableTransform(drag.selection);
+    if (!activeTransform) return;
+
+    const delta: Vec3 = [
+      position[0] - drag.startPosition[0],
+      position[1] - drag.startPosition[1],
+      position[2] - drag.startPosition[2],
+    ];
+
+    activeTransform.position = [...position];
+    this.refreshSelectionObject(drag.selection);
+
+    for (const linked of drag.linkedTransforms ?? []) {
+      const transform = this.getMutableTransform(linked.selection);
+      if (!transform) continue;
+      transform.position = [
+        round(linked.startTransform.position[0] + delta[0]),
+        round(linked.startTransform.position[1] + delta[1]),
+        round(linked.startTransform.position[2] + delta[2]),
+      ];
+      this.refreshSelectionObject(linked.selection);
+    }
+
+    this.updateSelectionBox();
+    this.updateGizmo();
+    this.emitSelectionChanged();
   }
 
   private updateRotateDrag(event: PointerEvent): void {
@@ -1646,10 +1942,105 @@ export class SceneApp {
   }
 
   private select(selection: Selection | null): void {
-    this.selection = selection;
+    this.selectedSelections.clear();
+    if (selection) {
+      const current = cloneSelection(selection);
+      this.selectedSelections.set(selectionId(current), current);
+      this.selection = current;
+    } else {
+      this.selection = null;
+    }
     this.updateSelectionBox();
     this.updateGizmo();
     this.emitSelectionChanged();
+  }
+
+  private selectMany(selections: Selection[], active: Selection | null): void {
+    this.selectedSelections.clear();
+    for (const selection of selections) {
+      if (!this.hasSelection(selection)) continue;
+      const current = cloneSelection(selection);
+      this.selectedSelections.set(selectionId(current), current);
+    }
+
+    if (active && this.selectedSelections.has(selectionId(active))) {
+      this.selection = cloneSelection(active);
+    } else {
+      this.selection = this.selectedSelections.values().next().value ?? null;
+    }
+
+    this.updateSelectionBox();
+    this.updateGizmo();
+    this.emitSelectionChanged();
+  }
+
+  private toggleSelection(selection: Selection): void {
+    const id = selectionId(selection);
+    if (this.selectedSelections.has(id)) {
+      this.selectedSelections.delete(id);
+      if (this.selection && selectionsEqual(this.selection, selection)) {
+        const remaining = [...this.selectedSelections.values()];
+        this.selection = remaining.at(-1) ? cloneSelection(remaining.at(-1)!) : null;
+      }
+    } else {
+      const current = cloneSelection(selection);
+      this.selectedSelections.set(id, current);
+      this.selection = current;
+    }
+
+    this.updateSelectionBox();
+    this.updateGizmo();
+    this.emitSelectionChanged();
+  }
+
+  private activateSelection(selection: Selection): void {
+    if (!this.isSelectionSelected(selection)) return;
+    this.selection = cloneSelection(selection);
+    this.updateSelectionBox();
+    this.updateGizmo();
+    this.emitSelectionChanged();
+  }
+
+  private captureLinkedMoveStarts(active: Selection): LinkedMoveStart[] | undefined {
+    const linked = this.getSelectedSelections().flatMap((selection) => {
+      if (selectionsEqual(selection, active)) return [];
+      const startTransform = this.captureTransform(selection);
+      return startTransform ? [{ selection: cloneSelection(selection), startTransform }] : [];
+    });
+    return linked.length > 0 ? linked : undefined;
+  }
+
+  private isSelectionSelected(selection: Selection): boolean {
+    return this.selectedSelections.has(selectionId(selection));
+  }
+
+  private getSelectedSelections(): Selection[] {
+    return [...this.selectedSelections.values()].filter((selection) => this.hasSelection(selection));
+  }
+
+  private getAllSelections(options: { includeHidden: boolean }): Selection[] {
+    if (!this.layout) return [];
+    const selections: Selection[] = [];
+    for (const instance of this.layout.instances) {
+      instance.placements.forEach((placement, placementIndex) => {
+        if (!options.includeHidden && placement.hidden) return;
+        selections.push({ kind: "instance", assetId: instance.assetId, placementIndex });
+      });
+    }
+    this.layout.characters.forEach((character, index) => {
+      if (!options.includeHidden && character.hidden) return;
+      selections.push({ kind: "character", index });
+    });
+    return selections;
+  }
+
+  private getSelectionLabel(selection: Selection): string {
+    const transform = this.getMutableTransform(selection);
+    if (selection.kind === "instance") {
+      return transform?.name ?? selection.assetId;
+    }
+    const character = transform as LayoutCharacter | null;
+    return character?.name ?? character?.assetId ?? "object";
   }
 
   private getSelectionWorldBox(selection: Selection): Box3 | null {
@@ -1665,24 +2056,29 @@ export class SceneApp {
 
   private updateSelectionBox(): void {
     this.removeSelectionBox();
-    if (!this.layout || !this.selection) return;
+    if (!this.layout) return;
 
-    const box = this.getSelectionWorldBox(this.selection);
-    if (!box || box.isEmpty()) return;
-    this.selectionBox = new Box3Helper(box, 0x00aaff);
-    this.selectionBox.name = "editor-selection-box";
-    this.scene.add(this.selectionBox);
+    for (const selection of this.getSelectedSelections()) {
+      const box = this.getSelectionWorldBox(selection);
+      if (!box || box.isEmpty()) continue;
+      const active = this.selection && selectionsEqual(this.selection, selection);
+      const helper = new Box3Helper(box, active ? 0x00aaff : 0xf3cc5c);
+      helper.name = active ? "editor-selection-box-active" : "editor-selection-box";
+      this.selectionBoxes.push(helper);
+      this.scene.add(helper);
+    }
   }
 
   private removeSelectionBox(): void {
-    if (!this.selectionBox) return;
-    this.scene.remove(this.selectionBox);
-    this.selectionBox.geometry.dispose();
-    const materials = Array.isArray(this.selectionBox.material)
-      ? this.selectionBox.material
-      : [this.selectionBox.material];
-    for (const material of materials) material.dispose();
-    this.selectionBox = null;
+    for (const selectionBox of this.selectionBoxes) {
+      this.scene.remove(selectionBox);
+      selectionBox.geometry.dispose();
+      const materials = Array.isArray(selectionBox.material)
+        ? selectionBox.material
+        : [selectionBox.material];
+      for (const material of materials) material.dispose();
+    }
+    this.selectionBoxes.length = 0;
   }
 
   private updateGizmo(): void {
@@ -1857,12 +2253,61 @@ export class SceneApp {
     this.executeCommand({
       label,
       redo: () => {
-        this.selection = commandSelection;
+        this.selectMany([commandSelection], commandSelection);
         this.applyTransform(commandSelection, after);
       },
       undo: () => {
-        this.selection = commandSelection;
+        this.selectMany([commandSelection], commandSelection);
         this.applyTransform(commandSelection, before);
+      },
+    });
+  }
+
+  private commitLinkedMoveChange(drag: {
+    selection: Selection;
+    startTransform: EditableTransform;
+    linkedTransforms?: LinkedMoveStart[] | undefined;
+  }): void {
+    const entries = [
+      {
+        selection: cloneSelection(drag.selection),
+        before: drag.startTransform,
+        after: this.captureTransform(drag.selection),
+      },
+      ...(drag.linkedTransforms ?? []).map((linked) => ({
+        selection: cloneSelection(linked.selection),
+        before: linked.startTransform,
+        after: this.captureTransform(linked.selection),
+      })),
+    ];
+
+    const changes: Array<{
+      selection: Selection;
+      before: EditableTransform;
+      after: EditableTransform;
+    }> = [];
+    for (const entry of entries) {
+      if (!entry.after || transformsEqual(entry.before, entry.after)) continue;
+      changes.push({
+        selection: entry.selection,
+        before: entry.before,
+        after: entry.after,
+      });
+    }
+
+    if (changes.length === 0) return;
+    const selections = changes.map((entry) => cloneSelection(entry.selection));
+    const active = cloneSelection(drag.selection);
+
+    this.executeCommand({
+      label: `Move ${changes.length} objects`,
+      redo: () => {
+        this.selectMany(selections, active);
+        for (const change of changes) this.applyTransform(change.selection, change.after);
+      },
+      undo: () => {
+        this.selectMany(selections, active);
+        for (const change of changes) this.applyTransform(change.selection, change.before);
       },
     });
   }
@@ -2003,6 +2448,16 @@ function writeScale(target: LayoutPlacement | LayoutCharacter, scale: Vec3): voi
   target.scale = x === y && y === z ? x : [x, y, z];
 }
 
+function cloneSelection(selection: Selection): Selection {
+  return selection.kind === "instance"
+    ? {
+        kind: "instance",
+        assetId: selection.assetId,
+        placementIndex: selection.placementIndex,
+      }
+    : { kind: "character", index: selection.index };
+}
+
 function selectionId(selection: Selection): string {
   if (selection.kind === "character") return `character:${selection.index}`;
   return `instance:${encodeURIComponent(selection.assetId)}:${selection.placementIndex}`;
@@ -2033,6 +2488,42 @@ function selectionsEqual(left: Selection | null, right: Selection | null): boole
   return left.assetId === right.assetId && left.placementIndex === right.placementIndex;
 }
 
+function compareInstanceDeletes(
+  left: { selection: Selection },
+  right: { selection: Selection },
+): number {
+  if (left.selection.kind !== "instance" || right.selection.kind !== "instance") return 0;
+  const assetSort = right.selection.assetId.localeCompare(left.selection.assetId);
+  if (assetSort !== 0) return assetSort;
+  return right.selection.placementIndex - left.selection.placementIndex;
+}
+
+function compareInstanceRestores(
+  left: { selection: Selection },
+  right: { selection: Selection },
+): number {
+  if (left.selection.kind !== "instance" || right.selection.kind !== "instance") return 0;
+  const assetSort = left.selection.assetId.localeCompare(right.selection.assetId);
+  if (assetSort !== 0) return assetSort;
+  return left.selection.placementIndex - right.selection.placementIndex;
+}
+
+function compareCharacterDeletes(
+  left: { selection: Selection },
+  right: { selection: Selection },
+): number {
+  if (left.selection.kind !== "character" || right.selection.kind !== "character") return 0;
+  return right.selection.index - left.selection.index;
+}
+
+function compareCharacterRestores(
+  left: { selection: Selection },
+  right: { selection: Selection },
+): number {
+  if (left.selection.kind !== "character" || right.selection.kind !== "character") return 0;
+  return left.selection.index - right.selection.index;
+}
+
 function selectionToTransform(selection: EditableSelection): EditableTransform {
   return {
     position: [...selection.position],
@@ -2050,6 +2541,8 @@ function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
     position: [...placement.position],
   };
   if (placement.name !== undefined) clone.name = placement.name;
+  if (placement.hidden !== undefined) clone.hidden = placement.hidden;
+  if (placement.locked !== undefined) clone.locked = placement.locked;
   if (placement.rotationYDeg !== undefined) clone.rotationYDeg = placement.rotationYDeg;
   if (placement.rotation !== undefined) clone.rotation = [...placement.rotation];
   if (placement.scale !== undefined) clone.scale = cloneScale(placement.scale);
@@ -2063,6 +2556,8 @@ function cloneCharacter(character: LayoutCharacter): LayoutCharacter {
     position: [...character.position],
   };
   if (character.name !== undefined) clone.name = character.name;
+  if (character.hidden !== undefined) clone.hidden = character.hidden;
+  if (character.locked !== undefined) clone.locked = character.locked;
   if (character.rotationYDeg !== undefined) clone.rotationYDeg = character.rotationYDeg;
   if (character.rotation !== undefined) clone.rotation = [...character.rotation];
   if (character.scale !== undefined) clone.scale = cloneScale(character.scale);

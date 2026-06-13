@@ -26,6 +26,7 @@ Kaynak: `C:\Users\emret\Desktop\GPTEditorSohbeti.txt` icindeki web sohbet notlar
 - [x] Duplicate eklendi.
   - Ctrl+D secili objeyi cogaltir.
   - Alt + move drag secili objeyi kopyalayip yeni kopyayi surukler.
+  - Coklu secimde Ctrl+D ve Alt + move drag secili obje kumesini kopyalar.
   - Duplicate islemi undo / redo command stack'e baglidir.
 
 ## Kismi Tamamlananlar
@@ -122,13 +123,22 @@ Kaynak: `C:\Users\emret\Desktop\GPTEditorSohbeti.txt` icindeki web sohbet notlar
 
 ### P3 - Selection ve organizasyon
 
-- [ ] Coklu secim ekle.
+- [x] Coklu secim ekle.
   - Ctrl + LMB veya Shift + LMB ile secime ekleme.
-- [ ] Drag selection box ekle.
-- [ ] Esc ile secimi temizle.
-- [ ] Ctrl+A ile tum objeleri sec.
-- [ ] H ile secili objeyi gizle.
-- [ ] Shift+H ile gizlenenleri goster.
+  - Outliner'da Ctrl/Shift + click ile secime ekleme/cikarma.
+  - Transform gizmo ve Details panel aktif objede kalir.
+  - Coklu secimde her obje kendi selection box helper'i ile gosterilir.
+- [x] Esc ile secimi temizle.
+- [x] Ctrl+A ile tum gorunur objeleri sec.
+- [x] H ile secili objeyi gizle.
+- [x] Shift+H ile gizlenenleri goster.
+- [x] Toplu delete / hide / lock / duplicate ekle.
+  - Delete ve Ctrl+D secili obje kumesine uygulanir.
+  - Alt + move drag secili obje kumesini kopyalar ve yeni kopya kumesini birlikte surukler.
+  - Normal coklu secim transformunda gizmo/Details aktif objede kalir.
+  - Outliner hide/lock dugmeleri coklu secili satirdan tetiklenirse tum secime uygulanir.
+- [x] Drag selection box kapsamdan cikarildi.
+  - Not: Unreal editor is akisinda az kullanildigi icin bu fazda uygulanmayacak.
 - [ ] Lock Movement ekle.
   - Kilitli obje yanlislikla tasinmamali.
 - [ ] Ctrl+G ile group ekle.
@@ -186,6 +196,6 @@ Kaynak: `C:\Users\emret\Desktop\GPTEditorSohbeti.txt` icindeki web sohbet notlar
 7. [x] Floor drop, surface snap, wall snap.
    - [x] Surface snap (floor drop dahil; placement'ta otomatik snap).
    - [x] Wall snap (en yakin duvara baglamsal snap + placement'ta otomatik).
-8. Multi-select, box select ve grouping.
+8. Multi-select ve grouping.
 9. Details panel gameplay metadata alanlari.
 10. Preview/Game View.

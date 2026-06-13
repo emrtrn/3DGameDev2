@@ -336,11 +336,17 @@ export class EditorUi {
       } else if (event.code === "KeyD") {
         event.preventDefault();
         this.app.duplicateSelected();
+      } else if (event.code === "KeyA") {
+        event.preventDefault();
+        this.app.selectAllObjects();
       }
       return;
     }
 
-    if (event.code === "KeyQ") {
+    if (event.code === "Escape") {
+      event.preventDefault();
+      this.app.clearSelection();
+    } else if (event.code === "KeyQ") {
       event.preventDefault();
       this.setActiveTool("select");
     } else if (event.code === "KeyW") {
@@ -361,6 +367,12 @@ export class EditorUi {
     } else if (event.code === "KeyF") {
       event.preventDefault();
       this.app.focusSelected();
+    } else if (event.code === "KeyH" && event.shiftKey) {
+      event.preventDefault();
+      this.app.showHiddenObjects();
+    } else if (event.code === "KeyH") {
+      event.preventDefault();
+      this.app.hideSelected();
     } else if (event.code === "KeyX") {
       event.preventDefault();
       this.updateSpaceButton(this.app.toggleTransformSpace());
@@ -633,7 +645,9 @@ export class EditorUi {
         `;
         row.addEventListener("click", (event) => {
           if ((event.target as HTMLElement).closest(".outliner-actions")) return;
-          this.app.selectSceneObject(object.id);
+          this.app.selectSceneObject(object.id, {
+            additive: event.ctrlKey || event.shiftKey,
+          });
         });
         row.addEventListener("dblclick", (event) => {
           if ((event.target as HTMLElement).closest(".outliner-actions")) return;
