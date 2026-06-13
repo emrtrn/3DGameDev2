@@ -2,9 +2,10 @@ import type { EditableAsset } from "@/scene/assetLoader";
 import type {
   EditableSceneObject,
   EditableSelection,
-  EditableTransform,
   EditorProjectInfo,
   EditorHistoryState,
+  EditorSnapSettings,
+  EditableTransform,
   SceneApp,
 } from "@/scene/SceneApp";
 import { ThumbnailRenderer } from "./ThumbnailRenderer";
@@ -336,6 +337,9 @@ export class EditorUi {
       } else if (event.code === "KeyD") {
         event.preventDefault();
         this.app.duplicateSelected();
+      } else if (event.code === "KeyG") {
+        event.preventDefault();
+        this.app.groupSelected();
       } else if (event.code === "KeyA") {
         event.preventDefault();
         this.app.selectAllObjects();
@@ -388,6 +392,7 @@ export class EditorUi {
         this.app.getEditorProjectInfo(),
         this.app.getEditableAssets(),
       ]);
+      this.syncSnapControls(this.app.getSnapSettings());
       this.projectInfo = projectInfo;
       this.editableAssets = assets;
       this.selectedFolder = normalizeProjectPath(projectInfo.assetRoot);
@@ -696,11 +701,11 @@ export class EditorUi {
         <strong>${escapeHtml(selection.label)}</strong>
         <span>${selection.kind} / ${escapeHtml(selection.assetId)}</span>
       </div>
-      ${vectorRow("Location", "p", selection.position, 0.1)}
-      ${vectorRow("Rotation", "r", selection.rotation, 1)}
-      ${scaleRow(selection.scale, selection.scaleLocked)}
+      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
+      ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
+      ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
       <div class="detail-actions">
-        <button type="button" data-detail-action="snap"
+        <button type="button" data-detail-action="snap" ${selection.locked ? "disabled" : ""}
           title="${
             this.app.isSelectionWallAsset()
               ? "Snap flush against the nearest wall (End)"
@@ -826,6 +831,33 @@ export class EditorUi {
     }
   }
 
+  private syncSnapControls(settings: EditorSnapSettings): void {
+    this.setSnapSelect("move", settings.move);
+    this.setSnapSelect("rotate", settings.rotate);
+    this.setSnapSelect("scale", settings.scale);
+    this.setSnapToggle("move", settings.moveEnabled);
+    this.setSnapToggle("rotate", settings.rotateEnabled);
+    this.setSnapToggle("scale", settings.scaleEnabled);
+  }
+
+  private setSnapSelect(key: "move" | "rotate" | "scale", value: number): void {
+    const select = this.root.querySelector<HTMLSelectElement>(`select[data-snap="${key}"]`);
+    if (!select) return;
+    const textValue = String(value);
+    if (![...select.options].some((option) => option.value === textValue)) {
+      const option = document.createElement("option");
+      option.value = textValue;
+      option.textContent = textValue;
+      select.append(option);
+    }
+    select.value = textValue;
+  }
+
+  private setSnapToggle(key: "move" | "rotate" | "scale", checked: boolean): void {
+    const input = this.root.querySelector<HTMLInputElement>(`input[data-snap-toggle="${key}"]`);
+    if (input) input.checked = checked;
+  }
+
   private setStatus(
     message: string,
     tone: "info" | "success" | "warning" | "error" = "info",
@@ -849,9 +881,18 @@ function vectorRow(
   prefix: "p" | "r",
   values: readonly [number, number, number],
   step: number,
+  disabled = false,
 ): string {
   const fields = AXES.map((axis, index) =>
-    axisField(`${prefix}${axis.toLowerCase()}`, axis, index, values[index] ?? 0, step, "pr"),
+    axisField(
+      `${prefix}${axis.toLowerCase()}`,
+      axis,
+      index,
+      values[index] ?? 0,
+      step,
+      "pr",
+      disabled,
+    ),
   ).join("");
   return `
     <div class="detail-vector">
@@ -862,9 +903,21 @@ function vectorRow(
 }
 
 /** The Scale row: three X/Y/Z fields plus a proportional-lock toggle. */
-function scaleRow(values: readonly [number, number, number], locked: boolean): string {
+function scaleRow(
+  values: readonly [number, number, number],
+  locked: boolean,
+  transformLocked = false,
+): string {
   const fields = AXES.map((axis, index) =>
-    axisField(`s${axis.toLowerCase()}`, axis, index, values[index] ?? 0, 0.05, "scale"),
+    axisField(
+      `s${axis.toLowerCase()}`,
+      axis,
+      index,
+      values[index] ?? 0,
+      0.05,
+      "scale",
+      transformLocked,
+    ),
   ).join("");
   return `
     <div class="detail-vector detail-vector-scale">
@@ -886,12 +939,13 @@ function axisField(
   value: number,
   step: number,
   detail: "pr" | "scale",
+  disabled = false,
 ): string {
   return `
     <label class="axis-field axis-${axis.toLowerCase()}">
       <span class="axis-tag">${axis}</span>
       <input name="${name}" data-detail="${detail}" data-axis="${index}"
-        type="number" step="${step}" value="${Number(value.toFixed(3))}" />
+        type="number" step="${step}" value="${Number(value.toFixed(3))}" ${disabled ? "disabled" : ""} />
     </label>
   `;
 }

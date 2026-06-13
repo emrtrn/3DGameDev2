@@ -245,9 +245,9 @@ body.editor-mode #debug-stats {
   inset: 0 0 auto 0;
   height: 44px;
   display: grid;
-  grid-template-columns: 240px 320px minmax(220px, 1fr) 360px;
+  grid-template-columns: 230px 300px minmax(330px, 1fr) 300px;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   padding: 0 12px;
   background: rgba(22, 25, 28, 0.94);
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
@@ -293,9 +293,9 @@ body.editor-mode #debug-stats {
 }
 
 .editor-snaps {
-  justify-content: center;
+  justify-content: flex-start;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .editor-snaps label {
@@ -412,15 +412,15 @@ body.editor-mode #debug-stats {
 
 .outliner-row {
   width: 100%;
-  min-height: 44px;
+  min-height: 32px;
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   text-align: left;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 6px;
-  padding: 0 8px;
+  padding: 0 6px 0 8px;
   color: #edf2f4;
   background: #2b3136;
   cursor: pointer;
@@ -435,7 +435,6 @@ body.editor-mode #debug-stats {
   background: rgba(114, 212, 159, 0.18);
 }
 
-.outliner-row.is-hidden .outliner-kind,
 .outliner-row.is-hidden .outliner-meta {
   opacity: 0.45;
 }
@@ -449,11 +448,32 @@ body.editor-mode #debug-stats {
   min-height: 26px;
   min-width: 26px;
   padding: 0;
-  font-size: 13px;
+  font-size: 0;
   line-height: 1;
   border-color: transparent;
   background: transparent;
   opacity: 0.5;
+}
+
+.editor-shell .outliner-toggle::before {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.editor-shell .outliner-toggle[data-action="hidden"]::before {
+  content: "V";
+}
+
+.editor-shell .outliner-toggle[data-action="hidden"].on::before {
+  content: "H";
+}
+
+.editor-shell .outliner-toggle[data-action="locked"]::before {
+  content: "U";
+}
+
+.editor-shell .outliner-toggle[data-action="locked"].on::before {
+  content: "L";
 }
 
 .editor-shell .outliner-toggle:hover {
@@ -468,7 +488,7 @@ body.editor-mode #debug-stats {
 }
 
 .outliner-kind {
-  display: grid;
+  display: none;
   place-items: center;
   width: 22px;
   height: 22px;
@@ -480,8 +500,7 @@ body.editor-mode #debug-stats {
 }
 
 .outliner-meta {
-  display: grid;
-  gap: 2px;
+  display: block;
   min-width: 0;
 }
 
@@ -497,8 +516,7 @@ body.editor-mode #debug-stats {
 }
 
 .outliner-meta small {
-  color: #aeb8bd;
-  font-size: 11px;
+  display: none;
 }
 
 .details-body,

@@ -10,7 +10,11 @@ export interface ProjectManifest {
     assetCatalog?: string;
     assetManifest: string;
     gridSize?: number;
+    gridEnabled?: boolean;
     snapRotationDeg?: number;
+    snapRotationEnabled?: boolean;
+    snapScale?: number;
+    snapScaleEnabled?: boolean;
   };
   scripts: {
     preview?: string;

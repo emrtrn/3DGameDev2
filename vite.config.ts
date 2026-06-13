@@ -20,7 +20,11 @@ interface ProjectManifest {
     assetCatalog?: string;
     assetManifest: string;
     gridSize?: number;
+    gridEnabled?: boolean;
     snapRotationDeg?: number;
+    snapRotationEnabled?: boolean;
+    snapScale?: number;
+    snapScaleEnabled?: boolean;
   };
   scripts: Record<string, string | undefined>;
   output: {
@@ -162,6 +166,14 @@ function validateScaleValue(value: unknown, label: string): number {
   return Number(scale.toFixed(3));
 }
 
+function validatePositiveSnap(value: unknown, label: string, max: number): number {
+  const snap = Number(value);
+  if (!Number.isFinite(snap) || snap <= 0 || snap > max) {
+    throw new Error(`invalid ${label}: ${value}`);
+  }
+  return Number(snap.toFixed(3));
+}
+
 /** Copies the optional transform/authoring fields onto `target`, validating each. */
 function applyTransformFields(
   entry: Record<string, unknown>,
@@ -259,6 +271,62 @@ function validateLayout(value: unknown): unknown {
     loadGroups: layout.loadGroups,
     instances,
     characters,
+  };
+}
+
+function validateEditorSettings(value: unknown): Partial<ProjectManifest["editor"]> | null {
+  if (value === undefined) return null;
+  if (!value || typeof value !== "object") throw new Error("editor settings must be an object");
+  const input = value as Record<string, unknown>;
+  const editor: Partial<ProjectManifest["editor"]> = {};
+
+  if (input.gridSize !== undefined) {
+    editor.gridSize = validatePositiveSnap(input.gridSize, "editor.gridSize", 100);
+  }
+  if (input.gridEnabled !== undefined) {
+    if (typeof input.gridEnabled !== "boolean") throw new Error("editor.gridEnabled must be boolean");
+    editor.gridEnabled = input.gridEnabled;
+  }
+  if (input.snapRotationDeg !== undefined) {
+    editor.snapRotationDeg = validatePositiveSnap(
+      input.snapRotationDeg,
+      "editor.snapRotationDeg",
+      360,
+    );
+  }
+  if (input.snapRotationEnabled !== undefined) {
+    if (typeof input.snapRotationEnabled !== "boolean") {
+      throw new Error("editor.snapRotationEnabled must be boolean");
+    }
+    editor.snapRotationEnabled = input.snapRotationEnabled;
+  }
+  if (input.snapScale !== undefined) {
+    editor.snapScale = validatePositiveSnap(input.snapScale, "editor.snapScale", 8);
+  }
+  if (input.snapScaleEnabled !== undefined) {
+    if (typeof input.snapScaleEnabled !== "boolean") {
+      throw new Error("editor.snapScaleEnabled must be boolean");
+    }
+    editor.snapScaleEnabled = input.snapScaleEnabled;
+  }
+
+  return editor;
+}
+
+function validateSavePayload(value: unknown): {
+  layout: unknown;
+  editor: Partial<ProjectManifest["editor"]> | null;
+} {
+  if (value && typeof value === "object" && "layout" in value) {
+    const input = value as Record<string, unknown>;
+    return {
+      layout: validateLayout(input.layout),
+      editor: validateEditorSettings(input.editor),
+    };
+  }
+  return {
+    layout: validateLayout(value),
+    editor: null,
   };
 }
 
@@ -478,17 +546,26 @@ function layoutEditorPlugin(): Plugin {
         }
 
         try {
-          const payload = validateLayout(await readJsonBody(req));
+          const payload = validateSavePayload(await readJsonBody(req));
           const project = await loadActiveProject();
           const layoutPath = resolveProjectPath(project, project.manifest.editor.defaultScene);
           const previous = await readFile(layoutPath, "utf8").catch(() => null);
-          await writeFile(layoutPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+          const nextLayout = `${JSON.stringify(payload.layout, null, 2)}\n`;
+          await writeFile(layoutPath, nextLayout, "utf8");
+          let manifestChanged = false;
+          if (payload.editor) {
+            const previousManifest = `${JSON.stringify(project.manifest, null, 2)}\n`;
+            project.manifest.editor = { ...project.manifest.editor, ...payload.editor };
+            const nextManifest = `${JSON.stringify(project.manifest, null, 2)}\n`;
+            manifestChanged = previousManifest !== nextManifest;
+            if (manifestChanged) await writeFile(project.manifestPath, nextManifest, "utf8");
+          }
           res.setHeader("Content-Type", "application/json; charset=utf-8");
           res.end(
             JSON.stringify({
               ok: true,
               path: layoutPath,
-              changed: previous !== `${JSON.stringify(payload, null, 2)}\n`,
+              changed: previous !== nextLayout || manifestChanged,
             }),
           );
         } catch (error) {

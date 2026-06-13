@@ -45,12 +45,12 @@ Kaynak: `C:\Users\emret\Desktop\GPTEditorSohbeti.txt` icindeki web sohbet notlar
   - [x] Duplicate command stack'e baglandi.
   - [x] Rename command stack'e baglandi.
   - [x] Hide ve lock command stack'e baglandi.
-  - [ ] Group gibi yeni editor islemleri de command stack'e baglanmali.
-- [ ] Snap sistemi.
+  - [x] Group command stack'e baglandi.
+- [x] Snap sistemi.
   - [x] Move / rotate / scale step secimi var.
   - [x] Snap acik / kapali toggle'lari var.
   - [x] Move secenekleri 0.25 / 0.5 / 1 olacak sekilde editor is akisi icin iyilestirildi.
-  - [ ] Surface snap, wall snap, floor drop ve bounds snap yok.
+  - [x] Surface snap, wall snap ve floor drop var.
 - [ ] Kamera input modu.
   - [x] RMB basiliyken kamera kontrolu var.
   - [ ] RMB + mouse wheel ile camera speed ayari yok.
@@ -100,9 +100,6 @@ Kaynak: `C:\Users\emret\Desktop\GPTEditorSohbeti.txt` icindeki web sohbet notlar
     snap yapar (baglamsal). Content Browser'dan birakinca da otomatik wall snap.
   - Varsayim: asset on yuzu +Z'ye bakar; oda yaklasik eksen-hizali kutu. undo/redo'ya bagli.
   - TODO: duvar kalinligi ins'i yok (AABB dis yuzune dayar); serbest oda sekli desteklenmiyor.
-- [ ] Bounds Snap ekle.
-  - Mobilya kenarlari duvar veya diger mobilya kenarina hizalanabilsin.
-
 ### P2 - Profesyonel editor davranislari
 
 - [x] World / Local transform modu ekle.
@@ -139,10 +136,12 @@ Kaynak: `C:\Users\emret\Desktop\GPTEditorSohbeti.txt` icindeki web sohbet notlar
   - Outliner hide/lock dugmeleri coklu secili satirdan tetiklenirse tum secime uygulanir.
 - [x] Drag selection box kapsamdan cikarildi.
   - Not: Unreal editor is akisinda az kullanildigi icin bu fazda uygulanmayacak.
-- [ ] Lock Movement ekle.
+- [x] Lock Movement ekle.
   - Kilitli obje yanlislikla tasinmamali.
-- [ ] Ctrl+G ile group ekle.
+  - Gizmo, Details transform alanlari, snap ve coklu secim hareketi kilitli objeyi tasimaz.
+- [x] Ctrl+G ile group ekle.
   - Ornek: yatak + komodin + lamba seti tek parca gibi tasinabilmeli.
+  - Grup uyesi secilince tum grup secilir; move gizmo grubu birlikte tasir.
 
 ### P4 - Details panelini oyun datasi uretir hale getirme
 
@@ -196,6 +195,6 @@ Kaynak: `C:\Users\emret\Desktop\GPTEditorSohbeti.txt` icindeki web sohbet notlar
 7. [x] Floor drop, surface snap, wall snap.
    - [x] Surface snap (floor drop dahil; placement'ta otomatik snap).
    - [x] Wall snap (en yakin duvara baglamsal snap + placement'ta otomatik).
-8. Multi-select ve grouping.
+8. [x] Multi-select ve grouping.
 9. Details panel gameplay metadata alanlari.
 10. Preview/Game View.

@@ -53,13 +53,17 @@ import {
 const MAX_PIXEL_RATIO = 2;
 const CAMERA_TARGET = new Vector3(0, 0.65, -0.2);
 const GIZMO_RENDER_ORDER = 1000;
+const GIZMO_OPACITY = 0.42;
+const GIZMO_ACTIVE_OPACITY = 0.62;
+const GIZMO_ACTIVE_COLOR = 0xff9f1a;
 const CAMERA_MOVE_SPEED = 5.5;
 const CAMERA_LOOK_SENSITIVITY = 0.003;
 const CAMERA_PITCH_LIMIT = Math.PI * 0.47;
 
 type EditorTool = "select" | "move" | "rotate" | "scale";
 type TransformSpace = "world" | "local";
-type GizmoAxis = "x" | "y" | "z" | "xz" | "uniform";
+type GizmoAxis = "x" | "y" | "z" | "xyz" | "uniform";
+type GizmoVectorAxis = Extract<GizmoAxis, "x" | "y" | "z">;
 
 const FLAG_LABELS: Record<"hidden" | "locked" | "scaleLocked", { on: string; off: string }> = {
   hidden: { on: "Hide object", off: "Show object" },
@@ -100,6 +104,7 @@ export interface EditableSelection {
   rotation: Vec3;
   scale: Vec3;
   scaleLocked: boolean;
+  locked: boolean;
 }
 
 export interface EditableSceneObject extends EditableSelection {
@@ -119,6 +124,15 @@ export interface EditorProjectInfo {
   manifest: ActiveProject["manifest"];
   rootName: string;
   assetRoot: string;
+}
+
+export interface EditorSnapSettings {
+  move: number;
+  rotate: number;
+  scale: number;
+  moveEnabled: boolean;
+  rotateEnabled: boolean;
+  scaleEnabled: boolean;
 }
 
 interface EditorCommand {
@@ -176,6 +190,7 @@ export class SceneApp {
   private readonly selectionBoxes: Box3Helper[] = [];
   private readonly gizmoGroup = new Group();
   private readonly gizmoPickables: Object3D[] = [];
+  private activeGizmoHandle: GizmoHandle | null = null;
   private activeTool: EditorTool = "move";
   private transformSpace: TransformSpace = "world";
   private snapSettings = {
@@ -196,7 +211,10 @@ export class SceneApp {
         pointerId: number;
         startTransform: EditableTransform;
         startPosition: [number, number, number];
+        startClientX: number;
         startClientY: number;
+        freeMoveRight?: Vector3 | undefined;
+        freeMoveUp?: Vector3 | undefined;
         linkedTransforms?: LinkedMoveStart[] | undefined;
       }
     | {
@@ -476,6 +494,10 @@ export class SceneApp {
     );
   }
 
+  getSnapSettings(): EditorSnapSettings {
+    return { ...this.snapSettings };
+  }
+
   focusSelected(): void {
     const selected = this.getSelected();
     if (!selected) {
@@ -737,6 +759,7 @@ export class SceneApp {
         rotation: readRotation(placement),
         scale: readScale(placement),
         scaleLocked: placement.scaleLocked ?? false,
+        locked: placement.locked ?? false,
       };
     }
 
@@ -751,6 +774,7 @@ export class SceneApp {
       rotation: readRotation(character),
       scale: readScale(character),
       scaleLocked: character.scaleLocked ?? false,
+      locked: character.locked ?? false,
     };
   }
 
@@ -885,6 +909,55 @@ export class SceneApp {
     );
   }
 
+  groupSelected(): void {
+    const selections = this.getSelectedSelections();
+    if (selections.length < 2) {
+      this.onStatus?.("Select at least two objects to group.", "warning");
+      return;
+    }
+
+    const groupId = this.createGroupId();
+    const entries = selections.flatMap((selection) => {
+      const target = this.getMutableTransform(selection);
+      return target
+        ? [
+            {
+              selection: cloneSelection(selection),
+              previousGroupId: target.groupId,
+            },
+          ]
+        : [];
+    });
+    if (entries.length < 2) {
+      this.onStatus?.("Select at least two objects to group.", "warning");
+      return;
+    }
+
+    const active = this.selection
+      ? cloneSelection(this.selection)
+      : cloneSelection(entries[0]!.selection);
+    const applyEntries = (mode: "redo" | "undo"): void => {
+      for (const entry of entries) {
+        this.applyGroupId(
+          entry.selection,
+          mode === "redo" ? groupId : entry.previousGroupId,
+          { notify: false },
+        );
+      }
+      this.selectMany(
+        entries.map((entry) => cloneSelection(entry.selection)),
+        active,
+      );
+      this.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: `Group ${entries.length} objects`,
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
+    });
+  }
+
   showHiddenObjects(): void {
     const hiddenSelections = this
       .getAllSelections({ includeHidden: true })
@@ -968,7 +1041,17 @@ export class SceneApp {
     const response = await fetch("/__save-layout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(this.layout),
+      body: JSON.stringify({
+        layout: this.layout,
+        editor: {
+          gridSize: this.snapSettings.move,
+          gridEnabled: this.snapSettings.moveEnabled,
+          snapRotationDeg: this.snapSettings.rotate,
+          snapRotationEnabled: this.snapSettings.rotateEnabled,
+          snapScale: this.snapSettings.scale,
+          snapScaleEnabled: this.snapSettings.scaleEnabled,
+        },
+      }),
     });
     const body = (await response.json().catch(() => ({}))) as {
       ok?: boolean;
@@ -985,8 +1068,16 @@ export class SceneApp {
     this.activeProject = await loadActiveProject();
     this.assetLoader = new AssetLoader(this.activeProject.manifest);
     this.snapSettings.move = this.activeProject.manifest.editor.gridSize ?? this.snapSettings.move;
+    this.snapSettings.moveEnabled =
+      this.activeProject.manifest.editor.gridEnabled ?? this.snapSettings.moveEnabled;
     this.snapSettings.rotate =
       this.activeProject.manifest.editor.snapRotationDeg ?? this.snapSettings.rotate;
+    this.snapSettings.rotateEnabled =
+      this.activeProject.manifest.editor.snapRotationEnabled ?? this.snapSettings.rotateEnabled;
+    this.snapSettings.scale =
+      this.activeProject.manifest.editor.snapScale ?? this.snapSettings.scale;
+    this.snapSettings.scaleEnabled =
+      this.activeProject.manifest.editor.snapScaleEnabled ?? this.snapSettings.scaleEnabled;
     this.manifest = await this.assetLoader.loadManifest();
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
@@ -1163,6 +1254,7 @@ export class SceneApp {
       const transform = this.getMutableTransform(selection);
       if (!transform) return null;
       const snapshot = clonePlacement(transform);
+      delete snapshot.groupId;
       const duplicateIndex = selection.placementIndex + 1;
       const duplicateSelection: Selection = {
         kind: "instance",
@@ -1186,6 +1278,7 @@ export class SceneApp {
     const character = this.layout.characters[selection.index];
     if (!character) return null;
     const snapshot = cloneCharacter(character);
+    delete snapshot.groupId;
     const duplicateIndex = selection.index + 1;
     const duplicateSelection: Selection = { kind: "character", index: duplicateIndex };
     this.executeCommand({
@@ -1246,7 +1339,7 @@ export class SceneApp {
         inserts.push({
           source: cloneSelection(selection),
           selection: duplicateSelection,
-          snapshot: clonePlacement(transform),
+          snapshot: cloneUngroupedPlacement(transform),
         });
       });
     }
@@ -1261,7 +1354,7 @@ export class SceneApp {
       inserts.push({
         source: cloneSelection(selection),
         selection: { kind: "character", index: selection.index + offset + 1 },
-        snapshot: cloneCharacter(character),
+        snapshot: cloneUngroupedCharacter(character),
       });
     });
 
@@ -1347,10 +1440,6 @@ export class SceneApp {
     return Boolean(this.getMutableTransform(selection)?.locked);
   }
 
-  private isSelectionScaleLocked(selection: Selection): boolean {
-    return Boolean(this.getMutableTransform(selection)?.scaleLocked);
-  }
-
   /** Toggles proportional-scale lock on the current selection (Details panel). */
   setSelectionScaleLocked(value: boolean): void {
     if (!this.selection || !this.hasSelection(this.selection)) return;
@@ -1432,6 +1521,33 @@ export class SceneApp {
     if (options.notify !== false) this.emitSelectionChanged();
   }
 
+  private applyGroupId(
+    selection: Selection,
+    groupId: string | undefined,
+    options: { notify?: boolean } = {},
+  ): void {
+    const target = this.getMutableTransform(selection);
+    if (!target) return;
+    if (groupId) target.groupId = groupId;
+    else delete target.groupId;
+
+    if (options.notify !== false) this.emitSelectionChanged();
+  }
+
+  private createGroupId(): string {
+    const existing = new Set<string>();
+    for (const selection of this.getAllSelections({ includeHidden: true })) {
+      const groupId = this.getMutableTransform(selection)?.groupId;
+      if (groupId) existing.add(groupId);
+    }
+
+    let candidate = "";
+    do {
+      candidate = `group-${Date.now().toString(36)}-${Math.floor(Math.random() * 10000)}`;
+    } while (existing.has(candidate));
+    return candidate;
+  }
+
   private applyVisibility(selection: Selection): void {
     if (selection.kind === "instance") {
       this.rebuildInstanceGroup(selection.assetId);
@@ -1498,72 +1614,8 @@ export class SceneApp {
         return;
       }
 
-      let selection = picked ?? (this.activeTool === "select" ? null : this.selection);
-      let linkedTransforms: LinkedMoveStart[] | undefined;
-      if (selection) {
-        if (event.altKey && this.activeTool === "move") {
-          if (picked && this.isSelectionSelected(picked)) {
-            this.activateSelection(picked);
-          } else if (picked) {
-            this.select(selection);
-          }
-          selection = this.duplicateSelectionForDrag(selection) ?? selection;
-          linkedTransforms = this.captureLinkedMoveStarts(selection);
-        } else if (picked) {
-          this.select(selection);
-        }
-        const current = this.getSelected();
-        if (!current) return;
-
-        if (this.activeTool !== "select" && this.isSelectionLocked(selection)) {
-          this.onStatus?.("Selected object is locked.", "warning");
-          return;
-        }
-
-        if (this.activeTool === "move") {
-          const hit = this.clientToFloor(event.clientX, event.clientY);
-          if (hit) {
-            this.pointerDrag = {
-              mode: "move",
-              axis: "xz",
-              selection,
-              pointerId: event.pointerId,
-              offset: new Vector3(
-                current.position[0] - hit.x,
-                0,
-                current.position[2] - hit.z,
-              ),
-              startTransform: selectionToTransform(current),
-              startPosition: [...current.position],
-              startClientY: event.clientY,
-              linkedTransforms,
-            };
-            this.canvas.setPointerCapture(event.pointerId);
-          }
-        } else if (this.activeTool === "rotate") {
-          this.pointerDrag = {
-            mode: "rotate",
-            axis: "y",
-            selection,
-            pointerId: event.pointerId,
-            startTransform: selectionToTransform(current),
-            startClientX: event.clientX,
-            startRotation: [...current.rotation],
-          };
-          this.canvas.setPointerCapture(event.pointerId);
-        } else if (this.activeTool === "scale") {
-          this.pointerDrag = {
-            mode: "scale",
-            axis: "uniform",
-            selection,
-            pointerId: event.pointerId,
-            startTransform: selectionToTransform(current),
-            startClientX: event.clientX,
-            startClientY: event.clientY,
-            startScale: [...current.scale],
-          };
-          this.canvas.setPointerCapture(event.pointerId);
-        }
+      if (picked) {
+        this.select(picked);
       } else {
         this.select(null);
       }
@@ -1595,12 +1647,14 @@ export class SceneApp {
       if (this.pointerDrag?.pointerId === event.pointerId) {
         const drag = this.pointerDrag;
         this.pointerDrag = null;
+        this.activeGizmoHandle = null;
         this.canvas.releasePointerCapture(event.pointerId);
         if (drag.mode === "move" && drag.linkedTransforms?.length) {
           this.commitLinkedMoveChange(drag);
         } else {
           this.commitTransformChange(drag.selection, drag.startTransform);
         }
+        this.updateGizmo();
       }
     };
     this.canvas.addEventListener("pointerup", clearDrag);
@@ -1719,20 +1773,26 @@ export class SceneApp {
 
   private startGizmoDrag(handle: GizmoHandle, event: PointerEvent): void {
     if (!this.selection) return;
+    if (this.isSelectionLocked(this.selection)) {
+      this.onStatus?.("Selected object is locked.", "warning");
+      return;
+    }
     let linkedTransforms: LinkedMoveStart[] | undefined;
     if (event.altKey && handle.tool === "move") {
       const selection = this.duplicateSelectionForDrag(this.selection);
       if (selection) linkedTransforms = this.captureLinkedMoveStarts(selection);
+    } else if (handle.tool === "move") {
+      linkedTransforms = this.captureLinkedMoveStarts(this.selection);
     }
     const selected = this.getSelected();
     if (!selected) return;
-    if (this.selection && this.isSelectionLocked(this.selection)) {
-      this.onStatus?.("Selected object is locked.", "warning");
-      return;
-    }
+
+    this.activeGizmoHandle = { ...handle };
+    this.updateGizmo();
 
     if (handle.tool === "move") {
       const hit = this.clientToFloor(event.clientX, event.clientY);
+      const freeMoveBasis = this.getScreenSpaceMoveBasis();
       this.pointerDrag = {
         mode: "move",
         axis: handle.axis,
@@ -1743,7 +1803,10 @@ export class SceneApp {
           ? new Vector3(selected.position[0] - hit.x, 0, selected.position[2] - hit.z)
           : new Vector3(),
         startPosition: [...selected.position],
+        startClientX: event.clientX,
         startClientY: event.clientY,
+        freeMoveRight: freeMoveBasis.right,
+        freeMoveUp: freeMoveBasis.up,
         linkedTransforms,
       };
     } else if (handle.tool === "rotate") {
@@ -1776,6 +1839,34 @@ export class SceneApp {
     if (!this.pointerDrag || this.pointerDrag.mode !== "move") return;
 
     const position: [number, number, number] = [...selected.position];
+    if (this.pointerDrag.axis === "xyz") {
+      const deltaX = event.clientX - this.pointerDrag.startClientX;
+      const deltaY = event.clientY - this.pointerDrag.startClientY;
+      const right = this.pointerDrag.freeMoveRight ?? new Vector3(1, 0, 0);
+      const up = this.pointerDrag.freeMoveUp ?? new Vector3(0, 1, 0);
+      const offset = right
+        .clone()
+        .multiplyScalar(deltaX * 0.01)
+        .add(up.clone().multiplyScalar(-deltaY * 0.01));
+      position[0] = snapValue(
+        this.pointerDrag.startPosition[0] + offset.x,
+        this.snapSettings.move,
+        this.snapSettings.moveEnabled,
+      );
+      position[1] = snapValue(
+        this.pointerDrag.startPosition[1] + offset.y,
+        this.snapSettings.move,
+        this.snapSettings.moveEnabled,
+      );
+      position[2] = snapValue(
+        this.pointerDrag.startPosition[2] + offset.z,
+        this.snapSettings.move,
+        this.snapSettings.moveEnabled,
+      );
+      this.updateMoveDragPosition(position);
+      return;
+    }
+
     if (this.pointerDrag.axis === "y") {
       const deltaY = event.clientY - this.pointerDrag.startClientY;
       position[1] = snapValue(
@@ -1814,14 +1905,14 @@ export class SceneApp {
       return;
     }
 
-    if (this.pointerDrag.axis === "x" || this.pointerDrag.axis === "xz") {
+    if (this.pointerDrag.axis === "x") {
       position[0] = snapValue(
         hit.x + this.pointerDrag.offset.x,
         this.snapSettings.move,
         this.snapSettings.moveEnabled,
       );
     }
-    if (this.pointerDrag.axis === "z" || this.pointerDrag.axis === "xz") {
+    if (this.pointerDrag.axis === "z") {
       position[2] = snapValue(
         hit.z + this.pointerDrag.offset.z,
         this.snapSettings.move,
@@ -1884,9 +1975,7 @@ export class SceneApp {
       (event.clientY - this.pointerDrag.startClientY);
     const factor = delta * 0.005;
     const start = this.pointerDrag.startScale;
-    const locked =
-      this.pointerDrag.axis === "uniform" ||
-      this.isSelectionScaleLocked(this.pointerDrag.selection);
+    const locked = this.pointerDrag.axis === "uniform";
 
     const apply = (value: number): number =>
       Math.max(
@@ -1913,6 +2002,13 @@ export class SceneApp {
     const hits = this.raycaster.intersectObjects(this.gizmoPickables, true);
     const handle = hits[0]?.object.userData.gizmoHandle as GizmoHandle | undefined;
     return handle ?? null;
+  }
+
+  private getScreenSpaceMoveBasis(): { right: Vector3; up: Vector3 } {
+    return {
+      right: new Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion).normalize(),
+      up: new Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion).normalize(),
+    };
   }
 
   private pickSelection(clientX: number, clientY: number): Selection | null {
@@ -1944,9 +2040,12 @@ export class SceneApp {
   private select(selection: Selection | null): void {
     this.selectedSelections.clear();
     if (selection) {
-      const current = cloneSelection(selection);
-      this.selectedSelections.set(selectionId(current), current);
-      this.selection = current;
+      const groupSelections = this.getGroupedSelections(selection);
+      for (const groupSelection of groupSelections) {
+        const current = cloneSelection(groupSelection);
+        this.selectedSelections.set(selectionId(current), current);
+      }
+      this.selection = cloneSelection(selection);
     } else {
       this.selection = null;
     }
@@ -1975,27 +2074,25 @@ export class SceneApp {
   }
 
   private toggleSelection(selection: Selection): void {
-    const id = selectionId(selection);
-    if (this.selectedSelections.has(id)) {
-      this.selectedSelections.delete(id);
-      if (this.selection && selectionsEqual(this.selection, selection)) {
+    const groupSelections = this.getGroupedSelections(selection);
+    const allSelected = groupSelections.every((entry) =>
+      this.selectedSelections.has(selectionId(entry)),
+    );
+
+    if (allSelected) {
+      for (const entry of groupSelections) this.selectedSelections.delete(selectionId(entry));
+      if (this.selection && groupSelections.some((entry) => selectionsEqual(this.selection, entry))) {
         const remaining = [...this.selectedSelections.values()];
         this.selection = remaining.at(-1) ? cloneSelection(remaining.at(-1)!) : null;
       }
     } else {
-      const current = cloneSelection(selection);
-      this.selectedSelections.set(id, current);
-      this.selection = current;
+      for (const entry of groupSelections) {
+        const current = cloneSelection(entry);
+        this.selectedSelections.set(selectionId(current), current);
+      }
+      this.selection = cloneSelection(selection);
     }
 
-    this.updateSelectionBox();
-    this.updateGizmo();
-    this.emitSelectionChanged();
-  }
-
-  private activateSelection(selection: Selection): void {
-    if (!this.isSelectionSelected(selection)) return;
-    this.selection = cloneSelection(selection);
     this.updateSelectionBox();
     this.updateGizmo();
     this.emitSelectionChanged();
@@ -2004,10 +2101,21 @@ export class SceneApp {
   private captureLinkedMoveStarts(active: Selection): LinkedMoveStart[] | undefined {
     const linked = this.getSelectedSelections().flatMap((selection) => {
       if (selectionsEqual(selection, active)) return [];
+      if (this.isSelectionLocked(selection)) return [];
       const startTransform = this.captureTransform(selection);
       return startTransform ? [{ selection: cloneSelection(selection), startTransform }] : [];
     });
     return linked.length > 0 ? linked : undefined;
+  }
+
+  private getGroupedSelections(selection: Selection): Selection[] {
+    const groupId = this.getMutableTransform(selection)?.groupId;
+    if (!groupId) return [cloneSelection(selection)];
+
+    const members = this
+      .getAllSelections({ includeHidden: true })
+      .filter((entry) => this.getMutableTransform(entry)?.groupId === groupId);
+    return members.length > 0 ? members.map(cloneSelection) : [cloneSelection(selection)];
   }
 
   private isSelectionSelected(selection: Selection): boolean {
@@ -2087,6 +2195,7 @@ export class SceneApp {
 
     const selected = this.getSelected();
     if (!selected || this.activeTool === "select") return;
+    if (this.selection && this.isSelectionLocked(this.selection)) return;
 
     this.gizmoGroup.visible = true;
     this.gizmoGroup.position.set(...selected.position);
@@ -2126,11 +2235,11 @@ export class SceneApp {
     this.addArrowHandle("z", 0x5b8fe1);
 
     const center = new Mesh(
-      new BoxGeometry(0.24, 0.05, 0.24),
-      gizmoMaterial(0xf3cc5c, 0.95),
+      new BoxGeometry(0.18, 0.18, 0.18),
+      this.gizmoMaterialFor("move", "xyz", 0xf3cc5c),
     );
-    center.name = "move-xz-plane";
-    this.registerGizmoHandle(center, { tool: "move", axis: "xz" });
+    center.name = "move-xyz-free";
+    this.registerGizmoHandle(center, { tool: "move", axis: "xyz" });
     this.gizmoGroup.add(center);
   }
 
@@ -2140,10 +2249,10 @@ export class SceneApp {
     this.addRotateRing("z", 0x5b8fe1);
   }
 
-  private addRotateRing(axis: Exclude<GizmoAxis, "xz" | "uniform">, color: number): void {
+  private addRotateRing(axis: GizmoVectorAxis, color: number): void {
     const ring = new Mesh(
-      new TorusGeometry(0.72, 0.018, 12, 96),
-      gizmoMaterial(color, 0.95),
+      new TorusGeometry(0.72, 0.01, 10, 96),
+      this.gizmoMaterialFor("rotate", axis, color),
     );
     ring.name = `rotate-${axis}-ring`;
     // A torus lies in its local XY plane (normal +Z); orient each ring so its
@@ -2156,8 +2265,8 @@ export class SceneApp {
 
   private addScaleGizmo(): void {
     const center = new Mesh(
-      new BoxGeometry(0.25, 0.25, 0.25),
-      gizmoMaterial(0xf3cc5c, 0.95),
+      new BoxGeometry(0.16, 0.16, 0.16),
+      this.gizmoMaterialFor("scale", "uniform", 0xf3cc5c),
     );
     center.name = "scale-uniform";
     this.registerGizmoHandle(center, { tool: "scale", axis: "uniform" });
@@ -2168,15 +2277,15 @@ export class SceneApp {
     this.addScaleHandle("z", 0x5b8fe1);
   }
 
-  private addArrowHandle(axis: Exclude<GizmoAxis, "xz" | "uniform">, color: number): void {
+  private addArrowHandle(axis: GizmoVectorAxis, color: number): void {
     const group = new Group();
     group.name = `move-${axis}-axis`;
 
-    const material = gizmoMaterial(color, 0.95);
-    const shaft = new Mesh(new CylinderGeometry(0.025, 0.025, 0.58, 10), material.clone());
-    const head = new Mesh(new ConeGeometry(0.08, 0.18, 16), material.clone());
-    shaft.position.y = 0.29;
-    head.position.y = 0.68;
+    const material = this.gizmoMaterialFor("move", axis, color);
+    const shaft = new Mesh(new CylinderGeometry(0.012, 0.012, 0.62, 8), material.clone());
+    const head = new Mesh(new ConeGeometry(0.055, 0.14, 14), material.clone());
+    shaft.position.y = 0.31;
+    head.position.y = 0.69;
     group.add(shaft, head);
 
     if (axis === "x") group.rotation.z = -Math.PI / 2;
@@ -2186,17 +2295,33 @@ export class SceneApp {
     this.gizmoGroup.add(group);
   }
 
-  private addScaleHandle(axis: Exclude<GizmoAxis, "xz" | "uniform">, color: number): void {
-    const handle = new Mesh(
-      new BoxGeometry(0.16, 0.16, 0.16),
-      gizmoMaterial(color, 0.95),
+  private addScaleHandle(axis: GizmoVectorAxis, color: number): void {
+    const group = new Group();
+    group.name = `scale-${axis}-axis`;
+
+    const material = this.gizmoMaterialFor("scale", axis, color);
+    const shaft = new Mesh(new CylinderGeometry(0.01, 0.01, 0.52, 8), material.clone());
+    const handle = new Mesh(new BoxGeometry(0.11, 0.11, 0.11), material.clone());
+    shaft.position.y = 0.26;
+    handle.position.y = 0.58;
+    group.add(shaft, handle);
+
+    if (axis === "x") group.rotation.z = -Math.PI / 2;
+    if (axis === "z") group.rotation.x = Math.PI / 2;
+    this.registerGizmoHandle(group, { tool: "scale", axis });
+    this.gizmoGroup.add(group);
+  }
+
+  private gizmoMaterialFor(tool: EditorTool, axis: GizmoAxis, color: number): MeshBasicMaterial {
+    const active = this.isActiveGizmoHandle(tool, axis);
+    return gizmoMaterial(
+      active ? GIZMO_ACTIVE_COLOR : color,
+      active ? GIZMO_ACTIVE_OPACITY : GIZMO_OPACITY,
     );
-    handle.name = `scale-${axis}-axis`;
-    if (axis === "x") handle.position.x = 0.58;
-    if (axis === "y") handle.position.y = 0.58;
-    if (axis === "z") handle.position.z = 0.58;
-    this.registerGizmoHandle(handle, { tool: "scale", axis });
-    this.gizmoGroup.add(handle);
+  }
+
+  private isActiveGizmoHandle(tool: EditorTool, axis: GizmoAxis): boolean {
+    return this.activeGizmoHandle?.tool === tool && this.activeGizmoHandle.axis === axis;
   }
 
   private registerGizmoHandle(object: Object3D, handle: GizmoHandle): void {
@@ -2543,10 +2668,17 @@ function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
   if (placement.name !== undefined) clone.name = placement.name;
   if (placement.hidden !== undefined) clone.hidden = placement.hidden;
   if (placement.locked !== undefined) clone.locked = placement.locked;
+  if (placement.groupId !== undefined) clone.groupId = placement.groupId;
   if (placement.rotationYDeg !== undefined) clone.rotationYDeg = placement.rotationYDeg;
   if (placement.rotation !== undefined) clone.rotation = [...placement.rotation];
   if (placement.scale !== undefined) clone.scale = cloneScale(placement.scale);
   if (placement.scaleLocked !== undefined) clone.scaleLocked = placement.scaleLocked;
+  return clone;
+}
+
+function cloneUngroupedPlacement(placement: LayoutPlacement): LayoutPlacement {
+  const clone = clonePlacement(placement);
+  delete clone.groupId;
   return clone;
 }
 
@@ -2558,11 +2690,18 @@ function cloneCharacter(character: LayoutCharacter): LayoutCharacter {
   if (character.name !== undefined) clone.name = character.name;
   if (character.hidden !== undefined) clone.hidden = character.hidden;
   if (character.locked !== undefined) clone.locked = character.locked;
+  if (character.groupId !== undefined) clone.groupId = character.groupId;
   if (character.rotationYDeg !== undefined) clone.rotationYDeg = character.rotationYDeg;
   if (character.rotation !== undefined) clone.rotation = [...character.rotation];
   if (character.scale !== undefined) clone.scale = cloneScale(character.scale);
   if (character.scaleLocked !== undefined) clone.scaleLocked = character.scaleLocked;
   if (character.animation !== undefined) clone.animation = character.animation;
+  return clone;
+}
+
+function cloneUngroupedCharacter(character: LayoutCharacter): LayoutCharacter {
+  const clone = cloneCharacter(character);
+  delete clone.groupId;
   return clone;
 }
 

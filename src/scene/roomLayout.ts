@@ -4,6 +4,7 @@ export interface LayoutPlacement {
   name?: string;
   hidden?: boolean;
   locked?: boolean;
+  groupId?: string;
   position: Vec3;
   /** Legacy Y-only rotation in degrees. Read as a fallback when `rotation` is absent. */
   rotationYDeg?: number;
@@ -25,6 +26,7 @@ export interface LayoutCharacter {
   name?: string;
   hidden?: boolean;
   locked?: boolean;
+  groupId?: string;
   position: Vec3;
   /** Legacy Y-only rotation in degrees. Read as a fallback when `rotation` is absent. */
   rotationYDeg?: number;
