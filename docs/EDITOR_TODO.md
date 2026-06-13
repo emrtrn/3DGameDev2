@@ -147,23 +147,23 @@ Kaynak: `C:\Users\emret\Desktop\GPTEditorSohbeti.txt` icindeki web sohbet notlar
 
 ### P4 - Details panelini oyun datasi uretir hale getirme
 
-- [ ] Name alani ekle.
-- [ ] Category alani goster.
-- [ ] Transform bolumunu genislet.
+- [x] Name alani ekle. (Details panelinde duzenlenebilir; rename undo/redo'ya bagli.)
+- [x] Category alani goster. (Salt-okunur; manifest kategorisinden gelir.)
+- [x] Transform bolumunu genislet.
   - [x] Location X/Y/Z. (Detaylar panelinde yan yana, X/Y/Z renk etiketli.)
   - [x] Rotation X/Y/Z. (Tam Euler; gizmo'da X/Y/Z donme halkalari.)
   - [x] Scale X/Y/Z. (Eksen bazli; gizmo'da eksen bazli scale tutamaklari.)
   - [x] Scale kilidi. (Acikken eksenler oranli olcekler; details + gizmo.)
-  - [ ] Reset.
-  - [ ] Copy.
-  - [ ] Paste.
-- [ ] Placement bolumu ekle.
-  - Snap to Floor.
-  - Snap to Wall.
-  - Lock Movement.
-  - Cast Shadow.
-  - Collision Enabled.
-- [ ] Metadata bolumu ekle.
+  - [x] Reset. (Rotation 0, scale 1; pozisyon korunur. undo/redo'ya bagli.)
+  - [x] Copy. (Aktif transformu panel ic clipboard'a alir.)
+  - [x] Paste. (Tam transform: pozisyon + rotasyon + olcek. undo/redo'ya bagli.)
+- [x] Placement bolumu ekle.
+  - [x] Snap to Floor. (surfaceSnapSelected; altindaki yuzeye, yoksa zemine dusurur.)
+  - [x] Snap to Wall. (En yakin duvara baglar; karakter seciminde pasif.)
+  - [x] Lock Movement. (Toggle; coklu secimde tum secime uygulanir.)
+  - [x] Cast Shadow. (Placement veri alani; absent=true varsayilan. Runtime tuketir.)
+  - [x] Collision Enabled. (Placement veri alani; absent=true varsayilan. Runtime tuketir.)
+- [ ] Metadata bolumu ekle. (Faz C - sema-gudumlu; alanlar projede tanimlanir, editor cekirdegi generic kalir.)
   - Price.
   - Comfort.
   - Style.

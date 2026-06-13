@@ -656,6 +656,58 @@ body.editor-mode #debug-stats {
   width: 100%;
 }
 
+.detail-value {
+  color: #ffffff;
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.detail-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9aa4a9;
+}
+
+.detail-actions-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.editor-shell .detail-actions-row button {
+  width: 100%;
+}
+
+.detail-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #c8d0d4;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.detail-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #3f7fd0;
+  cursor: pointer;
+}
+
 .empty-details {
   color: #c8d0d4;
 }

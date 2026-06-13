@@ -68,6 +68,7 @@ export class EditorUi {
   private selected: EditableSelection | null = null;
   private detailsBaseline: EditableTransform | null = null;
   private detailsScale: [number, number, number] | null = null;
+  private transformClipboard: EditableTransform | null = null;
 
   constructor(private readonly app: SceneApp) {
     document.body.classList.add("editor-mode");
@@ -706,21 +707,61 @@ export class EditorUi {
 
     this.detailsScale = [...selection.scale];
 
+    const lockedAttr = selection.locked ? "disabled" : "";
+    const wallDisabled = selection.locked || selection.kind === "character" ? "disabled" : "";
     this.detailsBody.innerHTML = `
       <div class="detail-heading">
         <strong>${escapeHtml(selection.label)}</strong>
         <span>${selection.kind} / ${escapeHtml(selection.assetId)}</span>
       </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
+          placeholder="${escapeHtml(selection.assetId)}" />
+      </label>
+      <div class="detail-row">
+        <span>Category</span>
+        <span class="detail-value">${
+          selection.category ? escapeHtml(selection.category) : "—"
+        }</span>
+      </div>
       ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
       ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
       ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
-      <div class="detail-actions">
-        <button type="button" data-detail-action="snap" ${selection.locked ? "disabled" : ""}
-          title="${
-            this.app.isSelectionWallAsset()
-              ? "Snap flush against the nearest wall (End)"
-              : "Snap onto the surface below (End)"
-          }">${this.app.isSelectionWallAsset() ? "Snap to Wall" : "Snap to Surface"}</button>
+      <div class="detail-section">
+        <div class="detail-actions-row">
+          <button type="button" data-detail-action="reset" ${lockedAttr}
+            title="Reset rotation to 0 and scale to 1">Reset</button>
+          <button type="button" data-detail-action="copy"
+            title="Copy this transform">Copy</button>
+          <button type="button" data-detail-action="paste" ${lockedAttr}
+            title="Paste the copied transform">Paste</button>
+        </div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Placement</div>
+        <div class="detail-actions-row">
+          <button type="button" data-detail-action="snap-floor" ${lockedAttr}
+            title="Drop onto the surface below (End)">Snap to Floor</button>
+          <button type="button" data-detail-action="snap-wall" ${wallDisabled}
+            title="Snap flush against the nearest wall">Snap to Wall</button>
+        </div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-detail-toggle="locked" ${selection.locked ? "checked" : ""} />
+          <span>Lock Movement</span>
+        </label>
+        <label class="detail-toggle">
+          <input type="checkbox" data-detail-toggle="castShadow" ${
+            selection.castShadow ? "checked" : ""
+          } />
+          <span>Cast Shadow</span>
+        </label>
+        <label class="detail-toggle">
+          <input type="checkbox" data-detail-toggle="collision" ${
+            selection.collision ? "checked" : ""
+          } />
+          <span>Collision</span>
+        </label>
       </div>
     `;
 
@@ -753,9 +794,92 @@ export class EditorUi {
         this.app.setSelectionScaleLocked(!selection.scaleLocked);
       });
 
+    const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-detail-name]");
+    nameInput?.addEventListener("change", () => {
+      this.app.renameSceneObject(selection.id, nameInput.value);
+    });
+
     this.detailsBody
-      .querySelector<HTMLButtonElement>('[data-detail-action="snap"]')
-      ?.addEventListener("click", () => this.app.snapSelected());
+      .querySelectorAll<HTMLButtonElement>("[data-detail-action]")
+      .forEach((button) => {
+        button.addEventListener("click", () =>
+          this.handleDetailAction(button.dataset.detailAction ?? ""),
+        );
+      });
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>("[data-detail-toggle]")
+      .forEach((toggle) => {
+        toggle.addEventListener("change", () =>
+          this.handleDetailToggle(toggle.dataset.detailToggle ?? "", toggle.checked),
+        );
+      });
+  }
+
+  private handleDetailAction(action: string): void {
+    switch (action) {
+      case "reset":
+        this.resetSelectedTransform();
+        break;
+      case "copy":
+        this.copySelectedTransform();
+        break;
+      case "paste":
+        this.pasteSelectedTransform();
+        break;
+      case "snap-floor":
+        this.app.surfaceSnapSelected();
+        break;
+      case "snap-wall":
+        this.app.snapSelectedToWall();
+        break;
+    }
+  }
+
+  private handleDetailToggle(toggle: string, checked: boolean): void {
+    if (!this.selected) return;
+    switch (toggle) {
+      case "locked":
+        this.app.setSceneObjectLocked(this.selected.id, checked);
+        break;
+      case "castShadow":
+        this.app.setSelectionCastShadow(checked);
+        break;
+      case "collision":
+        this.app.setSelectionCollision(checked);
+        break;
+    }
+  }
+
+  /** Resets rotation to 0 and scale to 1, leaving position untouched. */
+  private resetSelectedTransform(): void {
+    const before = this.app.captureSelectedTransform();
+    if (!before) return;
+    this.app.updateSelectedTransform({ rotation: [0, 0, 0], scale: [1, 1, 1] });
+    this.app.commitSelectedTransform(before, "Reset transform");
+  }
+
+  private copySelectedTransform(): void {
+    const transform = this.app.captureSelectedTransform();
+    if (!transform) return;
+    this.transformClipboard = transform;
+    this.setStatus("Transform copied.", "info");
+  }
+
+  private pasteSelectedTransform(): void {
+    const clip = this.transformClipboard;
+    if (!clip) {
+      this.setStatus("Transform clipboard is empty.", "warning");
+      return;
+    }
+    const before = this.app.captureSelectedTransform();
+    if (!before) return;
+    this.app.updateSelectedTransform({
+      position: [...clip.position],
+      rotation: [...clip.rotation],
+      scale: [...clip.scale],
+    });
+    this.app.commitSelectedTransform(before, "Paste transform");
   }
 
   /**

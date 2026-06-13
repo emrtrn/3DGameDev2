@@ -77,6 +77,14 @@ const FLAG_LABELS: Record<"hidden" | "locked" | "scaleLocked", { on: string; off
   scaleLocked: { on: "Lock scale ratio", off: "Unlock scale ratio" },
 };
 
+const DEFAULT_TRUE_FLAG_LABELS: Record<
+  "castShadow" | "collision",
+  { on: string; off: string }
+> = {
+  castShadow: { on: "Enable cast shadow", off: "Disable cast shadow" },
+  collision: { on: "Enable collision", off: "Disable collision" },
+};
+
 interface GizmoHandle {
   tool: EditorTool;
   axis: GizmoAxis;
@@ -121,12 +129,18 @@ export interface EditableSelection {
   id: string;
   kind: Selection["kind"];
   assetId: string;
+  /** Asset catalog/manifest category, resolved for display. Empty when unknown. */
+  category: string;
   label: string;
   position: Vec3;
   rotation: Vec3;
   scale: Vec3;
   scaleLocked: boolean;
   locked: boolean;
+  /** Resolved cast-shadow flag (absent in data means true). */
+  castShadow: boolean;
+  /** Resolved collision flag (absent in data means true). */
+  collision: boolean;
 }
 
 export interface EditableSceneObject extends EditableSelection {
@@ -380,6 +394,7 @@ export class SceneApp {
           id: selectionId(selection),
           kind: "instance",
           assetId: instance.assetId,
+          category: this.assetCategory(instance.assetId),
           label: placement.name ?? `${instance.assetId} #${placementIndex + 1}`,
           position: [...placement.position],
           rotation: readRotation(placement),
@@ -388,6 +403,8 @@ export class SceneApp {
           selected: this.isSelectionSelected(selection),
           hidden: placement.hidden ?? false,
           locked: placement.locked ?? false,
+          castShadow: placement.castShadow ?? true,
+          collision: placement.collision ?? true,
         });
       });
     }
@@ -398,6 +415,7 @@ export class SceneApp {
         id: selectionId(selection),
         kind: "character",
         assetId: character.assetId,
+        category: this.assetCategory(character.assetId),
         label: character.name ?? `${character.assetId} #${index + 1}`,
         position: [...character.position],
         rotation: readRotation(character),
@@ -406,6 +424,8 @@ export class SceneApp {
         selected: this.isSelectionSelected(selection),
         hidden: character.hidden ?? false,
         locked: character.locked ?? false,
+        castShadow: character.castShadow ?? true,
+        collision: character.collision ?? true,
       });
     });
 
@@ -658,34 +678,51 @@ export class SceneApp {
     );
   }
 
+  /**
+   * Details "Snap to Wall": forces a wall snap on the active instance regardless
+   * of its catalog surface type. Characters and empty selections are no-ops.
+   */
+  snapSelectedToWall(): void {
+    if (!this.selection || this.selection.kind !== "instance") {
+      this.onStatus?.("Select a model to snap to a wall.", "warning");
+      return;
+    }
+    this.performWallSnap(this.selection);
+  }
+
   /** Returns true when the selection is a wall asset (handled here, no surface fallback). */
   private wallSnapSelected(): boolean {
     if (!this.selection || this.selection.kind !== "instance") return false;
     if (!this.isWallAsset(this.selection.assetId)) return false;
-    if (this.isSelectionLocked(this.selection)) {
+    this.performWallSnap(this.selection);
+    return true;
+  }
+
+  /** Slides and orients an instance flush against the nearest room wall. */
+  private performWallSnap(selection: InstanceSelection): void {
+    if (this.isSelectionLocked(selection)) {
       this.onStatus?.("Selected object is locked.", "warning");
-      return true;
+      return;
     }
 
-    const before = this.captureTransform(this.selection);
-    if (!before) return false;
+    const before = this.captureTransform(selection);
+    if (!before) return;
     const snap = this.computeWallSnap(
-      this.selection.assetId,
+      selection.assetId,
       before.position,
       before.rotation[1],
       before.scale,
     );
     if (!snap) {
       this.onStatus?.("No room walls found to snap to.", "warning");
-      return true;
+      return;
     }
 
     this.updateSelectedTransform({
       position: snap.position,
       rotation: [before.rotation[0], snap.rotationYDeg, before.rotation[2]],
     });
-    this.commitTransformChange(this.selection, before, "Wall snap");
-    return true;
+    this.commitTransformChange(selection, before, "Wall snap");
   }
 
   /**
@@ -804,12 +841,15 @@ export class SceneApp {
         id: selectionId(selection),
         kind: "instance",
         assetId: selection.assetId,
+        category: this.assetCategory(selection.assetId),
         label: placement.name ?? `${selection.assetId} #${selection.placementIndex + 1}`,
         position: [...placement.position],
         rotation: readRotation(placement),
         scale: readScale(placement),
         scaleLocked: placement.scaleLocked ?? false,
         locked: placement.locked ?? false,
+        castShadow: placement.castShadow ?? true,
+        collision: placement.collision ?? true,
       };
     }
 
@@ -819,13 +859,21 @@ export class SceneApp {
       id: selectionId(selection),
       kind: "character",
       assetId: character.assetId,
+      category: this.assetCategory(character.assetId),
       label: character.name ?? character.assetId,
       position: [...character.position],
       rotation: readRotation(character),
       scale: readScale(character),
       scaleLocked: character.scaleLocked ?? false,
       locked: character.locked ?? false,
+      castShadow: character.castShadow ?? true,
+      collision: character.collision ?? true,
     };
+  }
+
+  /** Resolves an asset's manifest category for Details display. */
+  private assetCategory(assetId: string): string {
+    return this.manifest?.assets.find((entry) => entry.id === assetId)?.category ?? "";
   }
 
   captureSelectedTransform(): EditableTransform | null {
@@ -1494,6 +1542,55 @@ export class SceneApp {
   setSelectionScaleLocked(value: boolean): void {
     if (!this.selection || !this.hasSelection(this.selection)) return;
     this.setSelectionFlag(this.selection, "scaleLocked", value);
+  }
+
+  /** Details "Cast Shadow" toggle for the active selection (default on). */
+  setSelectionCastShadow(value: boolean): void {
+    if (!this.selection || !this.hasSelection(this.selection)) return;
+    this.setSelectionDefaultTrueFlag(this.selection, "castShadow", value);
+  }
+
+  /** Details "Collision" toggle for the active selection (default on). */
+  setSelectionCollision(value: boolean): void {
+    if (!this.selection || !this.hasSelection(this.selection)) return;
+    this.setSelectionDefaultTrueFlag(this.selection, "collision", value);
+  }
+
+  /**
+   * Sets a default-true boolean placement field (castShadow/collision) with
+   * undo/redo. The absent key means true, so the default value is omitted on
+   * save and only the deviation (false) is stored.
+   */
+  private setSelectionDefaultTrueFlag(
+    selection: Selection,
+    field: "castShadow" | "collision",
+    value: boolean,
+  ): void {
+    const target = this.getMutableTransform(selection);
+    if (!target) return;
+    const previous = target[field] ?? true;
+    if (previous === value) return;
+
+    const label = DEFAULT_TRUE_FLAG_LABELS[field][value ? "on" : "off"];
+    const commandSelection = cloneSelection(selection);
+
+    this.executeCommand({
+      label,
+      redo: () => this.applyDefaultTrueFlag(commandSelection, field, value),
+      undo: () => this.applyDefaultTrueFlag(commandSelection, field, previous),
+    });
+  }
+
+  private applyDefaultTrueFlag(
+    selection: Selection,
+    field: "castShadow" | "collision",
+    value: boolean,
+  ): void {
+    const target = this.getMutableTransform(selection);
+    if (!target) return;
+    if (value) delete target[field];
+    else target[field] = false;
+    this.emitSelectionChanged();
   }
 
   private setSelectionFlag(

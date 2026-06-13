@@ -14,6 +14,10 @@ export interface LayoutPlacement {
   scale?: number | Vec3;
   /** Editor hint: keep scale axes proportional when editing. */
   scaleLocked?: boolean;
+  /** Runtime hint: object casts shadows. Absent means true (default on). */
+  castShadow?: boolean;
+  /** Runtime hint: object participates in collision. Absent means true (default on). */
+  collision?: boolean;
 }
 
 export interface LayoutModelInstances {
@@ -36,6 +40,10 @@ export interface LayoutCharacter {
   scale?: number | Vec3;
   /** Editor hint: keep scale axes proportional when editing. */
   scaleLocked?: boolean;
+  /** Runtime hint: object casts shadows. Absent means true (default on). */
+  castShadow?: boolean;
+  /** Runtime hint: object participates in collision. Absent means true (default on). */
+  collision?: boolean;
   animation?: string;
 }
 
