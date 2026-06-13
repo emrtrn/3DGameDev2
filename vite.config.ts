@@ -174,6 +174,20 @@ function validatePositiveSnap(value: unknown, label: string, max: number): numbe
   return Number(snap.toFixed(3));
 }
 
+function validateOptionalNumber(
+  value: unknown,
+  label: string,
+  min: number,
+  max: number,
+): number | undefined {
+  if (value === undefined) return undefined;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < min || number > max) {
+    throw new Error(`invalid ${label}: ${value}`);
+  }
+  return Number(number.toFixed(3));
+}
+
 /** Copies the optional transform/authoring fields onto `target`, validating each. */
 function applyTransformFields(
   entry: Record<string, unknown>,
@@ -184,6 +198,8 @@ function applyTransformFields(
   if (entry.hidden === true) target.hidden = true;
   if (entry.locked === true) target.locked = true;
   if (entry.scaleLocked === true) target.scaleLocked = true;
+  if (entry.castShadow === false) target.castShadow = false;
+  if (entry.collision === false) target.collision = false;
 
   if (entry.rotationYDeg !== undefined) {
     target.rotationYDeg = validateRotationDeg(entry.rotationYDeg, `${label} rotationYDeg`);
@@ -215,6 +231,78 @@ function validatePlacement(value: unknown): Record<string, unknown> {
   return placement;
 }
 
+function validateWorldSettings(value: unknown): Record<string, unknown> | null {
+  if (value === undefined) return null;
+  if (!value || typeof value !== "object") {
+    throw new Error("worldSettings must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const worldSettings: Record<string, unknown> = {};
+
+  if (input.staticObjectsCastShadow !== undefined) {
+    if (typeof input.staticObjectsCastShadow !== "boolean") {
+      throw new Error("worldSettings.staticObjectsCastShadow must be boolean");
+    }
+    if (input.staticObjectsCastShadow) worldSettings.staticObjectsCastShadow = true;
+  }
+
+  if (input.staticObjectsReceiveShadow !== undefined) {
+    if (typeof input.staticObjectsReceiveShadow !== "boolean") {
+      throw new Error("worldSettings.staticObjectsReceiveShadow must be boolean");
+    }
+    if (!input.staticObjectsReceiveShadow) worldSettings.staticObjectsReceiveShadow = false;
+  }
+
+  return Object.keys(worldSettings).length > 0 ? worldSettings : null;
+}
+
+function validateLightActor(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") throw new Error("light must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.id !== "string" || input.id.length === 0) {
+    throw new Error("light id must be a string");
+  }
+  if (input.type !== "directional" && input.type !== "point" && input.type !== "spot") {
+    throw new Error("light type must be directional, point, or spot");
+  }
+  if (!isNumberTuple(input.position)) throw new Error("invalid light position");
+
+  const light: Record<string, unknown> = {
+    id: input.id,
+    type: input.type,
+    position: input.position.map((number) => Number(number.toFixed(3))),
+  };
+  if (typeof input.name === "string") light.name = input.name;
+  if (input.hidden === true) light.hidden = true;
+  if (input.locked === true) light.locked = true;
+  if (input.scaleLocked === true) light.scaleLocked = true;
+  if (typeof input.groupId === "string") light.groupId = input.groupId;
+  if (input.rotation !== undefined) {
+    if (!isNumberTuple(input.rotation)) throw new Error("invalid light rotation");
+    light.rotation = input.rotation.map((axis) =>
+      validateRotationDeg(axis, "light rotation component"),
+    );
+  }
+  if (typeof input.color === "string" && /^#[0-9a-fA-F]{6}$/.test(input.color)) {
+    light.color = input.color;
+  }
+  const intensity = validateOptionalNumber(input.intensity, "light.intensity", 0, 20);
+  if (intensity !== undefined) light.intensity = intensity;
+  if (input.castShadow !== undefined) {
+    if (typeof input.castShadow !== "boolean") throw new Error("light.castShadow must be boolean");
+    light.castShadow = input.castShadow;
+  }
+  const distance = validateOptionalNumber(input.distance, "light.distance", 0, 100);
+  if (distance !== undefined) light.distance = distance;
+  const angle = validateOptionalNumber(input.angle, "light.angle", 1, 90);
+  if (angle !== undefined) light.angle = angle;
+  const penumbra = validateOptionalNumber(input.penumbra, "light.penumbra", 0, 1);
+  if (penumbra !== undefined) light.penumbra = penumbra;
+  const decay = validateOptionalNumber(input.decay, "light.decay", 0, 8);
+  if (decay !== undefined) light.decay = decay;
+  return light;
+}
+
 function validateLayout(value: unknown): unknown {
   if (!value || typeof value !== "object") throw new Error("layout must be an object");
   const layout = value as Record<string, unknown>;
@@ -229,6 +317,14 @@ function validateLayout(value: unknown): unknown {
   }
   if (!Array.isArray(layout.instances)) throw new Error("instances must be an array");
   if (!Array.isArray(layout.characters)) throw new Error("characters must be an array");
+  const worldSettings = validateWorldSettings(layout.worldSettings);
+  const lights = layout.lights === undefined
+    ? null
+    : Array.isArray(layout.lights)
+      ? layout.lights.map(validateLightActor)
+      : (() => {
+          throw new Error("lights must be an array");
+        })();
 
   const instances = layout.instances.map((instance) => {
     if (!instance || typeof instance !== "object") {
@@ -265,13 +361,16 @@ function validateLayout(value: unknown): unknown {
     return entry;
   });
 
-  return {
+  const output: Record<string, unknown> = {
     schema: 1,
     name: layout.name,
     loadGroups: layout.loadGroups,
     instances,
     characters,
   };
+  if (worldSettings) output.worldSettings = worldSettings;
+  if (lights) output.lights = lights;
+  return output;
 }
 
 function validateEditorSettings(value: unknown): Partial<ProjectManifest["editor"]> | null {

@@ -1,4 +1,5 @@
 export type Vec3 = [number, number, number];
+export type LayoutLightType = "directional" | "point" | "spot";
 
 export interface LayoutPlacement {
   name?: string;
@@ -14,7 +15,7 @@ export interface LayoutPlacement {
   scale?: number | Vec3;
   /** Editor hint: keep scale axes proportional when editing. */
   scaleLocked?: boolean;
-  /** Runtime hint: object casts shadows. Absent means true (default on). */
+  /** Legacy/runtime hint. Editor renderer controls instanced static shadows centrally. */
   castShadow?: boolean;
   /** Runtime hint: object participates in collision. Absent means true (default on). */
   collision?: boolean;
@@ -40,17 +41,46 @@ export interface LayoutCharacter {
   scale?: number | Vec3;
   /** Editor hint: keep scale axes proportional when editing. */
   scaleLocked?: boolean;
-  /** Runtime hint: object casts shadows. Absent means true (default on). */
+  /** Runtime hint: character casts shadows. Absent means true (default on). */
   castShadow?: boolean;
   /** Runtime hint: object participates in collision. Absent means true (default on). */
   collision?: boolean;
   animation?: string;
 }
 
+export interface LayoutWorldSettings {
+  /** Central static/instanced shadow casting. Absent means false. */
+  staticObjectsCastShadow?: boolean;
+  /** Central static/instanced shadow receiving. Absent means true. */
+  staticObjectsReceiveShadow?: boolean;
+}
+
+export interface LayoutLightActor {
+  id: string;
+  type: LayoutLightType;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  scaleLocked?: boolean;
+  groupId?: string;
+  position: Vec3;
+  /** Full Euler rotation (XYZ order) in degrees. */
+  rotation?: Vec3;
+  color?: string;
+  intensity?: number;
+  castShadow?: boolean;
+  distance?: number;
+  angle?: number;
+  penumbra?: number;
+  decay?: number;
+}
+
 export interface RoomLayout {
   schema: 1;
   name: string;
   loadGroups: string[];
+  worldSettings?: LayoutWorldSettings;
+  lights?: LayoutLightActor[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];
 }

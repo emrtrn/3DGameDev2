@@ -245,7 +245,7 @@ body.editor-mode #debug-stats {
   inset: 0 0 auto 0;
   height: 44px;
   display: grid;
-  grid-template-columns: 230px 300px minmax(330px, 1fr) 300px;
+  grid-template-columns: 230px 300px minmax(280px, 1fr) 390px;
   align-items: center;
   gap: 8px;
   padding: 0 12px;
@@ -290,6 +290,44 @@ body.editor-mode #debug-stats {
 
 .editor-actions {
   justify-content: flex-end;
+}
+
+.add-actor-menu {
+  position: relative;
+}
+
+.add-actor-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  min-width: 180px;
+  display: none;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(19, 22, 25, 0.98);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.add-actor-menu:hover .add-actor-popover,
+.add-actor-menu:focus-within .add-actor-popover {
+  display: grid;
+  gap: 4px;
+}
+
+.add-actor-section-title {
+  padding: 4px 6px;
+  color: #9aa4a9;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.editor-shell .add-actor-popover button {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
 }
 
 .editor-snaps {
@@ -389,6 +427,40 @@ body.editor-mode #debug-stats {
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.inspector-tabs {
+  display: flex;
+  align-items: end;
+  gap: 4px;
+  margin: -4px -6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.editor-shell .inspector-tab {
+  height: 32px;
+  border-color: transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: #b8c1c6;
+  padding: 0 10px;
+}
+
+.editor-shell .inspector-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.editor-shell .inspector-tab.active {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(12, 14, 16, 0.72);
+}
+
+.inspector-pane {
+  height: calc(100% - 42px);
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .outliner-list {

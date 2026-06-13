@@ -6,7 +6,6 @@
  * This class owns: renderer, scene graph, camera rig, lights, frame loop.
  */
 import {
-  AmbientLight,
   AnimationMixer,
   Box3,
   Box3Helper,
@@ -22,13 +21,17 @@ import {
   Matrix4,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   Object3D,
   PCFSoftShadowMap,
   PerspectiveCamera,
   Plane,
+  PointLight,
   Quaternion,
   Raycaster,
   Scene,
+  SphereGeometry,
+  SpotLight,
   TorusGeometry,
   Vector2,
   Vector3,
@@ -45,7 +48,9 @@ import {
   readRotation,
   readScale,
   type LayoutCharacter,
+  type LayoutLightActor,
   type LayoutPlacement,
+  type LayoutWorldSettings,
   type RoomLayout,
   type Vec3,
 } from "./roomLayout";
@@ -66,6 +71,10 @@ const CAMERA_ORBIT_SENSITIVITY = 0.006;
 const CAMERA_PAN_SENSITIVITY = 0.0025;
 const CAMERA_DOLLY_SENSITIVITY = 0.018;
 const GIZMO_SCREEN_SIZE_PX = 118;
+const DEFAULT_STATIC_OBJECTS_CAST_SHADOWS = false;
+const DEFAULT_STATIC_OBJECTS_RECEIVE_SHADOWS = true;
+const DEFAULT_LIGHT_COLOR = "#ffffff";
+const DEFAULT_SUN_ID = "sun";
 
 type EditorTool = "select" | "move" | "rotate" | "scale";
 type TransformSpace = "world" | "local";
@@ -93,9 +102,11 @@ interface GizmoHandle {
 
 type Selection =
   | { kind: "instance"; assetId: string; placementIndex: number }
-  | { kind: "character"; index: number };
+  | { kind: "character"; index: number }
+  | { kind: "light"; index: number };
 type InstanceSelection = Extract<Selection, { kind: "instance" }>;
 type CharacterSelection = Extract<Selection, { kind: "character" }>;
+type LightSelection = Extract<Selection, { kind: "light" }>;
 
 interface LinkedMoveStart {
   selection: Selection;
@@ -142,6 +153,13 @@ export interface EditableSelection {
   castShadow: boolean;
   /** Resolved collision flag (absent in data means true). */
   collision: boolean;
+  lightType?: LayoutLightActor["type"];
+  color?: string;
+  intensity?: number;
+  distance?: number;
+  angle?: number;
+  penumbra?: number;
+  decay?: number;
 }
 
 export interface EditableSceneObject extends EditableSelection {
@@ -172,10 +190,23 @@ export interface EditorSnapSettings {
   scaleEnabled: boolean;
 }
 
+export interface EditorWorldSettings {
+  lightingMode: "Dynamic";
+  shadowFilter: "PCF Soft";
+  staticObjectsCastShadow: boolean;
+  staticObjectsReceiveShadow: boolean;
+}
+
 interface EditorCommand {
   label: string;
   undo: () => void;
   redo: () => void;
+}
+
+interface LightObjectRecord {
+  root: Object3D;
+  light: DirectionalLight | PointLight | SpotLight;
+  target?: Object3D;
 }
 
 interface MaterialStats {
@@ -192,7 +223,7 @@ export class SceneApp {
   private renderer: WebGLRenderer;
   private scene = new Scene();
   private camera: PerspectiveCamera;
-  private sun: DirectionalLight;
+  private sun: DirectionalLight | null = null;
   private frameHandle = 0;
   private lastTime = 0;
   private assetLoader: AssetLoader | null = null;
@@ -223,6 +254,7 @@ export class SceneApp {
   private instanceGroups = new Map<string, Group>();
   private instanceMeshes = new Map<string, InstancedMesh[]>();
   private characterObjects: Object3D[] = [];
+  private lightObjects: LightObjectRecord[] = [];
   private localBounds = new Map<string, Box3>();
   private assetPlacements = new Map<string, EditableAsset["placement"]>();
   private selection: Selection | null = null;
@@ -285,6 +317,7 @@ export class SceneApp {
   onSelectionChanged: ((selection: EditableSelection | null) => void) | null = null;
   onSceneObjectsChanged: ((objects: EditableSceneObject[]) => void) | null = null;
   onHistoryChanged: ((state: EditorHistoryState) => void) | null = null;
+  onWorldSettingsChanged: ((settings: EditorWorldSettings) => void) | null = null;
   onStatus: ((message: string, tone?: "info" | "success" | "warning" | "error") => void) | null =
     null;
 
@@ -307,25 +340,6 @@ export class SceneApp {
 
     this.scene.background = new Color(0xd7d7c7);
     this.camera = new PerspectiveCamera(44, 1, 0.1, 100);
-
-    const sun = new DirectionalLight(0xffffff, 2.0);
-    sun.position.set(3, 9, 4);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.bias = -0.0005;
-    sun.shadow.normalBias = 0.02;
-    // Default ortho frustum; refit to the room AABB once the scene loads.
-    const shadowCam = sun.shadow.camera;
-    shadowCam.near = 0.5;
-    shadowCam.far = 60;
-    shadowCam.left = -12;
-    shadowCam.right = 12;
-    shadowCam.top = 12;
-    shadowCam.bottom = -12;
-    this.sun = sun;
-    this.scene.add(sun);
-    this.scene.add(sun.target);
-    this.scene.add(new AmbientLight(0xffffff, 0.6));
 
     this.gizmoGroup.name = "editor-transform-gizmo";
     this.gizmoGroup.visible = false;
@@ -421,7 +435,7 @@ export class SceneApp {
           selected: this.isSelectionSelected(selection),
           hidden: placement.hidden ?? false,
           locked: placement.locked ?? false,
-          castShadow: placement.castShadow ?? true,
+          castShadow: this.staticObjectsCastShadow(),
           collision: placement.collision ?? true,
         });
       });
@@ -445,6 +459,34 @@ export class SceneApp {
         castShadow: character.castShadow ?? true,
         collision: character.collision ?? true,
       });
+    });
+
+    this.layout.lights?.forEach((light, index) => {
+      const selection: Selection = { kind: "light", index };
+      const sceneObject: EditableSceneObject = {
+        id: selectionId(selection),
+        kind: "light",
+        assetId: light.type,
+        category: "light",
+        label: light.name ?? light.id,
+        position: [...light.position],
+        rotation: readRotation(light),
+        scale: [1, 1, 1],
+        scaleLocked: true,
+        selected: this.isSelectionSelected(selection),
+        hidden: light.hidden ?? false,
+        locked: light.locked ?? false,
+        castShadow: light.castShadow ?? light.type === "directional",
+        collision: false,
+        lightType: light.type,
+        color: light.color ?? DEFAULT_LIGHT_COLOR,
+        intensity: light.intensity ?? defaultLightIntensity(light.type),
+      };
+      if (light.distance !== undefined) sceneObject.distance = light.distance;
+      if (light.angle !== undefined) sceneObject.angle = light.angle;
+      if (light.penumbra !== undefined) sceneObject.penumbra = light.penumbra;
+      if (light.decay !== undefined) sceneObject.decay = light.decay;
+      objects.push(sceneObject);
     });
 
     return objects;
@@ -561,6 +603,53 @@ export class SceneApp {
     return { ...this.snapSettings };
   }
 
+  getWorldSettings(): EditorWorldSettings {
+    return {
+      lightingMode: "Dynamic",
+      shadowFilter: "PCF Soft",
+      staticObjectsCastShadow: this.staticObjectsCastShadow(),
+      staticObjectsReceiveShadow: this.staticObjectsReceiveShadow(),
+    };
+  }
+
+  setWorldSettings(
+    values: Partial<
+      Pick<EditorWorldSettings, "staticObjectsCastShadow" | "staticObjectsReceiveShadow">
+    >,
+  ): void {
+    if (!this.layout) return;
+    const previous = this.getWorldSettings();
+    const next: EditorWorldSettings = { ...previous, ...values };
+    if (
+      previous.staticObjectsCastShadow === next.staticObjectsCastShadow &&
+      previous.staticObjectsReceiveShadow === next.staticObjectsReceiveShadow
+    ) {
+      return;
+    }
+
+    this.executeCommand({
+      label: "Update world settings",
+      redo: () => this.applyWorldSettings(next),
+      undo: () => this.applyWorldSettings(previous),
+    });
+  }
+
+  setSelectedLightSettings(values: Partial<LayoutLightActor>): void {
+    if (!this.layout || !this.selection || this.selection.kind !== "light") return;
+    const light = this.layout.lights?.[this.selection.index];
+    if (!light) return;
+    const previous = cloneLightActor(light);
+    const next = { ...previous, ...values };
+    if (lightActorsEqual(previous, next)) return;
+    const selection = cloneSelection(this.selection) as LightSelection;
+
+    this.executeCommand({
+      label: "Update light",
+      redo: () => this.applyLightActor(selection, next),
+      undo: () => this.applyLightActor(selection, previous),
+    });
+  }
+
   focusSelected(): void {
     const selected = this.getSelected();
     if (!selected || !this.selection) {
@@ -660,6 +749,7 @@ export class SceneApp {
     const pickables: Object3D[] = [];
     for (const meshes of this.instanceMeshes.values()) pickables.push(...meshes);
     pickables.push(...this.characterObjects);
+    pickables.push(...this.lightObjects.map((entry) => entry.root));
 
     const hits = ray.intersectObjects(pickables, true);
     for (const hit of hits) {
@@ -814,16 +904,11 @@ export class SceneApp {
 
   /** Fits the sun's shadow frustum to the room AABB so shadows stay crisp. */
   private fitSunShadowToScene(): void {
+    if (!this.sun) return;
     const room = this.getRoomBounds();
     if (!room || room.isEmpty()) return;
     const size = room.getSize(new Vector3());
-    const center = room.getCenter(new Vector3());
     const half = Math.max(size.x, size.z) * 0.6 + 1;
-
-    // Keep the sun's angle but recentre it over the room.
-    this.sun.position.set(center.x + 3, center.y + 9, center.z + 4);
-    this.sun.target.position.copy(center);
-    this.sun.target.updateMatrixWorld();
 
     const cam = this.sun.shadow.camera;
     cam.left = -half;
@@ -888,9 +973,36 @@ export class SceneApp {
         scale: readScale(placement),
         scaleLocked: placement.scaleLocked ?? false,
         locked: placement.locked ?? false,
-        castShadow: placement.castShadow ?? true,
+        castShadow: this.staticObjectsCastShadow(),
         collision: placement.collision ?? true,
       };
+    }
+
+    if (selection.kind === "light") {
+      const light = this.layout.lights?.[selection.index];
+      if (!light) return null;
+      const editable: EditableSelection = {
+        id: selectionId(selection),
+        kind: "light",
+        assetId: light.type,
+        category: "light",
+        label: light.name ?? light.id,
+        position: [...light.position],
+        rotation: readRotation(light),
+        scale: [1, 1, 1],
+        scaleLocked: true,
+        locked: light.locked ?? false,
+        castShadow: light.castShadow ?? light.type === "directional",
+        collision: false,
+        lightType: light.type,
+        color: light.color ?? DEFAULT_LIGHT_COLOR,
+        intensity: light.intensity ?? defaultLightIntensity(light.type),
+      };
+      if (light.distance !== undefined) editable.distance = light.distance;
+      if (light.angle !== undefined) editable.angle = light.angle;
+      if (light.penumbra !== undefined) editable.penumbra = light.penumbra;
+      if (light.decay !== undefined) editable.decay = light.decay;
+      return editable;
     }
 
     const character = this.layout.characters[selection.index];
@@ -956,6 +1068,7 @@ export class SceneApp {
 
     const instanceDeletes: Array<{ selection: InstanceSelection; snapshot: LayoutPlacement }> = [];
     const characterDeletes: Array<{ selection: CharacterSelection; snapshot: LayoutCharacter }> = [];
+    const lightDeletes: Array<{ selection: LightSelection; snapshot: LayoutLightActor }> = [];
     for (const selection of selections) {
       if (selection.kind === "instance") {
         const instance = this.layout?.instances.find((entry) => entry.assetId === selection.assetId);
@@ -969,15 +1082,25 @@ export class SceneApp {
         continue;
       }
 
-      const character = this.layout?.characters[selection.index];
-      if (character) {
+      if (selection.kind === "character") {
+        const character = this.layout?.characters[selection.index];
+        if (!character) continue;
         characterDeletes.push({
           selection: cloneSelection(selection) as CharacterSelection,
           snapshot: cloneCharacter(character),
         });
+        continue;
+      }
+
+      const light = this.layout?.lights?.[selection.index];
+      if (light) {
+        lightDeletes.push({
+          selection: cloneSelection(selection) as LightSelection,
+          snapshot: cloneLightActor(light),
+        });
       }
     }
-    if (instanceDeletes.length + characterDeletes.length === 0) return;
+    if (instanceDeletes.length + characterDeletes.length + lightDeletes.length === 0) return;
 
     const previousSelections = selections.map(cloneSelection);
     const previousActive = this.selection ? cloneSelection(this.selection) : null;
@@ -993,6 +1116,9 @@ export class SceneApp {
         for (const entry of [...characterDeletes].sort(compareCharacterDeletes)) {
           this.removeCharacterPlacement(entry.selection.index);
         }
+        for (const entry of [...lightDeletes].sort(compareLightDeletes)) {
+          this.removeLightActor(entry.selection.index);
+        }
         this.select(null);
       },
       undo: () => {
@@ -1005,6 +1131,9 @@ export class SceneApp {
         }
         for (const entry of [...characterDeletes].sort(compareCharacterRestores)) {
           this.insertCharacterPlacement(entry.selection.index, entry.snapshot);
+        }
+        for (const entry of [...lightDeletes].sort(compareLightRestores)) {
+          this.insertLightActor(entry.selection.index, entry.snapshot);
         }
         this.selectMany(previousSelections, previousActive);
       },
@@ -1101,6 +1230,25 @@ export class SceneApp {
       .getAllSelections({ includeHidden: true })
       .filter((selection) => this.getMutableTransform(selection)?.hidden);
     this.setSelectionsFlag(hiddenSelections, "hidden", false, "Show hidden objects");
+  }
+
+  addLightActor(type: LayoutLightActor["type"]): void {
+    if (!this.layout) return;
+    const index = this.layout.lights?.length ?? 0;
+    const actor = this.createDefaultLightActor(type);
+    const selection: Selection = { kind: "light", index };
+
+    this.executeCommand({
+      label: `Add ${formatLightType(type)}`,
+      redo: () => {
+        this.insertLightActor(index, actor);
+        this.select(selection);
+      },
+      undo: () => {
+        this.removeLightActor(index);
+        this.select(null);
+      },
+    });
   }
 
   addAssetAt(assetId: string, clientX: number, clientY: number): void {
@@ -1218,7 +1366,9 @@ export class SceneApp {
       this.activeProject.manifest.editor.snapScaleEnabled ?? this.snapSettings.scaleEnabled;
     this.manifest = await this.assetLoader.loadManifest();
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
+    this.ensureDefaultLights();
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
+    const convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);
     this.localBounds.clear();
 
     for (const [assetId, gltf] of this.models) {
@@ -1239,8 +1389,13 @@ export class SceneApp {
       this.addCharacter(this.models.get(character.assetId), character);
     }
 
+    for (const light of this.layout.lights ?? []) {
+      this.addLight(light);
+    }
+
     this.fitSunShadowToScene();
     this.emitSceneObjectsChanged();
+    this.emitWorldSettingsChanged();
     this.emitHistoryChanged();
 
     const bytes = await this.assetLoader.totalBytesForGroups(this.layout.loadGroups);
@@ -1252,10 +1407,11 @@ export class SceneApp {
         layout: this.layout.name,
         processedAssetBytes: bytes,
         materialStats,
+        convertedUnlitMaterials,
         note:
           materialStats.basic > 0
-            ? "MeshBasicMaterial indicates KHR_materials_unlit is active; scene lights do not affect those assets."
-            : "No unlit runtime materials detected.",
+            ? "Unlit runtime materials remain; scene lights do not affect those assets."
+            : "Runtime model materials are lit and can receive dynamic lighting.",
       }),
     );
   }
@@ -1282,8 +1438,8 @@ export class SceneApp {
       );
       instanced.name = `${assetId}-${object.name || "mesh"}`;
       instanced.frustumCulled = false;
-      instanced.castShadow = true;
-      instanced.receiveShadow = true;
+      instanced.castShadow = this.staticObjectsCastShadow();
+      instanced.receiveShadow = this.staticObjectsReceiveShadow();
       instanced.userData.assetId = assetId;
 
       for (let index = 0; index < placementMatrices.length; index += 1) {
@@ -1347,12 +1503,17 @@ export class SceneApp {
       return;
     }
 
+    if (selection.kind === "light") {
+      this.refreshLightObject(selection.index);
+      return;
+    }
+
     const object = this.characterObjects[selection.index];
     const transform = this.getMutableTransform(selection);
     if (!object || !transform) return;
     object.position.set(...transform.position);
     applyEulerDegrees(object, readRotation(transform));
-    object.scale.set(...readScale(transform));
+    object.scale.set(...readScale(transform as LayoutCharacter));
   }
 
   private addCharacter(gltf: GLTF | undefined, placement: LayoutCharacter): void {
@@ -1388,6 +1549,178 @@ export class SceneApp {
     return removedLayout ? cloneCharacter(removedLayout) : null;
   }
 
+  private ensureDefaultLights(): void {
+    if (!this.layout) return;
+    if (this.layout.lights && this.layout.lights.length > 0) return;
+    this.layout.lights = [
+      {
+        id: DEFAULT_SUN_ID,
+        type: "directional",
+        name: "Sun",
+        position: [3, 9, 4],
+        rotation: [-55, 35, 0],
+        color: DEFAULT_LIGHT_COLOR,
+        intensity: 2.0,
+        castShadow: true,
+      },
+    ];
+  }
+
+  private createDefaultLightActor(type: LayoutLightActor["type"]): LayoutLightActor {
+    const position = this.defaultActorPosition(type === "directional" ? 4 : 2);
+    const id = this.createLightId(type);
+    return {
+      id,
+      type,
+      name: uniqueActorName(formatLightType(type), this.layout?.lights ?? []),
+      position,
+      rotation: type === "point" ? [0, 0, 0] : [-55, 35, 0],
+      color: DEFAULT_LIGHT_COLOR,
+      intensity: defaultLightIntensity(type),
+      castShadow: type !== "point",
+      ...(type === "point" ? { distance: 8, decay: 2 } : {}),
+      ...(type === "spot" ? { distance: 10, angle: 30, penumbra: 0.35, decay: 2 } : {}),
+    };
+  }
+
+  private createLightId(type: LayoutLightActor["type"]): string {
+    const existing = new Set(this.layout?.lights?.map((light) => light.id) ?? []);
+    let id = "";
+    do {
+      id = `${type}-light-${Date.now().toString(36)}-${Math.floor(Math.random() * 10000)}`;
+    } while (existing.has(id));
+    return id;
+  }
+
+  private defaultActorPosition(distance: number): Vec3 {
+    const direction = new Vector3();
+    this.camera.getWorldDirection(direction);
+    const position = this.camera.position.clone().addScaledVector(direction.normalize(), distance);
+    position.y = Math.max(1, position.y);
+    return [round(position.x), round(position.y), round(position.z)];
+  }
+
+  private addLight(actor: LayoutLightActor): void {
+    const record = this.createLightObject(actor);
+    record.root.userData.lightIndex = this.lightObjects.length;
+    record.root.traverse((child) => {
+      child.userData.lightIndex = this.lightObjects.length;
+    });
+    this.scene.add(record.root);
+    if (record.target) this.scene.add(record.target);
+    this.lightObjects.push(record);
+    if (actor.type === "directional" && (!this.sun || actor.id === DEFAULT_SUN_ID)) {
+      this.sun = record.light as DirectionalLight;
+    }
+    this.refreshLightObject(this.lightObjects.length - 1);
+  }
+
+  private createLightObject(actor: LayoutLightActor): LightObjectRecord {
+    const root = new Object3D();
+    root.name = actor.name ?? actor.id;
+    const color = new Color(actor.color ?? DEFAULT_LIGHT_COLOR);
+    const intensity = actor.intensity ?? defaultLightIntensity(actor.type);
+
+    let light: DirectionalLight | PointLight | SpotLight;
+    let target: Object3D | undefined;
+    if (actor.type === "point") {
+      light = new PointLight(color, intensity, actor.distance ?? 8, actor.decay ?? 2);
+    } else if (actor.type === "spot") {
+      light = new SpotLight(
+        color,
+        intensity,
+        actor.distance ?? 10,
+        degreesToRadians(actor.angle ?? 30),
+        actor.penumbra ?? 0.35,
+        actor.decay ?? 2,
+      );
+      target = light.target;
+    } else {
+      light = new DirectionalLight(color, intensity);
+      target = light.target;
+    }
+
+    light.name = `${root.name} Light`;
+    light.castShadow = actor.castShadow ?? actor.type === "directional";
+    configureShadowCastingLight(light);
+    root.add(light);
+    root.add(createLightIcon(actor.type, color));
+    return target ? { root, light, target } : { root, light };
+  }
+
+  private insertLightActor(index: number, actor: LayoutLightActor): void {
+    if (!this.layout) return;
+    const insertionIndex = clampIndex(index, this.layout.lights?.length ?? 0);
+    this.layout.lights ??= [];
+    const record = this.createLightObject(actor);
+    this.layout.lights.splice(insertionIndex, 0, cloneLightActor(actor));
+    this.lightObjects.splice(insertionIndex, 0, record);
+    this.scene.add(record.root);
+    if (record.target) this.scene.add(record.target);
+    if (actor.type === "directional" && (!this.sun || actor.id === DEFAULT_SUN_ID)) {
+      this.sun = record.light as DirectionalLight;
+    }
+    this.refreshLightIndices();
+    this.refreshLightObject(insertionIndex);
+  }
+
+  private removeLightActor(index: number): LayoutLightActor | null {
+    if (!this.layout?.lights) return null;
+    const [removedLayout] = this.layout.lights.splice(index, 1);
+    const [removedObject] = this.lightObjects.splice(index, 1);
+    removedObject?.root.removeFromParent();
+    removedObject?.target?.removeFromParent();
+    this.refreshLightIndices();
+    this.sun =
+      (this.lightObjects.find((entry) => entry.light instanceof DirectionalLight)
+        ?.light as DirectionalLight | undefined) ?? null;
+    return removedLayout ? cloneLightActor(removedLayout) : null;
+  }
+
+  private refreshLightIndices(): void {
+    this.lightObjects.forEach((record, index) => {
+      record.root.userData.lightIndex = index;
+      record.root.traverse((child) => {
+        child.userData.lightIndex = index;
+      });
+    });
+  }
+
+  private refreshLightObject(index: number): void {
+    const actor = this.layout?.lights?.[index];
+    const record = this.lightObjects[index];
+    if (!actor || !record) return;
+
+    record.root.name = actor.name ?? actor.id;
+    record.root.position.set(...actor.position);
+    applyEulerDegrees(record.root, readRotation(actor));
+    record.root.visible = !(actor.hidden ?? false);
+
+    const color = new Color(actor.color ?? DEFAULT_LIGHT_COLOR);
+    record.light.color.copy(color);
+    record.light.intensity = actor.intensity ?? defaultLightIntensity(actor.type);
+    record.light.castShadow = actor.castShadow ?? actor.type === "directional";
+    if (record.light instanceof PointLight || record.light instanceof SpotLight) {
+      record.light.distance = actor.distance ?? (actor.type === "point" ? 8 : 10);
+      record.light.decay = actor.decay ?? 2;
+    }
+    if (record.light instanceof SpotLight) {
+      record.light.angle = degreesToRadians(actor.angle ?? 30);
+      record.light.penumbra = actor.penumbra ?? 0.35;
+    }
+
+    if (record.target) {
+      const [rx, ry, rz] = readRotation(actor).map(degreesToRadians) as Vec3;
+      const direction = new Vector3(0, 0, -1)
+        .applyEuler(new Euler(rx, ry, rz))
+        .normalize();
+      record.target.position.copy(record.root.position).add(direction);
+      record.target.updateMatrixWorld();
+    }
+
+    updateLightIconColor(record.root, color);
+  }
+
   private duplicateSelection(selection: Selection): Selection | null {
     if (!this.layout || !this.hasSelection(selection)) return null;
 
@@ -1410,6 +1743,29 @@ export class SceneApp {
         },
         undo: () => {
           this.removeInstancePlacement(selection.assetId, duplicateIndex);
+          this.select(selection);
+        },
+      });
+      return duplicateSelection;
+    }
+
+    if (selection.kind === "light") {
+      const light = this.layout.lights?.[selection.index];
+      if (!light) return null;
+      const snapshot = cloneLightActor(light);
+      snapshot.id = this.createLightId(light.type);
+      snapshot.name = uniqueActorName(light.name ?? light.id, this.layout.lights ?? []);
+      delete snapshot.groupId;
+      const duplicateIndex = selection.index + 1;
+      const duplicateSelection: Selection = { kind: "light", index: duplicateIndex };
+      this.executeCommand({
+        label: `Duplicate ${light.name ?? light.id}`,
+        redo: () => {
+          this.insertLightActor(duplicateIndex, snapshot);
+          this.select(duplicateSelection);
+        },
+        undo: () => {
+          this.removeLightActor(duplicateIndex);
           this.select(selection);
         },
       });
@@ -1452,7 +1808,7 @@ export class SceneApp {
     const inserts: Array<{
       source: Selection;
       selection: Selection;
-      snapshot: LayoutPlacement | LayoutCharacter;
+      snapshot: LayoutPlacement | LayoutCharacter | LayoutLightActor;
     }> = [];
 
     const instancesByAsset = new Map<string, Selection[]>();
@@ -1499,6 +1855,23 @@ export class SceneApp {
       });
     });
 
+    const lightSelections = selections
+      .filter((selection): selection is LightSelection => selection.kind === "light")
+      .map((selection) => cloneSelection(selection) as LightSelection)
+      .sort((left, right) => left.index - right.index);
+    lightSelections.forEach((selection, offset) => {
+      const light = this.layout?.lights?.[selection.index];
+      if (!light) return;
+      const snapshot = cloneUngroupedLightActor(light);
+      snapshot.id = this.createLightId(light.type);
+      snapshot.name = uniqueActorName(light.name ?? light.id, this.layout?.lights ?? []);
+      inserts.push({
+        source: cloneSelection(selection),
+        selection: { kind: "light", index: selection.index + offset + 1 },
+        snapshot,
+      });
+    });
+
     if (inserts.length === 0) return null;
 
     const duplicateSelections = inserts.map((entry) => cloneSelection(entry.selection));
@@ -1518,11 +1891,13 @@ export class SceneApp {
               entry.selection.placementIndex,
               entry.snapshot as LayoutPlacement,
             );
-          } else {
+          } else if (entry.selection.kind === "character") {
             this.insertCharacterPlacement(
               entry.selection.index,
               entry.snapshot as LayoutCharacter,
             );
+          } else {
+            this.insertLightActor(entry.selection.index, entry.snapshot as LayoutLightActor);
           }
         }
         this.selectMany(
@@ -1534,8 +1909,10 @@ export class SceneApp {
         for (const entry of [...inserts].reverse()) {
           if (entry.selection.kind === "instance") {
             this.removeInstancePlacement(entry.selection.assetId, entry.selection.placementIndex);
-          } else {
+          } else if (entry.selection.kind === "character") {
             this.removeCharacterPlacement(entry.selection.index);
+          } else {
+            this.removeLightActor(entry.selection.index);
           }
         }
         this.selectMany(previousSelections, previousActive);
@@ -1573,6 +1950,7 @@ export class SceneApp {
       const character = this.layout?.characters[selection.index];
       if (object && character) object.name = target.name ?? character.assetId;
     }
+    if (selection.kind === "light") this.refreshLightObject(selection.index);
 
     this.emitSelectionChanged();
   }
@@ -1590,12 +1968,17 @@ export class SceneApp {
   /** Details "Cast Shadow" toggle for the active selection (default on). */
   setSelectionCastShadow(value: boolean): void {
     if (!this.selection || !this.hasSelection(this.selection)) return;
+    if (this.selection.kind !== "character") {
+      this.onStatus?.("Cast Shadow is controlled centrally for static objects.", "info");
+      return;
+    }
     this.setSelectionDefaultTrueFlag(this.selection, "castShadow", value);
   }
 
   /** Details "Collision" toggle for the active selection (default on). */
   setSelectionCollision(value: boolean): void {
     if (!this.selection || !this.hasSelection(this.selection)) return;
+    if (this.selection.kind === "light") return;
     this.setSelectionDefaultTrueFlag(this.selection, "collision", value);
   }
 
@@ -1609,7 +1992,8 @@ export class SceneApp {
     field: "castShadow" | "collision",
     value: boolean,
   ): void {
-    const target = this.getMutableTransform(selection);
+    if (selection.kind === "light") return;
+    const target = this.getMutableTransform(selection) as LayoutPlacement | LayoutCharacter | null;
     if (!target) return;
     const previous = target[field] ?? true;
     if (previous === value) return;
@@ -1629,7 +2013,8 @@ export class SceneApp {
     field: "castShadow" | "collision",
     value: boolean,
   ): void {
-    const target = this.getMutableTransform(selection);
+    if (selection.kind === "light") return;
+    const target = this.getMutableTransform(selection) as LayoutPlacement | LayoutCharacter | null;
     if (!target) return;
     if (value) delete target[field];
     else target[field] = false;
@@ -1651,6 +2036,50 @@ export class SceneApp {
     object.traverse((child) => {
       if (isRenderableMesh(child)) child.castShadow = castShadow;
     });
+  }
+
+  private applyWorldSettings(settings: EditorWorldSettings): void {
+    if (!this.layout) return;
+    const worldSettings: LayoutWorldSettings = { ...(this.layout.worldSettings ?? {}) };
+
+    if (settings.staticObjectsCastShadow === DEFAULT_STATIC_OBJECTS_CAST_SHADOWS) {
+      delete worldSettings.staticObjectsCastShadow;
+    } else {
+      worldSettings.staticObjectsCastShadow = settings.staticObjectsCastShadow;
+    }
+
+    if (settings.staticObjectsReceiveShadow === DEFAULT_STATIC_OBJECTS_RECEIVE_SHADOWS) {
+      delete worldSettings.staticObjectsReceiveShadow;
+    } else {
+      worldSettings.staticObjectsReceiveShadow = settings.staticObjectsReceiveShadow;
+    }
+
+    if (Object.keys(worldSettings).length === 0) delete this.layout.worldSettings;
+    else this.layout.worldSettings = worldSettings;
+
+    this.applyStaticObjectShadowSettings();
+    this.emitWorldSettingsChanged();
+    this.emitSceneObjectsChanged();
+  }
+
+  private applyLightActor(selection: LightSelection, actor: LayoutLightActor): void {
+    if (!this.layout?.lights?.[selection.index]) return;
+    this.layout.lights[selection.index] = cloneLightActor(actor);
+    this.refreshLightObject(selection.index);
+    this.updateSelectionBox();
+    this.updateGizmo();
+    this.emitSelectionChanged();
+  }
+
+  private applyStaticObjectShadowSettings(): void {
+    const castShadow = this.staticObjectsCastShadow();
+    const receiveShadow = this.staticObjectsReceiveShadow();
+    for (const meshes of this.instanceMeshes.values()) {
+      for (const mesh of meshes) {
+        mesh.castShadow = castShadow;
+        mesh.receiveShadow = receiveShadow;
+      }
+    }
   }
 
   private setSelectionFlag(
@@ -1758,6 +2187,10 @@ export class SceneApp {
   private applyVisibility(selection: Selection): void {
     if (selection.kind === "instance") {
       this.rebuildInstanceGroup(selection.assetId);
+      return;
+    }
+    if (selection.kind === "light") {
+      this.refreshLightObject(selection.index);
       return;
     }
     const object = this.characterObjects[selection.index];
@@ -2402,6 +2835,12 @@ export class SceneApp {
         const index = Number(character.userData.characterIndex);
         if (Number.isInteger(index)) return { kind: "character", index };
       }
+
+      const light = findParentLight(hit.object);
+      if (light) {
+        const index = Number(light.userData.lightIndex);
+        if (Number.isInteger(index)) return { kind: "light", index };
+      }
     }
     return null;
   }
@@ -2508,6 +2947,10 @@ export class SceneApp {
       if (!options.includeHidden && character.hidden) return;
       selections.push({ kind: "character", index });
     });
+    this.layout.lights?.forEach((light, index) => {
+      if (!options.includeHidden && light.hidden) return;
+      selections.push({ kind: "light", index });
+    });
     return selections;
   }
 
@@ -2515,6 +2958,10 @@ export class SceneApp {
     const transform = this.getMutableTransform(selection);
     if (selection.kind === "instance") {
       return transform?.name ?? selection.assetId;
+    }
+    if (selection.kind === "light") {
+      const light = transform as LayoutLightActor | null;
+      return light?.name ?? light?.id ?? "light";
     }
     const character = transform as LayoutCharacter | null;
     return character?.name ?? character?.assetId ?? "object";
@@ -2526,6 +2973,10 @@ export class SceneApp {
       const transform = this.getMutableTransform(selection);
       if (!bounds || !transform) return null;
       return bounds.clone().applyMatrix4(composePlacementMatrix(transform));
+    }
+    if (selection.kind === "light") {
+      const object = this.lightObjects[selection.index]?.root;
+      return object ? new Box3().setFromObject(object) : null;
     }
     const object = this.characterObjects[selection.index];
     return object ? new Box3().setFromObject(object) : null;
@@ -2716,12 +3167,13 @@ export class SceneApp {
 
   private getMutableTransform(
     selection: Selection,
-  ): (LayoutPlacement | LayoutCharacter) | null {
+  ): (LayoutPlacement | LayoutCharacter | LayoutLightActor) | null {
     if (!this.layout) return null;
     if (selection.kind === "instance") {
       const instance = this.layout.instances.find((entry) => entry.assetId === selection.assetId);
       return instance?.placements[selection.placementIndex] ?? null;
     }
+    if (selection.kind === "light") return this.layout.lights?.[selection.index] ?? null;
     return this.layout.characters[selection.index] ?? null;
   }
 
@@ -2731,7 +3183,10 @@ export class SceneApp {
     return {
       position: [...transform.position],
       rotation: readRotation(transform),
-      scale: readScale(transform),
+      scale:
+        selection.kind === "light"
+          ? [1, 1, 1]
+          : readScale(transform as LayoutPlacement | LayoutCharacter),
     };
   }
 
@@ -2839,12 +3294,31 @@ export class SceneApp {
     this.onHistoryChanged?.(this.getHistoryState());
   }
 
+  private emitWorldSettingsChanged(): void {
+    this.onWorldSettingsChanged?.(this.getWorldSettings());
+  }
+
+  private staticObjectsCastShadow(): boolean {
+    return (
+      this.layout?.worldSettings?.staticObjectsCastShadow ??
+      DEFAULT_STATIC_OBJECTS_CAST_SHADOWS
+    );
+  }
+
+  private staticObjectsReceiveShadow(): boolean {
+    return (
+      this.layout?.worldSettings?.staticObjectsReceiveShadow ??
+      DEFAULT_STATIC_OBJECTS_RECEIVE_SHADOWS
+    );
+  }
+
   private hasSelection(selection: Selection): boolean {
     if (!this.layout) return false;
     if (selection.kind === "instance") {
       const instance = this.layout.instances.find((entry) => entry.assetId === selection.assetId);
       return Boolean(instance?.placements[selection.placementIndex]);
     }
+    if (selection.kind === "light") return Boolean(this.layout.lights?.[selection.index]);
     return Boolean(this.layout.characters[selection.index]);
   }
 
@@ -2938,9 +3412,12 @@ function axisToIndex(axis: GizmoAxis): 0 | 1 | 2 {
  * legacy `rotationYDeg` field (runtime-compatible); X/Z components promote to
  * the full `rotation` array, keeping `rotationYDeg` as a graceful fallback.
  */
-function writeRotation(target: LayoutPlacement | LayoutCharacter, rotation: Vec3): void {
+function writeRotation(
+  target: LayoutPlacement | LayoutCharacter | LayoutLightActor,
+  rotation: Vec3,
+): void {
   const [x, y, z] = [round(rotation[0]), round(rotation[1]), round(rotation[2])];
-  target.rotationYDeg = y;
+  if ("assetId" in target) target.rotationYDeg = y;
   if (x === 0 && z === 0) {
     delete target.rotation;
   } else {
@@ -2949,23 +3426,27 @@ function writeRotation(target: LayoutPlacement | LayoutCharacter, rotation: Vec3
 }
 
 /** Writes a scale vector back to a placement (scalar when uniform, else array). */
-function writeScale(target: LayoutPlacement | LayoutCharacter, scale: Vec3): void {
+function writeScale(target: LayoutPlacement | LayoutCharacter | LayoutLightActor, scale: Vec3): void {
+  if ("type" in target) return;
   const [x, y, z] = [round(scale[0]), round(scale[1]), round(scale[2])];
   target.scale = x === y && y === z ? x : [x, y, z];
 }
 
 function cloneSelection(selection: Selection): Selection {
-  return selection.kind === "instance"
-    ? {
-        kind: "instance",
-        assetId: selection.assetId,
-        placementIndex: selection.placementIndex,
-      }
-    : { kind: "character", index: selection.index };
+  if (selection.kind === "instance") {
+    return {
+      kind: "instance",
+      assetId: selection.assetId,
+      placementIndex: selection.placementIndex,
+    };
+  }
+  if (selection.kind === "light") return { kind: "light", index: selection.index };
+  return { kind: "character", index: selection.index };
 }
 
 function selectionId(selection: Selection): string {
   if (selection.kind === "character") return `character:${selection.index}`;
+  if (selection.kind === "light") return `light:${selection.index}`;
   return `instance:${encodeURIComponent(selection.assetId)}:${selection.placementIndex}`;
 }
 
@@ -2974,6 +3455,10 @@ function parseSelectionId(id: string): Selection | null {
   if (kind === "character") {
     const index = Number(encodedAssetId);
     return Number.isInteger(index) ? { kind: "character", index } : null;
+  }
+  if (kind === "light") {
+    const index = Number(encodedAssetId);
+    return Number.isInteger(index) ? { kind: "light", index } : null;
   }
   if (kind !== "instance" || rawIndex === undefined) return null;
   const placementIndex = Number(rawIndex);
@@ -2988,6 +3473,9 @@ function parseSelectionId(id: string): Selection | null {
 function selectionsEqual(left: Selection | null, right: Selection | null): boolean {
   if (!left || !right || left.kind !== right.kind) return false;
   if (left.kind === "character" && right.kind === "character") {
+    return left.index === right.index;
+  }
+  if (left.kind === "light" && right.kind === "light") {
     return left.index === right.index;
   }
   if (left.kind !== "instance" || right.kind !== "instance") return false;
@@ -3030,6 +3518,22 @@ function compareCharacterRestores(
   return left.selection.index - right.selection.index;
 }
 
+function compareLightDeletes(
+  left: { selection: Selection },
+  right: { selection: Selection },
+): number {
+  if (left.selection.kind !== "light" || right.selection.kind !== "light") return 0;
+  return right.selection.index - left.selection.index;
+}
+
+function compareLightRestores(
+  left: { selection: Selection },
+  right: { selection: Selection },
+): number {
+  if (left.selection.kind !== "light" || right.selection.kind !== "light") return 0;
+  return left.selection.index - right.selection.index;
+}
+
 function selectionToTransform(selection: EditableSelection): EditableTransform {
   return {
     position: [...selection.position],
@@ -3054,6 +3558,8 @@ function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
   if (placement.rotation !== undefined) clone.rotation = [...placement.rotation];
   if (placement.scale !== undefined) clone.scale = cloneScale(placement.scale);
   if (placement.scaleLocked !== undefined) clone.scaleLocked = placement.scaleLocked;
+  if (placement.castShadow !== undefined) clone.castShadow = placement.castShadow;
+  if (placement.collision !== undefined) clone.collision = placement.collision;
   return clone;
 }
 
@@ -3076,12 +3582,42 @@ function cloneCharacter(character: LayoutCharacter): LayoutCharacter {
   if (character.rotation !== undefined) clone.rotation = [...character.rotation];
   if (character.scale !== undefined) clone.scale = cloneScale(character.scale);
   if (character.scaleLocked !== undefined) clone.scaleLocked = character.scaleLocked;
+  if (character.castShadow !== undefined) clone.castShadow = character.castShadow;
+  if (character.collision !== undefined) clone.collision = character.collision;
   if (character.animation !== undefined) clone.animation = character.animation;
   return clone;
 }
 
 function cloneUngroupedCharacter(character: LayoutCharacter): LayoutCharacter {
   const clone = cloneCharacter(character);
+  delete clone.groupId;
+  return clone;
+}
+
+function cloneLightActor(light: LayoutLightActor): LayoutLightActor {
+  const clone: LayoutLightActor = {
+    id: light.id,
+    type: light.type,
+    position: [...light.position],
+  };
+  if (light.name !== undefined) clone.name = light.name;
+  if (light.hidden !== undefined) clone.hidden = light.hidden;
+  if (light.locked !== undefined) clone.locked = light.locked;
+  if (light.scaleLocked !== undefined) clone.scaleLocked = light.scaleLocked;
+  if (light.groupId !== undefined) clone.groupId = light.groupId;
+  if (light.rotation !== undefined) clone.rotation = [...light.rotation];
+  if (light.color !== undefined) clone.color = light.color;
+  if (light.intensity !== undefined) clone.intensity = light.intensity;
+  if (light.castShadow !== undefined) clone.castShadow = light.castShadow;
+  if (light.distance !== undefined) clone.distance = light.distance;
+  if (light.angle !== undefined) clone.angle = light.angle;
+  if (light.penumbra !== undefined) clone.penumbra = light.penumbra;
+  if (light.decay !== undefined) clone.decay = light.decay;
+  return clone;
+}
+
+function cloneUngroupedLightActor(light: LayoutLightActor): LayoutLightActor {
+  const clone = cloneLightActor(light);
   delete clone.groupId;
   return clone;
 }
@@ -3096,6 +3632,68 @@ function transformsEqual(left: EditableTransform, right: EditableTransform): boo
 
 function vecEqual(left: Vec3, right: Vec3): boolean {
   return left[0] === right[0] && left[1] === right[1] && left[2] === right[2];
+}
+
+function defaultLightIntensity(type: LayoutLightActor["type"]): number {
+  if (type === "directional") return 2;
+  if (type === "spot") return 3;
+  return 2.5;
+}
+
+function formatLightType(type: LayoutLightActor["type"]): string {
+  if (type === "directional") return "Directional Light";
+  if (type === "spot") return "Spot Light";
+  return "Point Light";
+}
+
+function uniqueActorName(baseName: string, lights: LayoutLightActor[]): string {
+  const existing = new Set(lights.map((light) => light.name ?? light.id));
+  if (!existing.has(baseName)) return baseName;
+  let index = 2;
+  while (existing.has(`${baseName} ${index}`)) index += 1;
+  return `${baseName} ${index}`;
+}
+
+function configureShadowCastingLight(light: DirectionalLight | PointLight | SpotLight): void {
+  light.shadow.mapSize.set(2048, 2048);
+  light.shadow.bias = -0.0005;
+  light.shadow.normalBias = 0.02;
+  if (light instanceof DirectionalLight) {
+    const shadowCam = light.shadow.camera;
+    shadowCam.near = 0.5;
+    shadowCam.far = 60;
+    shadowCam.left = -12;
+    shadowCam.right = 12;
+    shadowCam.top = 12;
+    shadowCam.bottom = -12;
+  }
+}
+
+function createLightIcon(type: LayoutLightActor["type"], color: Color): Mesh {
+  const geometry =
+    type === "point"
+      ? new SphereGeometry(0.16, 16, 10)
+      : type === "spot"
+        ? new ConeGeometry(0.18, 0.34, 16)
+        : new BoxGeometry(0.28, 0.28, 0.28);
+  const material = new MeshBasicMaterial({ color, transparent: true, opacity: 0.92 });
+  const icon = new Mesh(geometry, material);
+  icon.name = `${formatLightType(type)} Icon`;
+  return icon;
+}
+
+function updateLightIconColor(root: Object3D, color: Color): void {
+  root.traverse((child) => {
+    if (!(child instanceof Mesh)) return;
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) {
+      if (material instanceof MeshBasicMaterial) material.color.copy(color);
+    }
+  });
+}
+
+function lightActorsEqual(left: LayoutLightActor, right: LayoutLightActor): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function clampIndex(index: number, length: number): number {
@@ -3131,6 +3729,46 @@ function collectMaterialStats(models: Map<string, GLTF>): MaterialStats {
   return { basic, lit, total: seen.size };
 }
 
+function convertUnlitModelMaterialsToLit(models: Map<string, GLTF>): number {
+  const converted = new Map<Material, Material>();
+
+  const resolveMaterial = (material: Material): Material => {
+    if (!(material instanceof MeshBasicMaterial)) return material;
+    const cached = converted.get(material);
+    if (cached) return cached;
+
+    const lit = new MeshStandardMaterial({
+      name: material.name,
+      color: material.color.clone(),
+      map: material.map,
+      alphaMap: material.alphaMap,
+      transparent: material.transparent,
+      opacity: material.opacity,
+      alphaTest: material.alphaTest,
+      side: material.side,
+      depthTest: material.depthTest,
+      depthWrite: material.depthWrite,
+      wireframe: material.wireframe,
+    });
+    lit.vertexColors = material.vertexColors;
+    lit.toneMapped = material.toneMapped;
+    lit.needsUpdate = true;
+    converted.set(material, lit);
+    return lit;
+  };
+
+  for (const gltf of models.values()) {
+    gltf.scene.traverse((object) => {
+      if (!isRenderableMesh(object)) return;
+      object.material = Array.isArray(object.material)
+        ? object.material.map(resolveMaterial)
+        : resolveMaterial(object.material);
+    });
+  }
+
+  return converted.size;
+}
+
 function findParentInstancedMesh(object: Object3D): InstancedMesh | null {
   let current: Object3D | null = object;
   while (current) {
@@ -3144,6 +3782,15 @@ function findParentCharacter(object: Object3D): Object3D | null {
   let current: Object3D | null = object;
   while (current) {
     if (current.userData.characterIndex !== undefined) return current;
+    current = current.parent;
+  }
+  return null;
+}
+
+function findParentLight(object: Object3D): Object3D | null {
+  let current: Object3D | null = object;
+  while (current) {
+    if (current.userData.lightIndex !== undefined) return current;
     current = current.parent;
   }
   return null;

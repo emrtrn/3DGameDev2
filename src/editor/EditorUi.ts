@@ -5,6 +5,7 @@ import type {
   EditorProjectInfo,
   EditorHistoryState,
   EditorSnapSettings,
+  EditorWorldSettings,
   EditableTransform,
   SceneApp,
 } from "@/scene/SceneApp";
@@ -20,6 +21,7 @@ import {
 import { projectFileUrl } from "@/project/ProjectSystem";
 
 type Tool = "select" | "move" | "rotate" | "scale";
+type InspectorTab = "details" | "world";
 
 const TOOL_LABELS: Record<Tool, string> = {
   select: "Select",
@@ -50,6 +52,7 @@ export class EditorUi {
   private folderTree: HTMLElement;
   private outlinerList: HTMLDivElement;
   private detailsBody: HTMLDivElement;
+  private worldSettingsBody: HTMLDivElement;
   private statusText: HTMLElement;
   private undoButton: HTMLButtonElement;
   private redoButton: HTMLButtonElement;
@@ -66,6 +69,7 @@ export class EditorUi {
   private outlinerObjects: EditableSceneObject[] = [];
   private outlinerFilter = "";
   private selected: EditableSelection | null = null;
+  private worldSettings: EditorWorldSettings | null = null;
   private detailsBaseline: EditableTransform | null = null;
   private detailsScale: [number, number, number] | null = null;
   private transformClipboard: EditableTransform | null = null;
@@ -128,6 +132,15 @@ export class EditorUi {
           </label>
         </div>
         <div class="editor-actions">
+          <div class="add-actor-menu">
+            <button type="button" data-add-actor-button title="Add actor">+ Add Actor</button>
+            <div class="add-actor-popover" data-add-actor-popover>
+              <div class="add-actor-section-title">Lights</div>
+              <button type="button" data-add-actor="directional">Directional Light</button>
+              <button type="button" data-add-actor="point">Point Light</button>
+              <button type="button" data-add-actor="spot">Spot Light</button>
+            </div>
+          </div>
           <button type="button" data-action="undo" title="Undo">Undo</button>
           <button type="button" data-action="redo" title="Redo">Redo</button>
           <button type="button" data-action="delete">Delete</button>
@@ -145,8 +158,28 @@ export class EditorUi {
         <div class="outliner-list" data-outliner-list></div>
       </aside>
       <aside class="editor-panel editor-details">
-        <div class="panel-title">Details</div>
-        <div class="details-body" data-details-body></div>
+        <div class="inspector-tabs" role="tablist" aria-label="Inspector">
+          <button
+            type="button"
+            class="inspector-tab active"
+            data-inspector-tab="details"
+            role="tab"
+            aria-selected="true"
+          >Details</button>
+          <button
+            type="button"
+            class="inspector-tab"
+            data-inspector-tab="world"
+            role="tab"
+            aria-selected="false"
+          >World Settings</button>
+        </div>
+        <div class="inspector-pane" data-inspector-pane="details">
+          <div class="details-body" data-details-body></div>
+        </div>
+        <div class="inspector-pane" data-inspector-pane="world" hidden>
+          <div class="details-body world-settings-body" data-world-settings-body></div>
+        </div>
       </aside>
       <section class="editor-content-drawer" data-content-drawer aria-hidden="true">
         <div class="content-drawer-top">
@@ -193,6 +226,7 @@ export class EditorUi {
     this.folderTree = requireElement(this.root, "[data-folder-tree]");
     this.outlinerList = requireElement(this.root, "[data-outliner-list]");
     this.detailsBody = requireElement(this.root, "[data-details-body]");
+    this.worldSettingsBody = requireElement(this.root, "[data-world-settings-body]");
     this.statusText = requireElement(this.root, "[data-status]");
     this.undoButton = requireElement(this.root, '[data-action="undo"]');
     this.redoButton = requireElement(this.root, '[data-action="redo"]');
@@ -201,6 +235,7 @@ export class EditorUi {
     this.buildToolbar();
     this.bindActions();
     this.renderDetails(null);
+    this.renderWorldSettings(this.app.getWorldSettings());
 
     this.app.onSelectionChanged = (selection) => {
       this.selected = selection;
@@ -209,6 +244,7 @@ export class EditorUi {
     };
     this.app.onSceneObjectsChanged = (objects) => this.renderOutliner(objects);
     this.app.onHistoryChanged = (state) => this.renderHistory(state);
+    this.app.onWorldSettingsChanged = (settings) => this.renderWorldSettings(settings);
     this.app.onStatus = (message, tone) => this.setStatus(message, tone);
 
     this.renderOutliner(this.app.getSceneObjects());
@@ -269,6 +305,22 @@ export class EditorUi {
     });
     this.root.querySelector('[data-action="save"]')?.addEventListener("click", () => {
       void this.save();
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-add-actor]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const type = button.dataset.addActor;
+        if (type === "directional" || type === "point" || type === "spot") {
+          this.app.addLightActor(type);
+        }
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.inspectorTab;
+        if (tab === "details" || tab === "world") this.setInspectorTab(tab);
+      });
     });
 
     this.updateSpaceButton(this.app.getTransformSpace());
@@ -647,7 +699,7 @@ export class EditorUi {
         if (object.selected) row.classList.add("active");
         if (object.hidden) row.classList.add("is-hidden");
         row.innerHTML = `
-          <span class="outliner-kind">${object.kind === "character" ? "C" : "I"}</span>
+          <span class="outliner-kind">${outlinerKindLabel(object.kind)}</span>
           <span class="outliner-meta">
             <strong>${object.label}</strong>
             <small>${object.assetId} - ${formatPosition(object.position)}</small>
@@ -693,6 +745,68 @@ export class EditorUi {
     this.redoButton.title = state.redoLabel ? `Redo ${state.redoLabel}` : "Redo";
   }
 
+  private setInspectorTab(tab: InspectorTab): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
+      const active = button.dataset.inspectorTab === tab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    this.root.querySelectorAll<HTMLElement>("[data-inspector-pane]").forEach((pane) => {
+      pane.hidden = pane.dataset.inspectorPane !== tab;
+    });
+    if (tab === "world") this.renderWorldSettings(this.worldSettings ?? this.app.getWorldSettings());
+  }
+
+  private renderWorldSettings(settings: EditorWorldSettings): void {
+    this.worldSettings = settings;
+    this.worldSettingsBody.innerHTML = `
+      <div class="detail-heading">
+        <strong>World Settings</strong>
+        <span>Scene rendering</span>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Lighting</div>
+        <div class="detail-row">
+          <span>Lighting Mode</span>
+          <span class="detail-value">${settings.lightingMode}</span>
+        </div>
+        <div class="detail-row">
+          <span>Shadow Filter</span>
+          <span class="detail-value">${settings.shadowFilter}</span>
+        </div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Static Objects</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-world-toggle="staticObjectsCastShadow" ${
+            settings.staticObjectsCastShadow ? "checked" : ""
+          } />
+          <span>Cast Shadow</span>
+        </label>
+        <label class="detail-toggle">
+          <input type="checkbox" data-world-toggle="staticObjectsReceiveShadow" ${
+            settings.staticObjectsReceiveShadow ? "checked" : ""
+          } />
+          <span>Receive Shadow</span>
+        </label>
+      </div>
+    `;
+
+    this.worldSettingsBody
+      .querySelectorAll<HTMLInputElement>("[data-world-toggle]")
+      .forEach((toggle) => {
+        toggle.addEventListener("change", () => {
+          const key = toggle.dataset.worldToggle;
+          if (key === "staticObjectsCastShadow") {
+            this.app.setWorldSettings({ staticObjectsCastShadow: toggle.checked });
+          }
+          if (key === "staticObjectsReceiveShadow") {
+            this.app.setWorldSettings({ staticObjectsReceiveShadow: toggle.checked });
+          }
+        });
+      });
+  }
+
   private renderDetails(selection: EditableSelection | null): void {
     if (!selection) {
       this.detailsScale = null;
@@ -704,11 +818,24 @@ export class EditorUi {
       `;
       return;
     }
+    if (selection.kind === "light") {
+      this.renderLightDetails(selection);
+      return;
+    }
 
     this.detailsScale = [...selection.scale];
 
     const lockedAttr = selection.locked ? "disabled" : "";
     const wallDisabled = selection.locked || selection.kind === "character" ? "disabled" : "";
+    const castShadowToggle =
+      selection.kind === "character"
+        ? `<label class="detail-toggle">
+          <input type="checkbox" data-detail-toggle="castShadow" ${
+            selection.castShadow ? "checked" : ""
+          } />
+          <span>Cast Shadow</span>
+        </label>`
+        : "";
     this.detailsBody.innerHTML = `
       <div class="detail-heading">
         <strong>${escapeHtml(selection.label)}</strong>
@@ -750,12 +877,7 @@ export class EditorUi {
           <input type="checkbox" data-detail-toggle="locked" ${selection.locked ? "checked" : ""} />
           <span>Lock Movement</span>
         </label>
-        <label class="detail-toggle">
-          <input type="checkbox" data-detail-toggle="castShadow" ${
-            selection.castShadow ? "checked" : ""
-          } />
-          <span>Cast Shadow</span>
-        </label>
+        ${castShadowToggle}
         <label class="detail-toggle">
           <input type="checkbox" data-detail-toggle="collision" ${
             selection.collision ? "checked" : ""
@@ -806,6 +928,136 @@ export class EditorUi {
           this.handleDetailAction(button.dataset.detailAction ?? ""),
         );
       });
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>("[data-detail-toggle]")
+      .forEach((toggle) => {
+        toggle.addEventListener("change", () =>
+          this.handleDetailToggle(toggle.dataset.detailToggle ?? "", toggle.checked),
+        );
+      });
+  }
+
+  private renderLightDetails(selection: EditableSelection): void {
+    this.detailsScale = [1, 1, 1];
+    const lockedAttr = selection.locked ? "disabled" : "";
+    const isPoint = selection.lightType === "point";
+    const isSpot = selection.lightType === "spot";
+    this.detailsBody.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>light / ${escapeHtml(selection.lightType ?? selection.assetId)}</span>
+      </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
+          placeholder="${escapeHtml(selection.assetId)}" />
+      </label>
+      <div class="detail-row">
+        <span>Type</span>
+        <span class="detail-value">${escapeHtml(selection.lightType ?? "light")}</span>
+      </div>
+      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
+      ${!isPoint ? vectorRow("Rotation", "r", selection.rotation, 1, selection.locked) : ""}
+      <div class="detail-section">
+        <div class="detail-section-title">Light</div>
+        <label class="detail-row">
+          <span>Color</span>
+          <input data-light-color type="color" value="${escapeHtml(selection.color ?? "#ffffff")}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Intensity</span>
+          <input data-light-number="intensity" type="number" step="0.1" min="0" max="20"
+            value="${selection.intensity ?? 1}" ${lockedAttr} />
+        </label>
+        ${
+          isPoint || isSpot
+            ? `<label class="detail-row">
+              <span>Distance</span>
+              <input data-light-number="distance" type="number" step="0.1" min="0" max="100"
+                value="${selection.distance ?? (isPoint ? 8 : 10)}" ${lockedAttr} />
+            </label>
+            <label class="detail-row">
+              <span>Decay</span>
+              <input data-light-number="decay" type="number" step="0.1" min="0" max="8"
+                value="${selection.decay ?? 2}" ${lockedAttr} />
+            </label>`
+            : ""
+        }
+        ${
+          isSpot
+            ? `<label class="detail-row">
+              <span>Angle</span>
+              <input data-light-number="angle" type="number" step="1" min="1" max="90"
+                value="${selection.angle ?? 30}" ${lockedAttr} />
+            </label>
+            <label class="detail-row">
+              <span>Penumbra</span>
+              <input data-light-number="penumbra" type="number" step="0.05" min="0" max="1"
+                value="${selection.penumbra ?? 0.35}" ${lockedAttr} />
+            </label>`
+            : ""
+        }
+        <label class="detail-toggle">
+          <input type="checkbox" data-light-toggle="castShadow" ${
+            selection.castShadow ? "checked" : ""
+          } ${lockedAttr} />
+          <span>Cast Shadow</span>
+        </label>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Actor</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-detail-toggle="locked" ${selection.locked ? "checked" : ""} />
+          <span>Lock Movement</span>
+        </label>
+      </div>
+    `;
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>('input[data-detail="pr"]')
+      .forEach((input) => {
+        input.addEventListener("focus", () => this.beginDetailsEdit());
+        input.addEventListener("input", () => {
+          this.beginDetailsEdit();
+          this.applyDetails();
+        });
+        input.addEventListener("change", () => this.commitDetailsEdit());
+      });
+
+    const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-detail-name]");
+    nameInput?.addEventListener("change", () => {
+      this.app.renameSceneObject(selection.id, nameInput.value);
+    });
+
+    this.detailsBody.querySelector<HTMLInputElement>("[data-light-color]")?.addEventListener(
+      "change",
+      (event) => {
+        this.app.setSelectedLightSettings({ color: (event.currentTarget as HTMLInputElement).value });
+      },
+    );
+
+    this.detailsBody.querySelectorAll<HTMLInputElement>("[data-light-number]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.lightNumber;
+        const value = Number(input.value);
+        if (!Number.isFinite(value)) return;
+        if (key === "intensity") this.app.setSelectedLightSettings({ intensity: value });
+        if (key === "distance") this.app.setSelectedLightSettings({ distance: value });
+        if (key === "decay") this.app.setSelectedLightSettings({ decay: value });
+        if (key === "angle") this.app.setSelectedLightSettings({ angle: value });
+        if (key === "penumbra") this.app.setSelectedLightSettings({ penumbra: value });
+      });
+    });
+
+    this.detailsBody.querySelector<HTMLInputElement>("[data-light-toggle]")?.addEventListener(
+      "change",
+      (event) => {
+        this.app.setSelectedLightSettings({
+          castShadow: (event.currentTarget as HTMLInputElement).checked,
+        });
+      },
+    );
 
     this.detailsBody
       .querySelectorAll<HTMLInputElement>("[data-detail-toggle]")
@@ -1100,6 +1352,12 @@ function nextTransformTool(tool: Tool): Tool {
 
 function formatPosition(position: [number, number, number]): string {
   return position.map((value) => Number(value.toFixed(2))).join(", ");
+}
+
+function outlinerKindLabel(kind: EditableSceneObject["kind"]): string {
+  if (kind === "character") return "C";
+  if (kind === "light") return "L";
+  return "I";
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
