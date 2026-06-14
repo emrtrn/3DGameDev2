@@ -9,7 +9,7 @@
     "defaultScene": "layouts/render-test-room.json",
     "assetManifest": "assets/manifest.json",
     "gridSize": 1,
-    "gridEnabled": true,
+    "gridEnabled": false,
     "snapRotationDeg": 15,
     "snapRotationEnabled": true,
     "snapScale": 0.1,
