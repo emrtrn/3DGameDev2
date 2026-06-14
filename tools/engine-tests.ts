@@ -22,15 +22,23 @@ import { validateSceneDocument } from "../engine/scene/sceneSerialization";
 import {
   readLightComponent,
   readMeshRendererComponent,
+  readMetadataComponent,
   readTransformComponent,
 } from "../engine/scene/components";
 import { readRotation, readScale } from "../engine/scene/transform";
+import { EngineApp } from "../engine/core/EngineApp";
+import type { Subsystem } from "../engine/core/Subsystem";
 import { selectionId } from "../editor/core/selection";
 import type { LayoutCharacter, LayoutLightActor, RoomLayout } from "../engine/scene/layout";
 
 let checks = 0;
 const check = (label: string, fn: () => void): void => {
   fn();
+  checks += 1;
+  console.log(`  ok: ${label}`);
+};
+const checkAsync = async (label: string, fn: () => Promise<void>): Promise<void> => {
+  await fn();
   checks += 1;
   console.log(`  ok: ${label}`);
 };
@@ -235,6 +243,125 @@ check("light entity carries actor render inputs for parity", () => {
     assert.equal(entity.name, actor.name ?? actor.id);
     assert.equal(entity.tags?.includes("hidden") ?? false, actor.hidden ?? false);
   });
+});
+
+// ===========================================================================
+// Section 6 - Vertical Slice Readiness Gate
+// ===========================================================================
+
+// 6.1 Engine core can initialize and tick deterministic subsystems: forward
+// lifecycle order for init/start/update (registration order) and reverse order
+// for dispose, with a deterministic per-tick context (frame + elapsed).
+await checkAsync("engine core initializes and ticks deterministic subsystems", async () => {
+  const events: string[] = [];
+  const make = (id: string): Subsystem => ({
+    id,
+    init() {
+      events.push(`init:${id}`);
+    },
+    start() {
+      events.push(`start:${id}`);
+    },
+    update(context) {
+      events.push(`update:${id}:${context.frame}`);
+    },
+    dispose() {
+      events.push(`dispose:${id}`);
+    },
+  });
+
+  const app = new EngineApp();
+  app.registerSubsystem(make("a"));
+  app.registerSubsystem(make("b"));
+  await app.init();
+  await app.start();
+  const tick1 = app.update(0.5);
+  const tick2 = app.update(0.25);
+  await app.dispose();
+
+  assert.deepEqual(events, [
+    "init:a",
+    "init:b",
+    "start:a",
+    "start:b",
+    "update:a:1",
+    "update:b:1",
+    "update:a:2",
+    "update:b:2",
+    "dispose:b",
+    "dispose:a",
+  ]);
+  // Deterministic tick context.
+  assert.equal(tick1.frame, 1);
+  assert.equal(tick1.elapsedSeconds, 0.5);
+  assert.equal(tick2.frame, 2);
+  assert.equal(tick2.elapsedSeconds, 0.75);
+});
+
+// 6.2 The scene model can represent a mesh entity, a light entity, metadata,
+// and a transform hierarchy in a single validating document.
+check("scene model represents mesh + light + metadata + transform hierarchy", () => {
+  const fixture: RoomLayout = {
+    schema: 1,
+    name: "readiness-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "crate",
+        placements: [
+          {
+            position: [1, 0, 2],
+            rotation: [0, 90, 0],
+            scale: [2, 2, 2],
+            nodeId: "crate-node",
+            metadata: { hp: 100, label: "crate", fragile: true, kinds: ["wood", "metal"] },
+          },
+        ],
+      },
+    ],
+    characters: [{ assetId: "hero", position: [1, 0, 3], parentId: "crate-node" }],
+    lights: [{ id: "sun", type: "directional", position: [0, 5, 0], intensity: 2 }],
+  };
+
+  const document = roomLayoutToSceneDocument(fixture);
+  assert.ok(validateSceneDocument(document).valid, "fixture document validates");
+
+  // Mesh entity with a transform.
+  const crate = document.entities.find((entity) => entity.id === instanceEntityId("crate", 0));
+  const crateMesh = crate ? readMeshRendererComponent(crate) : undefined;
+  const crateTransform = crate ? readTransformComponent(crate) : undefined;
+  assert.equal(crateMesh?.assetId, "crate");
+  assert.deepEqual(crateTransform?.scale, [2, 2, 2]);
+
+  // Metadata component on the mesh entity.
+  const metadata = crate ? readMetadataComponent(crate) : undefined;
+  assert.deepEqual(metadata?.values, {
+    hp: 100,
+    label: "crate",
+    fragile: true,
+    kinds: ["wood", "metal"],
+  });
+
+  // Light entity with a light component.
+  const light = document.entities.find((entity) => entity.id === lightEntityId(0));
+  assert.equal(light ? readLightComponent(light)?.type : undefined, "directional");
+
+  // Transform hierarchy: the character's parentId resolves to the crate entity.
+  const child = document.entities.find((entity) => entity.id === characterEntityId(0));
+  assert.equal(child?.parentId, instanceEntityId("crate", 0));
+});
+
+// 6.3 The legacy adapter derives that scene model from the current SAVED layout:
+// the real render-test-room layout yields readable mesh and light entities.
+// (`doc` was derived from public/layouts/render-test-room.json above.)
+check("saved layout derives mesh + light entities with readable components", () => {
+  const meshEntities = doc.entities.filter((entity) => readMeshRendererComponent(entity));
+  const lightEntities = doc.entities.filter((entity) => readLightComponent(entity));
+  assert.ok(meshEntities.length > 0, "at least one mesh entity from the saved layout");
+  assert.ok(lightEntities.length > 0, "at least one light entity from the saved layout");
+  for (const entity of meshEntities) {
+    assert.ok(readTransformComponent(entity), `transform present for ${entity.id}`);
+  }
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

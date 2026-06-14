@@ -357,11 +357,19 @@ flow through the entity/component model — static mesh instances
 `createCharacterSceneObject`), and lights (`entityLightItem` /
 `createLightObject` / `syncLightObject`). Each has an equivalence/compatibility
 builder (`placementInstanceItems`, `placementCharacterItem`, `actorLightItem`)
-and a render-parity test. `build:verify` passes with 14 engine checks.
+and a render-parity test.
 
-Remaining: live browser smoke of Game Mode + Editor Mode against the
-entity-driven path (checklist section 5 item 3) and the section 6 readiness
-gate before the Phase 7 vertical slice.
+Section 5 complete: live browser smoke of Game Mode + Editor Mode against the
+entity-driven path passed (static scene, characters, lights/shadows/gizmos,
+selection).
+
+Section 6 (readiness gate) complete and test-enforced in `build:verify`:
+engine-core deterministic init/tick/dispose, a scene model that represents
+mesh + light + metadata + transform hierarchy in one validating document, and
+derivation from the real saved layout. `build:verify` passes with 17 engine
+checks and only the known `/__save-layout` baseline warning.
+
+The engine-core + scene-data spine is ready for the Phase 7 vertical slice.
 
 ## Phase 7 - Vertical Slice Engine
 

@@ -110,9 +110,11 @@ Testing (2026-06-14):
 - [x] Move only one render binding at a time toward entity/component input:
   static mesh instances first, then characters, then lights. (All three render
   bindings now flow through the entity/component model.)
-- [ ] Keep compatibility wrappers until both Game Mode and Editor Mode are
-  proven against the new path. (Compatibility builders kept; the remaining gate
-  is the live browser smoke — see PENDING below.)
+- [x] Keep compatibility wrappers until both Game Mode and Editor Mode are
+  proven against the new path. (Compatibility builders kept; live browser smoke
+  of Game Mode + Editor Mode passed against the entity-driven path on
+  2026-06-14 — static scene, characters, and lights/shadows/gizmos render and
+  selection works.)
 
 Progress (2026-06-14):
 
@@ -157,17 +159,38 @@ Progress (2026-06-14):
 - Verified: `build:verify` passes (14 engine checks). Render-parity tests prove
   instance/character/light entities carry the exact transform + render inputs
   the legacy paths used, so the Three.js output is identical by construction.
-- PENDING (item 3): live browser smoke in Game Mode and Editor Mode to confirm
-  the static scene, characters, and lights (incl. shadows + gizmos) render and
-  that selection still works against the entity-driven path. This is the
-  remaining gate before closing item 3 and section 6.
+- DONE (item 3): live browser smoke in Game Mode and Editor Mode confirmed the
+  static scene, characters, and lights (incl. shadows + gizmos) render and that
+  selection still works against the entity-driven path. Section 5 is complete.
 
 ## 6. Vertical Slice Readiness Gate
 
-- [ ] Confirm the engine core can initialize and tick deterministic subsystems.
-- [ ] Confirm the scene model can represent at least one mesh entity, one light
+- [x] Confirm the engine core can initialize and tick deterministic subsystems.
+- [x] Confirm the scene model can represent at least one mesh entity, one light
   entity, metadata, and transform hierarchy.
-- [ ] Confirm the legacy adapter can derive that scene model from the current
+- [x] Confirm the legacy adapter can derive that scene model from the current
   saved layout.
-- [ ] Confirm `npm run build:verify` still reports only the known baseline
+- [x] Confirm `npm run build:verify` still reports only the known baseline
   warnings.
+
+Notes (2026-06-14):
+
+- Confirmation is enforced by `tools/engine-tests.ts` (run in `build:verify`),
+  not just inspected, so the gate cannot silently regress:
+  - 6.1: an `EngineApp` test registers two subsystems and asserts forward
+    `init`/`start`/`update` order, reverse `dispose` order, and a deterministic
+    per-tick context (`frame` increments; `elapsedSeconds` accumulates).
+  - 6.2: a single fixture document represents a mesh entity (with transform),
+    a light entity (`LightComponent`), metadata (`MetadataComponent` values),
+    and a transform hierarchy (child `parentId` resolves to the parent entity),
+    and `validateSceneDocument` passes. Added `readMetadataComponent` to round
+    out the typed reader set (transform/mesh/light/metadata).
+  - 6.3: the derivation runs on the real saved `render-test-room.json` and
+    yields readable mesh + light entities (transform present on every mesh
+    entity).
+- 6.4: `build:verify` passes with 17 engine checks and only the known
+  `/__save-layout` authoring-code baseline warning.
+
+Section 5 and Section 6 are complete. The engine-core + scene-data spine is
+ready for the Phase 7 vertical slice (collider/physics, audio, input action
+map, behavior update) in `docs/MIGRATION_ROADMAP.md`.

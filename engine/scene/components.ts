@@ -64,6 +64,15 @@ export function readMeshRendererComponent(entity: Entity): MeshRendererComponent
   return component;
 }
 
+/** Reads a typed metadata component from an entity's serializable component data. */
+export function readMetadataComponent(entity: Entity): MetadataComponent | undefined {
+  const data = entity.components[METADATA_COMPONENT];
+  if (!data) return undefined;
+  const values = data.values;
+  if (typeof values !== "object" || values === null || Array.isArray(values)) return undefined;
+  return { values: { ...(values as Record<string, SceneJsonValue>) } };
+}
+
 const LIGHT_TYPES: readonly SceneLightType[] = ["directional", "point", "spot"];
 
 /** Reads a typed light from an entity's serializable component data. */
