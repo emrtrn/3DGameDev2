@@ -58,6 +58,7 @@ import {
 } from "@engine/render-three/models";
 import {
   createLightObject as createThreeLightObject,
+  entityLightItem,
   syncLightObject,
   type LightObjectRecord,
 } from "@engine/render-three/lights";
@@ -97,6 +98,7 @@ import type {
 import {
   characterEntity,
   instanceEntitiesForAsset,
+  lightEntity,
   roomLayoutToSceneDocument,
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
@@ -1923,7 +1925,7 @@ export class SceneApp {
   }
 
   private addLight(actor: LayoutLightActor): void {
-    const record = this.createLightObject(actor);
+    const record = this.createLightObject(actor, this.lightObjects.length);
     record.root.userData.lightIndex = this.lightObjects.length;
     record.root.traverse((child) => {
       child.userData.lightIndex = this.lightObjects.length;
@@ -1937,15 +1939,18 @@ export class SceneApp {
     this.refreshLightObject(this.lightObjects.length - 1);
   }
 
-  private createLightObject(actor: LayoutLightActor): LightObjectRecord {
-    return createThreeLightObject(actor, DEFAULT_LIGHT_COLOR);
+  private createLightObject(actor: LayoutLightActor, index: number): LightObjectRecord {
+    // Light objects now flow through the entity/component model: the layout
+    // actor is derived into a scene entity, then into a render item. Inputs
+    // match the legacy actor path (same transform/light component round-trip).
+    return createThreeLightObject(entityLightItem(lightEntity(index, actor)), DEFAULT_LIGHT_COLOR);
   }
 
   private insertLightActor(index: number, actor: LayoutLightActor): void {
     if (!this.layout) return;
     const insertionIndex = clampIndex(index, this.layout.lights?.length ?? 0);
     this.layout.lights ??= [];
-    const record = this.createLightObject(actor);
+    const record = this.createLightObject(actor, insertionIndex);
     this.layout.lights.splice(insertionIndex, 0, cloneLightActor(actor));
     this.lightObjects.splice(insertionIndex, 0, record);
     this.scene.add(record.root);
@@ -1983,7 +1988,7 @@ export class SceneApp {
     const actor = this.layout?.lights?.[index];
     const record = this.lightObjects[index];
     if (!actor || !record) return;
-    syncLightObject(record, actor, {
+    syncLightObject(record, entityLightItem(lightEntity(index, actor)), {
       defaultColor: DEFAULT_LIGHT_COLOR,
       selected: this.isLightSelected(index),
     });

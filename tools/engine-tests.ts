@@ -14,14 +14,19 @@ import {
   characterEntityId,
   instanceEntitiesForAsset,
   instanceEntityId,
+  lightEntity,
   lightEntityId,
   roomLayoutToSceneDocument,
 } from "../engine/scene/legacyRoomLayoutAdapter";
 import { validateSceneDocument } from "../engine/scene/sceneSerialization";
-import { readMeshRendererComponent, readTransformComponent } from "../engine/scene/components";
+import {
+  readLightComponent,
+  readMeshRendererComponent,
+  readTransformComponent,
+} from "../engine/scene/components";
 import { readRotation, readScale } from "../engine/scene/transform";
 import { selectionId } from "../editor/core/selection";
-import type { LayoutCharacter, RoomLayout } from "../engine/scene/layout";
+import type { LayoutCharacter, LayoutLightActor, RoomLayout } from "../engine/scene/layout";
 
 let checks = 0;
 const check = (label: string, fn: () => void): void => {
@@ -172,6 +177,63 @@ check("character entity carries placement render inputs for parity", () => {
     // castShadow default-on: renderer.castShadow ?? true === placement.castShadow ?? true.
     assert.equal(renderer.castShadow ?? true, character.castShadow ?? true);
     assert.equal(entity.tags?.includes("hidden") ?? false, character.hidden ?? false);
+  });
+});
+
+// 7. Render parity: a light entity carries the exact transform, light, name,
+// and hidden inputs the legacy light render path reads, so entity-driven light
+// objects (entityLightItem) match the legacy actor path (actorLightItem).
+check("light entity carries actor render inputs for parity", () => {
+  const lights: LayoutLightActor[] = [
+    {
+      id: "sun",
+      type: "directional",
+      name: "Sun",
+      position: [3, 9, 4],
+      rotation: [-55, 35, 0],
+      color: "#ffffff",
+      intensity: 2,
+      castShadow: true,
+    },
+    {
+      id: "lamp-1",
+      type: "point",
+      position: [1, 2, 3],
+      distance: 8,
+      decay: 2,
+      intensity: 1.5,
+      hidden: true,
+    },
+    {
+      id: "spot-1",
+      type: "spot",
+      position: [0, 5, 0],
+      rotation: [-90, 0, 0],
+      angle: 30,
+      penumbra: 0.35,
+      distance: 10,
+    },
+  ];
+  lights.forEach((actor, index) => {
+    const entity = lightEntity(index, actor);
+    const transform = readTransformComponent(entity);
+    const light = readLightComponent(entity);
+    assert.ok(transform, `transform present for light[${index}]`);
+    assert.ok(light, `light component present for light[${index}]`);
+    assert.deepEqual(transform.position, actor.position);
+    assert.deepEqual(transform.rotation, readRotation(actor));
+    assert.equal(light.type, actor.type);
+    assert.equal(light.color, actor.color);
+    assert.equal(light.intensity, actor.intensity);
+    assert.equal(light.castShadow, actor.castShadow);
+    assert.equal(light.distance, actor.distance);
+    assert.equal(light.angle, actor.angle);
+    assert.equal(light.penumbra, actor.penumbra);
+    assert.equal(light.decay, actor.decay);
+    // Name fallback baked into entity.name: name ?? id (the light id is not a
+    // component field, so the adapter resolves the display name here).
+    assert.equal(entity.name, actor.name ?? actor.id);
+    assert.equal(entity.tags?.includes("hidden") ?? false, actor.hidden ?? false);
   });
 });
 

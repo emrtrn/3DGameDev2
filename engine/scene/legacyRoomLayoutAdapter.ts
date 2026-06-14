@@ -111,6 +111,23 @@ export function characterEntity(index: number, character: LayoutCharacter): Enti
   );
 }
 
+/**
+ * Derives the entity for a single light actor at its layout index. Used by the
+ * render adapter to drive light objects from the entity/component model. The
+ * index mirrors the editor light selection id. The actor's display name
+ * (`name ?? id`) is resolved into `entity.name` here because the light's `id`
+ * is not a component field; the render builder reads `entity.name` directly.
+ * Parent hierarchy is not resolved here (a light bakes its own world transform).
+ */
+export function lightEntity(index: number, light: LayoutLightActor): Entity {
+  return buildEntity(
+    lightEntityId(index),
+    light.name ?? light.id,
+    lightComponents(light),
+    flagTags(light),
+  );
+}
+
 export function roomLayoutToSceneDocument(layout: RoomLayout): SceneDocument {
   const pending: PendingEntity[] = [];
   const nodeIdToEntityId = new Map<string, string>();
@@ -145,12 +162,9 @@ export function roomLayoutToSceneDocument(layout: RoomLayout): SceneDocument {
   });
 
   (layout.lights ?? []).forEach((light, index) => {
-    const id = lightEntityId(index);
-    registerNode(id, light.nodeId);
-    pending.push({
-      entity: buildEntity(id, light.name, lightComponents(light), flagTags(light)),
-      legacyParentId: light.parentId,
-    });
+    const entity = lightEntity(index, light);
+    registerNode(entity.id, light.nodeId);
+    pending.push({ entity, legacyParentId: light.parentId });
   });
 
   for (const item of pending) {

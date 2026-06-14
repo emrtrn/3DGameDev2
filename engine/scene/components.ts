@@ -63,3 +63,23 @@ export function readMeshRendererComponent(entity: Entity): MeshRendererComponent
   if (typeof data.receiveShadow === "boolean") component.receiveShadow = data.receiveShadow;
   return component;
 }
+
+const LIGHT_TYPES: readonly SceneLightType[] = ["directional", "point", "spot"];
+
+/** Reads a typed light from an entity's serializable component data. */
+export function readLightComponent(entity: Entity): LightComponent | undefined {
+  const data = entity.components[LIGHT_COMPONENT];
+  if (!data) return undefined;
+  if (typeof data.type !== "string" || !LIGHT_TYPES.includes(data.type as SceneLightType)) {
+    return undefined;
+  }
+  const component: LightComponent = { type: data.type as SceneLightType };
+  if (typeof data.color === "string") component.color = data.color;
+  if (typeof data.intensity === "number") component.intensity = data.intensity;
+  if (typeof data.castShadow === "boolean") component.castShadow = data.castShadow;
+  if (typeof data.distance === "number") component.distance = data.distance;
+  if (typeof data.angle === "number") component.angle = data.angle;
+  if (typeof data.penumbra === "number") component.penumbra = data.penumbra;
+  if (typeof data.decay === "number") component.decay = data.decay;
+  return component;
+}

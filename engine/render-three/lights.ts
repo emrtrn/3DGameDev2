@@ -18,15 +18,85 @@ import {
 } from "three";
 import type { ColorRepresentation } from "three";
 
-import type { LayoutLightActor } from "@engine/scene/layout";
+import type { Entity } from "@engine/scene/entity";
+import { readLightComponent, readTransformComponent } from "@engine/scene/components";
+import type { SceneLightType } from "@engine/scene/components";
+import type { LayoutLightActor, Vec3 } from "@engine/scene/layout";
 import { defaultLightIntensity } from "@engine/scene/lights";
 import { degreesToRadians, readRotation } from "@engine/scene/transform";
 import { applyEulerDegrees } from "./transforms";
 
-const lightIconTextures = new Map<LayoutLightActor["type"], CanvasTexture>();
-const lightIconMaterials = new Map<LayoutLightActor["type"], SpriteMaterial>();
+const lightIconTextures = new Map<SceneLightType, CanvasTexture>();
+const lightIconMaterials = new Map<SceneLightType, SpriteMaterial>();
 
 export type ThreeLight = DirectionalLight | PointLight | SpotLight;
+
+/**
+ * Normalized light render input, decoupled from the layout format. Carries the
+ * resolved display name plus every actor field the Three.js light binding reads
+ * (`createLightObject`/`syncLightObject`/`buildLightGizmo` apply the same
+ * defaults whether the source is a placement or a scene entity).
+ */
+export interface LightRenderItem {
+  name: string;
+  type: SceneLightType;
+  position: Vec3;
+  /** XYZ-order Euler rotation in degrees. */
+  rotation: Vec3;
+  hidden: boolean;
+  color?: string;
+  intensity?: number;
+  castShadow?: boolean;
+  distance?: number;
+  angle?: number;
+  penumbra?: number;
+  decay?: number;
+}
+
+/** Legacy builder: derives a light render item straight from a layout actor. */
+export function actorLightItem(actor: LayoutLightActor): LightRenderItem {
+  const item: LightRenderItem = {
+    name: actor.name ?? actor.id,
+    type: actor.type,
+    position: [actor.position[0], actor.position[1], actor.position[2]],
+    rotation: readRotation(actor),
+    hidden: actor.hidden ?? false,
+  };
+  if (actor.color !== undefined) item.color = actor.color;
+  if (actor.intensity !== undefined) item.intensity = actor.intensity;
+  if (actor.castShadow !== undefined) item.castShadow = actor.castShadow;
+  if (actor.distance !== undefined) item.distance = actor.distance;
+  if (actor.angle !== undefined) item.angle = actor.angle;
+  if (actor.penumbra !== undefined) item.penumbra = actor.penumbra;
+  if (actor.decay !== undefined) item.decay = actor.decay;
+  return item;
+}
+
+/**
+ * Entity-driven builder: derives a light render item from a scene entity's
+ * transform/light components and the `hidden` tag. Produces the same item as
+ * `actorLightItem` because the adapter fills those components from the same
+ * actor fields and resolves the display name into `entity.name`.
+ */
+export function entityLightItem(entity: Entity): LightRenderItem {
+  const transform = readTransformComponent(entity);
+  const light = readLightComponent(entity);
+  const item: LightRenderItem = {
+    name: entity.name ?? "Light",
+    type: light?.type ?? "directional",
+    position: transform ? [...transform.position] : [0, 0, 0],
+    rotation: transform ? [...transform.rotation] : [0, 0, 0],
+    hidden: entity.tags?.includes("hidden") ?? false,
+  };
+  if (light?.color !== undefined) item.color = light.color;
+  if (light?.intensity !== undefined) item.intensity = light.intensity;
+  if (light?.castShadow !== undefined) item.castShadow = light.castShadow;
+  if (light?.distance !== undefined) item.distance = light.distance;
+  if (light?.angle !== undefined) item.angle = light.angle;
+  if (light?.penumbra !== undefined) item.penumbra = light.penumbra;
+  if (light?.decay !== undefined) item.decay = light.decay;
+  return item;
+}
 
 export interface LightObjectRecord {
   root: Object3D;
@@ -54,26 +124,26 @@ export function configureShadowCastingLight(
 }
 
 export function createLightObject(
-  actor: LayoutLightActor,
+  item: LightRenderItem,
   defaultColor: ColorRepresentation,
 ): LightObjectRecord {
   const root = new Object3D();
-  root.name = actor.name ?? actor.id;
-  const color = new Color(actor.color ?? defaultColor);
-  const intensity = actor.intensity ?? defaultLightIntensity(actor.type);
+  root.name = item.name;
+  const color = new Color(item.color ?? defaultColor);
+  const intensity = item.intensity ?? defaultLightIntensity(item.type);
 
   let light: ThreeLight;
   let target: Object3D | undefined;
-  if (actor.type === "point") {
-    light = new PointLight(color, intensity, actor.distance ?? 8, actor.decay ?? 2);
-  } else if (actor.type === "spot") {
+  if (item.type === "point") {
+    light = new PointLight(color, intensity, item.distance ?? 8, item.decay ?? 2);
+  } else if (item.type === "spot") {
     light = new SpotLight(
       color,
       intensity,
-      actor.distance ?? 10,
-      degreesToRadians(actor.angle ?? 30),
-      actor.penumbra ?? 0.35,
-      actor.decay ?? 2,
+      item.distance ?? 10,
+      degreesToRadians(item.angle ?? 30),
+      item.penumbra ?? 0.35,
+      item.decay ?? 2,
     );
     target = light.target;
   } else {
@@ -82,39 +152,39 @@ export function createLightObject(
   }
 
   light.name = `${root.name} Light`;
-  light.castShadow = actor.castShadow ?? actor.type === "directional";
+  light.castShadow = item.castShadow ?? item.type === "directional";
   configureShadowCastingLight(light);
   root.add(light);
-  const gizmo = buildLightGizmo(actor, color);
+  const gizmo = buildLightGizmo(item, color);
   root.add(gizmo);
   return target ? { root, light, target, gizmo } : { root, light, gizmo };
 }
 
 export function syncLightObject(
   record: LightObjectRecord,
-  actor: LayoutLightActor,
+  item: LightRenderItem,
   options: { defaultColor: ColorRepresentation; selected: boolean },
 ): void {
-  record.root.name = actor.name ?? actor.id;
-  record.root.position.set(...actor.position);
-  applyEulerDegrees(record.root, readRotation(actor));
-  record.root.visible = !(actor.hidden ?? false);
+  record.root.name = item.name;
+  record.root.position.set(...item.position);
+  applyEulerDegrees(record.root, item.rotation);
+  record.root.visible = !item.hidden;
 
-  const color = new Color(actor.color ?? options.defaultColor);
+  const color = new Color(item.color ?? options.defaultColor);
   record.light.color.copy(color);
-  record.light.intensity = actor.intensity ?? defaultLightIntensity(actor.type);
-  record.light.castShadow = actor.castShadow ?? actor.type === "directional";
+  record.light.intensity = item.intensity ?? defaultLightIntensity(item.type);
+  record.light.castShadow = item.castShadow ?? item.type === "directional";
   if (record.light instanceof PointLight || record.light instanceof SpotLight) {
-    record.light.distance = actor.distance ?? (actor.type === "point" ? 8 : 10);
-    record.light.decay = actor.decay ?? 2;
+    record.light.distance = item.distance ?? (item.type === "point" ? 8 : 10);
+    record.light.decay = item.decay ?? 2;
   }
   if (record.light instanceof SpotLight) {
-    record.light.angle = degreesToRadians(actor.angle ?? 30);
-    record.light.penumbra = actor.penumbra ?? 0.35;
+    record.light.angle = degreesToRadians(item.angle ?? 30);
+    record.light.penumbra = item.penumbra ?? 0.35;
   }
 
   if (record.target) {
-    const [rx, ry, rz] = readRotation(actor).map(degreesToRadians) as [
+    const [rx, ry, rz] = item.rotation.map(degreesToRadians) as [
       number,
       number,
       number,
@@ -126,24 +196,24 @@ export function syncLightObject(
     record.target.updateMatrixWorld();
   }
 
-  // Rebuild the wireframe so cone angle / sphere radius / color track the actor.
+  // Rebuild the wireframe so cone angle / sphere radius / color track the light.
   record.root.remove(record.gizmo);
   disposeLightGizmo(record.gizmo);
-  record.gizmo = buildLightGizmo(actor, color);
+  record.gizmo = buildLightGizmo(item, color);
   record.root.add(record.gizmo);
   const wire = record.gizmo.getObjectByName("light-wire");
   if (wire) wire.visible = options.selected;
 }
 
 /** Unreal-style billboard icon (bulb for point/spot, sun for directional). */
-export function createLightIcon(type: LayoutLightActor["type"]): Sprite {
+export function createLightIcon(type: SceneLightType): Sprite {
   const sprite = new Sprite(lightIconMaterial(type));
   sprite.scale.set(0.55, 0.55, 0.55);
   sprite.name = "light-icon";
   return sprite;
 }
 
-function lightIconMaterial(type: LayoutLightActor["type"]): SpriteMaterial {
+function lightIconMaterial(type: SceneLightType): SpriteMaterial {
   let material = lightIconMaterials.get(type);
   if (material) return material;
   material = new SpriteMaterial({
@@ -157,7 +227,7 @@ function lightIconMaterial(type: LayoutLightActor["type"]): SpriteMaterial {
   return material;
 }
 
-function lightIconTexture(type: LayoutLightActor["type"]): CanvasTexture {
+function lightIconTexture(type: SceneLightType): CanvasTexture {
   let texture = lightIconTextures.get(type);
   if (texture) return texture;
   const canvas = document.createElement("canvas");
@@ -170,7 +240,7 @@ function lightIconTexture(type: LayoutLightActor["type"]): CanvasTexture {
   return texture;
 }
 
-function drawLightGlyph(ctx: CanvasRenderingContext2D, type: LayoutLightActor["type"]): void {
+function drawLightGlyph(ctx: CanvasRenderingContext2D, type: SceneLightType): void {
   ctx.clearRect(0, 0, 64, 64);
   ctx.lineWidth = 4;
   ctx.lineJoin = "round";
@@ -221,22 +291,22 @@ function drawLightGlyph(ctx: CanvasRenderingContext2D, type: LayoutLightActor["t
  * a wireframe that represents the light's actual reach.
  */
 export function buildLightGizmo(
-  actor: LayoutLightActor,
+  item: LightRenderItem,
   color: ColorRepresentation,
 ): Object3D {
   const group = new Group();
   group.name = "light-gizmo";
-  group.add(createLightIcon(actor.type));
+  group.add(createLightIcon(item.type));
 
   const lineMaterial = new LineBasicMaterial({ color, transparent: true, opacity: 0.85 });
   let wire: LineSegments;
-  if (actor.type === "spot") {
-    const angle = degreesToRadians(actor.angle ?? 30);
-    const height = actor.distance && actor.distance > 0 ? actor.distance : 10;
+  if (item.type === "spot") {
+    const angle = degreesToRadians(item.angle ?? 30);
+    const height = item.distance && item.distance > 0 ? item.distance : 10;
     const radius = Math.tan(angle) * height;
     wire = buildSpotConeWire(radius, height, lineMaterial);
-  } else if (actor.type === "point") {
-    const radius = actor.distance && actor.distance > 0 ? actor.distance : 1;
+  } else if (item.type === "point") {
+    const radius = item.distance && item.distance > 0 ? item.distance : 1;
     wire = buildPointSphereWire(radius, lineMaterial);
   } else {
     wire = buildDirectionWire(lineMaterial);
