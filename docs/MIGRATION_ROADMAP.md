@@ -216,6 +216,10 @@ Completed:
 - Kept `src/scene/gltfModelLoader.ts` as a compatibility export.
 - Updated `src/scene/assetLoader.ts` to import the GLTF adapter from
   `@engine/render-three/gltfModelLoader`.
+- Moved Three.js transform helpers (`composePlacementMatrix`, `eulerDegrees`,
+  `applyEulerDegrees`) into `engine/render-three/transforms.ts`.
+- Moved material helpers (`isRenderableMesh`, `collectMaterialStats`,
+  `convertUnlitModelMaterialsToLit`) into `engine/render-three/materials.ts`.
 
 Tasks:
 

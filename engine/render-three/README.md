@@ -7,6 +7,10 @@ Current files:
 
 - `gltfModelLoader.ts`: GLTFLoader + meshoptimizer adapter with per-asset
   promise caching.
+- `transforms.ts`: Three.js transform helpers for layout placement matrices and
+  Euler-degree application.
+- `materials.ts`: renderable mesh guard, material stats, and unlit-to-lit
+  material conversion helpers.
 
 Rules:
 

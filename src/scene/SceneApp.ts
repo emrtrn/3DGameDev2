@@ -27,7 +27,6 @@ import {
   Matrix4,
   Mesh,
   MeshBasicMaterial,
-  MeshStandardMaterial,
   Object3D,
   PCFSoftShadowMap,
   PerspectiveCamera,
@@ -45,13 +44,23 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import type { Intersection, Material } from "three";
+import type { Intersection } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
 import type { AssetManifest, EditableAsset } from "@engine/assets/manifest";
 import { loadActiveProject, type ActiveProject } from "@/project/ProjectSystem";
 import { loadRoomLayout } from "./roomLayout";
+import {
+  applyEulerDegrees,
+  composePlacementMatrix,
+  eulerDegrees,
+} from "@engine/render-three/transforms";
+import {
+  collectMaterialStats,
+  convertUnlitModelMaterialsToLit,
+  isRenderableMesh,
+} from "@engine/render-three/materials";
 import {
   degreesToRadians,
   readPivot,
@@ -247,12 +256,6 @@ interface LightObjectRecord {
   target?: Object3D;
   /** Wireframe representation (cone/sphere) + clickable icon; rebuilt on change. */
   gizmo: Object3D;
-}
-
-interface MaterialStats {
-  basic: number;
-  lit: number;
-  total: number;
 }
 
 interface EditorOptions {
@@ -4243,13 +4246,6 @@ export class SceneApp {
 
 const HIDDEN_INSTANCE_MATRIX = new Matrix4().makeScale(0, 0, 0);
 
-function composePlacementMatrix(placement: LayoutPlacement | LayoutCharacter): Matrix4 {
-  const position = new Vector3(...placement.position);
-  const rotation = new Quaternion().setFromEuler(eulerDegrees(readRotation(placement)));
-  const scale = new Vector3(...readScale(placement));
-  return new Matrix4().compose(position, rotation, scale);
-}
-
 const RAD_TO_DEG = 180 / Math.PI;
 
 /** Builds a world matrix from an editable transform (pos / euler-degrees / scale). */
@@ -4272,21 +4268,6 @@ function matrixToTransform(matrix: Matrix4): EditableTransform {
     rotation: [euler.x * RAD_TO_DEG, euler.y * RAD_TO_DEG, euler.z * RAD_TO_DEG],
     scale: [scale.x, scale.y, scale.z],
   };
-}
-
-/** Builds an XYZ-order Euler from a degrees vector. */
-function eulerDegrees(rotation: Vec3): Euler {
-  return new Euler(
-    degreesToRadians(rotation[0]),
-    degreesToRadians(rotation[1]),
-    degreesToRadians(rotation[2]),
-    "XYZ",
-  );
-}
-
-/** Applies a degrees rotation vector to an Object3D's Euler (XYZ order). */
-function applyEulerDegrees(object: Object3D, rotation: Vec3): void {
-  object.rotation.copy(eulerDegrees(rotation));
 }
 
 /** Maps a gizmo axis to its rotation/scale vector index (defaults to Y). */
@@ -4797,74 +4778,6 @@ function worldSettingsEqual(left: EditorWorldSettings, right: EditorWorldSetting
 function clampIndex(index: number, length: number): number {
   if (!Number.isFinite(index)) return length;
   return Math.max(0, Math.min(length, Math.trunc(index)));
-}
-
-function isRenderableMesh(
-  object: Object3D,
-): object is Mesh & { material: Material | Material[] } {
-  return object instanceof Mesh;
-}
-
-function collectMaterialStats(models: Map<string, GLTF>): MaterialStats {
-  const seen = new Set<Material>();
-  for (const gltf of models.values()) {
-    gltf.scene.traverse((object) => {
-      if (!isRenderableMesh(object)) return;
-      const materials = Array.isArray(object.material)
-        ? object.material
-        : [object.material];
-      for (const material of materials) seen.add(material);
-    });
-  }
-
-  let basic = 0;
-  let lit = 0;
-  for (const material of seen) {
-    if (material.type === "MeshBasicMaterial") basic += 1;
-    else lit += 1;
-  }
-
-  return { basic, lit, total: seen.size };
-}
-
-function convertUnlitModelMaterialsToLit(models: Map<string, GLTF>): number {
-  const converted = new Map<Material, Material>();
-
-  const resolveMaterial = (material: Material): Material => {
-    if (!(material instanceof MeshBasicMaterial)) return material;
-    const cached = converted.get(material);
-    if (cached) return cached;
-
-    const lit = new MeshStandardMaterial({
-      name: material.name,
-      color: material.color.clone(),
-      map: material.map,
-      alphaMap: material.alphaMap,
-      transparent: material.transparent,
-      opacity: material.opacity,
-      alphaTest: material.alphaTest,
-      side: material.side,
-      depthTest: material.depthTest,
-      depthWrite: material.depthWrite,
-      wireframe: material.wireframe,
-    });
-    lit.vertexColors = material.vertexColors;
-    lit.toneMapped = material.toneMapped;
-    lit.needsUpdate = true;
-    converted.set(material, lit);
-    return lit;
-  };
-
-  for (const gltf of models.values()) {
-    gltf.scene.traverse((object) => {
-      if (!isRenderableMesh(object)) return;
-      object.material = Array.isArray(object.material)
-        ? object.material.map(resolveMaterial)
-        : resolveMaterial(object.material);
-    });
-  }
-
-  return converted.size;
 }
 
 function findParentInstancedMesh(object: Object3D): InstancedMesh | null {
