@@ -1,14 +1,19 @@
 import {
   Camera,
+  Matrix4,
   Object3D,
+  Plane,
   Quaternion,
   Raycaster,
   Vector2,
   Vector3,
 } from "three";
 
+import type { EditableTransform } from "@editor/core/editableScene";
 import { clamp } from "@editor/core/numeric";
+import type { Selection } from "@editor/core/selection";
 import { degreesToRadians } from "@engine/scene/transform";
+import type { Vec3 } from "@engine/scene/layout";
 import type { GizmoPlaneAxis } from "./axes";
 import {
   gizmoHandlesEqual,
@@ -16,6 +21,60 @@ import {
 } from "./handles";
 
 const DEFAULT_SCREEN_SIZE_PX = 118;
+
+export interface LinkedMoveStart {
+  selection: Selection;
+  startTransform: EditableTransform;
+}
+
+export type GizmoPointerDrag =
+  | {
+      mode: "move";
+      axis: GizmoHandle["axis"];
+      selection: Selection;
+      offset: Vector3;
+      pointerId: number;
+      startTransform: EditableTransform;
+      startPosition: Vec3;
+      startClientX: number;
+      startClientY: number;
+      freeMoveRight?: Vector3 | undefined;
+      freeMoveUp?: Vector3 | undefined;
+      linkedTransforms?: LinkedMoveStart[] | undefined;
+      movePlane?: Plane | undefined;
+      planeStartHit?: Vector3 | undefined;
+      /** When set, the move handles drag the pivot point instead of the object. */
+      pivotEdit?: boolean | undefined;
+      /** Inverse of the fixed object world matrix, to map dragged world to local pivot. */
+      pivotMatrixInverse?: Matrix4 | undefined;
+      /** Pivot value at drag start, for the undo step. */
+      startPivot?: Vec3 | undefined;
+    }
+  | {
+      mode: "rotate";
+      axis: GizmoHandle["axis"];
+      selection: Selection;
+      pointerId: number;
+      startTransform: EditableTransform;
+      startClientX: number;
+      startRotation: Vec3;
+      linkedTransforms?: LinkedMoveStart[] | undefined;
+      pivotWorld?: Vector3 | undefined;
+      pivot?: Vec3 | undefined;
+    }
+  | {
+      mode: "scale";
+      axis: GizmoHandle["axis"];
+      selection: Selection;
+      pointerId: number;
+      startTransform: EditableTransform;
+      startClientX: number;
+      startClientY: number;
+      startScale: Vec3;
+      linkedTransforms?: LinkedMoveStart[] | undefined;
+      pivotWorld?: Vector3 | undefined;
+      pivot?: Vec3 | undefined;
+    };
 
 export class GizmoInteractionStore {
   private active: GizmoHandle | null = null;

@@ -202,6 +202,8 @@ import {
   pickGizmoHandle as pickGizmoHandleFromObjects,
   planeAxisNormalWorld,
   screenSpaceMoveBasis,
+  type GizmoPointerDrag,
+  type LinkedMoveStart,
 } from "@editor/gizmos/interaction";
 import {
   isCameraNavigationKey,
@@ -259,11 +261,6 @@ const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   ArrowRight: "move-right",
   Space: "jump",
 };
-
-interface LinkedMoveStart {
-  selection: Selection;
-  startTransform: EditableTransform;
-}
 
 type CameraDrag =
   | {
@@ -382,55 +379,7 @@ export class SceneApp {
     scaleEnabled: true,
   };
   private pendingAssetId: string | null = null;
-  private pointerDrag:
-    | {
-        mode: "move";
-        axis: GizmoAxis;
-        selection: Selection;
-        offset: Vector3;
-        pointerId: number;
-        startTransform: EditableTransform;
-        startPosition: [number, number, number];
-        startClientX: number;
-        startClientY: number;
-        freeMoveRight?: Vector3 | undefined;
-        freeMoveUp?: Vector3 | undefined;
-        linkedTransforms?: LinkedMoveStart[] | undefined;
-        movePlane?: Plane | undefined;
-        planeStartHit?: Vector3 | undefined;
-        /** When set, the move handles drag the pivot point instead of the object. */
-        pivotEdit?: boolean | undefined;
-        /** Inverse of the (fixed) object world matrix, to map dragged world → local pivot. */
-        pivotMatrixInverse?: Matrix4 | undefined;
-        /** Pivot value at drag start, for the undo step. */
-        startPivot?: Vec3 | undefined;
-      }
-    | {
-        mode: "rotate";
-        axis: GizmoAxis;
-        selection: Selection;
-        pointerId: number;
-        startTransform: EditableTransform;
-        startClientX: number;
-        startRotation: Vec3;
-        linkedTransforms?: LinkedMoveStart[] | undefined;
-        pivotWorld?: Vector3 | undefined;
-        pivot?: Vec3 | undefined;
-      }
-    | {
-        mode: "scale";
-        axis: GizmoAxis;
-        selection: Selection;
-        pointerId: number;
-        startTransform: EditableTransform;
-        startClientX: number;
-        startClientY: number;
-        startScale: Vec3;
-        linkedTransforms?: LinkedMoveStart[] | undefined;
-        pivotWorld?: Vector3 | undefined;
-        pivot?: Vec3 | undefined;
-      }
-    | null = null;
+  private pointerDrag: GizmoPointerDrag | null = null;
   private readonly commandStore = new EditorCommandStore();
 
   /** Called every frame with the smoothed delta; used by the debug overlay. */
