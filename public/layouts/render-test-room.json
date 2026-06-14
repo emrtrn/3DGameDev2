@@ -32,7 +32,22 @@
     },
     {
       "assetId": "wall",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            1.95,
+            0.05,
+            0.35
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": 1
+        }
+      ]
     },
     {
       "assetId": "wall-window",
@@ -133,6 +148,7 @@
     }
   ],
   "worldSettings": {
+    "staticObjectsCastShadow": true,
     "ambientIntensity": 1
   },
   "lights": [
@@ -140,9 +156,9 @@
       "id": "sun",
       "type": "directional",
       "position": [
-        3,
-        9,
-        4
+        0,
+        1.54,
+        0
       ],
       "name": "Sun",
       "rotation": [
