@@ -36,7 +36,11 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
 import type { AssetManifest, EditableAsset } from "@engine/assets/manifest";
-import { loadActiveProject, type ActiveProject } from "@/project/ProjectSystem";
+import {
+  dirnameProjectPath,
+  loadActiveProject,
+  type ActiveProject,
+} from "@/project/ProjectSystem";
 import { loadRoomLayout } from "./roomLayout";
 import {
   applyEulerDegrees,
@@ -4064,10 +4068,4 @@ function findParentLight(object: Object3D): Object3D | null {
     current = current.parent;
   }
   return null;
-}
-
-function dirnameProjectPath(path: string): string {
-  const normalized = path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-  const slash = normalized.lastIndexOf("/");
-  return slash >= 0 ? normalized.slice(0, slash) : "";
 }

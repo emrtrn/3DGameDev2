@@ -75,3 +75,9 @@ export function projectPublicFileUrl(
   // codebase, so publicDir no longer needs to be prepended.
   return projectFileUrl(publicRelativePath);
 }
+
+export function dirnameProjectPath(path: string): string {
+  const normalized = path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const slash = normalized.lastIndexOf("/");
+  return slash >= 0 ? normalized.slice(0, slash) : "";
+}
