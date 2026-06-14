@@ -11,8 +11,8 @@ Current files:
   Euler-degree application.
 - `materials.ts`: renderable mesh guard, material stats, and unlit-to-lit
   material conversion helpers.
-- `lights.ts`: Three.js light shadow configuration plus editor light icon and
-  wire gizmo construction/disposal helpers.
+- `lights.ts`: Three.js light object creation/sync, shadow configuration, and
+  editor light icon/wire gizmo construction/disposal helpers.
 - `renderer.ts`: WebGLRenderer creation, baseline shadow-map configuration, and
   render statistics helpers.
 - `camera.ts`: perspective scene camera creation and responsive viewport/FOV

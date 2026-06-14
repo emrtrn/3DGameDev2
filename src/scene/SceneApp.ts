@@ -25,11 +25,9 @@ import {
   Object3D,
   Plane,
   PlaneGeometry,
-  PointLight,
   Quaternion,
   Raycaster,
   Scene,
-  SpotLight,
   TorusGeometry,
   Vector2,
   Vector3,
@@ -56,9 +54,9 @@ import {
   createInstancedModelGroup,
 } from "@engine/render-three/models";
 import {
-  buildLightGizmo,
-  configureShadowCastingLight,
-  disposeLightGizmo,
+  createLightObject as createThreeLightObject,
+  syncLightObject,
+  type LightObjectRecord,
 } from "@engine/render-three/lights";
 import {
   applyResponsiveCameraViewport,
@@ -260,14 +258,6 @@ interface EditorCommand {
   label: string;
   undo: () => void;
   redo: () => void;
-}
-
-interface LightObjectRecord {
-  root: Object3D;
-  light: DirectionalLight | PointLight | SpotLight;
-  target?: Object3D;
-  /** Wireframe representation (cone/sphere) + clickable icon; rebuilt on change. */
-  gizmo: Object3D;
 }
 
 interface EditorOptions {
@@ -1956,37 +1946,7 @@ export class SceneApp {
   }
 
   private createLightObject(actor: LayoutLightActor): LightObjectRecord {
-    const root = new Object3D();
-    root.name = actor.name ?? actor.id;
-    const color = new Color(actor.color ?? DEFAULT_LIGHT_COLOR);
-    const intensity = actor.intensity ?? defaultLightIntensity(actor.type);
-
-    let light: DirectionalLight | PointLight | SpotLight;
-    let target: Object3D | undefined;
-    if (actor.type === "point") {
-      light = new PointLight(color, intensity, actor.distance ?? 8, actor.decay ?? 2);
-    } else if (actor.type === "spot") {
-      light = new SpotLight(
-        color,
-        intensity,
-        actor.distance ?? 10,
-        degreesToRadians(actor.angle ?? 30),
-        actor.penumbra ?? 0.35,
-        actor.decay ?? 2,
-      );
-      target = light.target;
-    } else {
-      light = new DirectionalLight(color, intensity);
-      target = light.target;
-    }
-
-    light.name = `${root.name} Light`;
-    light.castShadow = actor.castShadow ?? actor.type === "directional";
-    configureShadowCastingLight(light);
-    root.add(light);
-    const gizmo = buildLightGizmo(actor, color);
-    root.add(gizmo);
-    return target ? { root, light, target, gizmo } : { root, light, gizmo };
+    return createThreeLightObject(actor, DEFAULT_LIGHT_COLOR);
   }
 
   private insertLightActor(index: number, actor: LayoutLightActor): void {
@@ -2031,41 +1991,10 @@ export class SceneApp {
     const actor = this.layout?.lights?.[index];
     const record = this.lightObjects[index];
     if (!actor || !record) return;
-
-    record.root.name = actor.name ?? actor.id;
-    record.root.position.set(...actor.position);
-    applyEulerDegrees(record.root, readRotation(actor));
-    record.root.visible = !(actor.hidden ?? false);
-
-    const color = new Color(actor.color ?? DEFAULT_LIGHT_COLOR);
-    record.light.color.copy(color);
-    record.light.intensity = actor.intensity ?? defaultLightIntensity(actor.type);
-    record.light.castShadow = actor.castShadow ?? actor.type === "directional";
-    if (record.light instanceof PointLight || record.light instanceof SpotLight) {
-      record.light.distance = actor.distance ?? (actor.type === "point" ? 8 : 10);
-      record.light.decay = actor.decay ?? 2;
-    }
-    if (record.light instanceof SpotLight) {
-      record.light.angle = degreesToRadians(actor.angle ?? 30);
-      record.light.penumbra = actor.penumbra ?? 0.35;
-    }
-
-    if (record.target) {
-      const [rx, ry, rz] = readRotation(actor).map(degreesToRadians) as Vec3;
-      const direction = new Vector3(0, 0, -1)
-        .applyEuler(new Euler(rx, ry, rz))
-        .normalize();
-      record.target.position.copy(record.root.position).add(direction);
-      record.target.updateMatrixWorld();
-    }
-
-    // Rebuild the wireframe so cone angle / sphere radius / color track the actor.
-    record.root.remove(record.gizmo);
-    disposeLightGizmo(record.gizmo);
-    record.gizmo = buildLightGizmo(actor, color);
-    record.root.add(record.gizmo);
-    const wire = record.gizmo.getObjectByName("light-wire");
-    if (wire) wire.visible = this.isLightSelected(index);
+    syncLightObject(record, actor, {
+      defaultColor: DEFAULT_LIGHT_COLOR,
+      selected: this.isLightSelected(index),
+    });
   }
 
   private duplicateSelection(selection: Selection): Selection | null {

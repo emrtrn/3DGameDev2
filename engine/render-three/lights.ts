@@ -1,7 +1,9 @@
 import {
   BufferGeometry,
   CanvasTexture,
+  Color,
   DirectionalLight,
+  Euler,
   Float32BufferAttribute,
   Group,
   LineBasicMaterial,
@@ -17,10 +19,22 @@ import {
 import type { ColorRepresentation } from "three";
 
 import type { LayoutLightActor } from "@engine/scene/layout";
-import { degreesToRadians } from "@engine/scene/transform";
+import { defaultLightIntensity } from "@engine/scene/lights";
+import { degreesToRadians, readRotation } from "@engine/scene/transform";
+import { applyEulerDegrees } from "./transforms";
 
 const lightIconTextures = new Map<LayoutLightActor["type"], CanvasTexture>();
 const lightIconMaterials = new Map<LayoutLightActor["type"], SpriteMaterial>();
+
+export type ThreeLight = DirectionalLight | PointLight | SpotLight;
+
+export interface LightObjectRecord {
+  root: Object3D;
+  light: ThreeLight;
+  target?: Object3D;
+  /** Wireframe representation (cone/sphere) + clickable icon; rebuilt on change. */
+  gizmo: Object3D;
+}
 
 export function configureShadowCastingLight(
   light: DirectionalLight | PointLight | SpotLight,
@@ -37,6 +51,88 @@ export function configureShadowCastingLight(
     shadowCam.top = 12;
     shadowCam.bottom = -12;
   }
+}
+
+export function createLightObject(
+  actor: LayoutLightActor,
+  defaultColor: ColorRepresentation,
+): LightObjectRecord {
+  const root = new Object3D();
+  root.name = actor.name ?? actor.id;
+  const color = new Color(actor.color ?? defaultColor);
+  const intensity = actor.intensity ?? defaultLightIntensity(actor.type);
+
+  let light: ThreeLight;
+  let target: Object3D | undefined;
+  if (actor.type === "point") {
+    light = new PointLight(color, intensity, actor.distance ?? 8, actor.decay ?? 2);
+  } else if (actor.type === "spot") {
+    light = new SpotLight(
+      color,
+      intensity,
+      actor.distance ?? 10,
+      degreesToRadians(actor.angle ?? 30),
+      actor.penumbra ?? 0.35,
+      actor.decay ?? 2,
+    );
+    target = light.target;
+  } else {
+    light = new DirectionalLight(color, intensity);
+    target = light.target;
+  }
+
+  light.name = `${root.name} Light`;
+  light.castShadow = actor.castShadow ?? actor.type === "directional";
+  configureShadowCastingLight(light);
+  root.add(light);
+  const gizmo = buildLightGizmo(actor, color);
+  root.add(gizmo);
+  return target ? { root, light, target, gizmo } : { root, light, gizmo };
+}
+
+export function syncLightObject(
+  record: LightObjectRecord,
+  actor: LayoutLightActor,
+  options: { defaultColor: ColorRepresentation; selected: boolean },
+): void {
+  record.root.name = actor.name ?? actor.id;
+  record.root.position.set(...actor.position);
+  applyEulerDegrees(record.root, readRotation(actor));
+  record.root.visible = !(actor.hidden ?? false);
+
+  const color = new Color(actor.color ?? options.defaultColor);
+  record.light.color.copy(color);
+  record.light.intensity = actor.intensity ?? defaultLightIntensity(actor.type);
+  record.light.castShadow = actor.castShadow ?? actor.type === "directional";
+  if (record.light instanceof PointLight || record.light instanceof SpotLight) {
+    record.light.distance = actor.distance ?? (actor.type === "point" ? 8 : 10);
+    record.light.decay = actor.decay ?? 2;
+  }
+  if (record.light instanceof SpotLight) {
+    record.light.angle = degreesToRadians(actor.angle ?? 30);
+    record.light.penumbra = actor.penumbra ?? 0.35;
+  }
+
+  if (record.target) {
+    const [rx, ry, rz] = readRotation(actor).map(degreesToRadians) as [
+      number,
+      number,
+      number,
+    ];
+    const direction = new Vector3(0, 0, -1)
+      .applyEuler(new Euler(rx, ry, rz))
+      .normalize();
+    record.target.position.copy(record.root.position).add(direction);
+    record.target.updateMatrixWorld();
+  }
+
+  // Rebuild the wireframe so cone angle / sphere radius / color track the actor.
+  record.root.remove(record.gizmo);
+  disposeLightGizmo(record.gizmo);
+  record.gizmo = buildLightGizmo(actor, color);
+  record.root.add(record.gizmo);
+  const wire = record.gizmo.getObjectByName("light-wire");
+  if (wire) wire.visible = options.selected;
 }
 
 /** Unreal-style billboard icon (bulb for point/spot, sun for directional). */
