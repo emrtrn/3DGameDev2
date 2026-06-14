@@ -4,6 +4,8 @@ export interface EditorCommand {
   redo: () => void;
 }
 
+export type EditorCommandPhase = "redo" | "undo";
+
 export interface EditorHistoryState {
   canUndo: boolean;
   canRedo: boolean;

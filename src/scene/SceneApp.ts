@@ -138,6 +138,7 @@ import {
 } from "@editor/core/editableScene";
 import type {
   EditorCommand,
+  EditorCommandPhase,
   EditorHistoryState,
 } from "@editor/core/history";
 import { EditorHistory } from "@editor/core/history";
@@ -1257,7 +1258,7 @@ export class SceneApp {
     const active = this.selection
       ? cloneSelection(this.selection)
       : cloneSelection(entries[0]!.selection);
-    const applyEntries = (mode: "redo" | "undo"): void => {
+    const applyEntries = (mode: EditorCommandPhase): void => {
       for (const entry of entries) {
         this.applyGroupId(
           entry.selection,
@@ -1300,7 +1301,7 @@ export class SceneApp {
     if (entries.length === 0) return;
     const active = this.selection ? cloneSelection(this.selection) : null;
 
-    const applyEntries = (mode: "redo" | "undo"): void => {
+    const applyEntries = (mode: EditorCommandPhase): void => {
       for (const entry of entries) {
         this.applyGroupId(
           entry.selection,
@@ -1349,7 +1350,7 @@ export class SceneApp {
     }
 
     const hadParentNodeId = parentTarget.nodeId !== undefined;
-    const apply = (mode: "redo" | "undo"): void => {
+    const apply = (mode: EditorCommandPhase): void => {
       const parentMut = this.getMutableTransform(parent);
       if (parentMut) {
         if (mode === "redo") parentMut.nodeId = parentNodeId;
@@ -1403,7 +1404,7 @@ export class SceneApp {
     if (children.length === 0) return;
 
     const hadParentNodeId = parentTarget.nodeId !== undefined;
-    const apply = (mode: "redo" | "undo"): void => {
+    const apply = (mode: EditorCommandPhase): void => {
       const parentMut = this.getMutableTransform(parent);
       if (parentMut) {
         if (mode === "redo") parentMut.nodeId = parentNodeId;
@@ -1439,7 +1440,7 @@ export class SceneApp {
       return;
     }
 
-    const apply = (mode: "redo" | "undo"): void => {
+    const apply = (mode: EditorCommandPhase): void => {
       for (const entry of entries) {
         const target = this.getMutableTransform(entry.selection);
         if (!target) continue;
@@ -2475,7 +2476,7 @@ export class SceneApp {
     }
     if (entries.every((entry) => entry.previous === value)) return;
 
-    const applyEntries = (mode: "redo" | "undo"): void => {
+    const applyEntries = (mode: EditorCommandPhase): void => {
       for (const entry of entries) {
         this.applyFlag(
           entry.selection,

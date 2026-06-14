@@ -272,8 +272,8 @@ Completed:
 - Added `editor/core/editableScene.ts` for editor-facing project info, snap
   settings, scene object, selection transform, and world settings contracts
   consumed by the editor UI.
-- Added `editor/core/history.ts` for editor command contracts, undo/redo
-  history stack behavior, and command action result labels.
+- Added `editor/core/history.ts` for editor command contracts, undo/redo phase
+  typing, history stack behavior, and command action result labels.
 - Added `editor/core/hierarchy.ts` for selection grouping, direct child lookup,
   and cycle-safe descendant traversal helpers.
 - Added `editor/core/ids.ts` for collision-checked editor id generation used by
