@@ -606,6 +606,19 @@ export default defineConfig({
     target: "es2022",
     // Perf budget guard: warn early if a chunk creeps past ~250 KB (pre-gzip).
     chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalized = id.replace(/\\/g, "/");
+          if (normalized.includes("/node_modules/three/")) return "vendor-three";
+          if (normalized.includes("/node_modules/meshoptimizer/")) return "vendor-meshoptimizer";
+          // When Rapier lands, keep its WASM-backed runtime behind the same
+          // vendor split pattern instead of folding it into the game entry.
+          if (normalized.includes("/node_modules/@dimforge/")) return "vendor-physics";
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     // Expose on LAN for real-device (Android/Chrome) testing.
