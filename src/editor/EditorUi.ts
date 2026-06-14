@@ -659,13 +659,20 @@ export class EditorUi {
   }
 
   private editableAssetByProjectPath(): Map<string, EditableAsset> {
+    // The Content Browser directory tree (`/__project-dir`) is public-scoped, so
+    // its file paths are "assets/...". Manifest `asset.file` is also public-root
+    // relative. Index both the bare "assets/..." key and the legacy
+    // "public/assets/..." form so a manifest-registered file is matched instead
+    // of being treated as "not registered" (which blocks drag-to-place).
     const publicDir = this.projectInfo?.manifest.publicDir ?? "public";
-    return new Map(
-      this.editableAssets.map((asset) => [
-        normalizeProjectPath(`${publicDir}/${asset.file}`),
-        asset,
-      ]),
-    );
+    const byPath = new Map<string, EditableAsset>();
+    for (const asset of this.editableAssets) {
+      const assetPath = normalizeProjectPath(asset.file);
+      byPath.set(assetPath, asset);
+      const publicPrefixedPath = normalizeProjectPath(`${publicDir}/${asset.file}`);
+      if (publicPrefixedPath !== assetPath) byPath.set(publicPrefixedPath, asset);
+    }
+    return byPath;
   }
 
   private createAssetCard(item: BrowserAssetItem): HTMLElement {
