@@ -1,12 +1,16 @@
-# 3DGameDev - Single-Codebase Game Template
+# 3DGameDev Architecture V2 Migration
 
-This workspace is a reusable Three.js **game template** whose editor is a
+This workspace is `3DGameDev-architecture-v2`, the migration clone for the
+architecture-v2 refactor. The stable reference repo is
+`C:\Users\emret\Desktop\3DGameDev`.
+
+The current app is still a reusable Three.js **game template** whose editor is a
 built-in mode of the game (`?editor`), not a separate app. One `SceneApp`
-renders both the game and the editor viewport, so there is no separate runtime
-to drift from.
+renders both the game and the editor viewport while the migration extracts
+engine/editor/builder boundaries.
 
-A new game = copy this repo, drop in its GDD/content, build. The editor travels
-with each game and is stripped from the production bundle.
+Do not rewrite from scratch. Preserve working behavior and move code in small,
+build-passing steps according to the roadmap.
 
 `home-makeover` (`C:\Users\emret\Desktop\home-makeover`) is a separate project
 for now; it will later be rebuilt as a copy of this template. This codebase no
@@ -23,6 +27,8 @@ longer edits it.
 ## Docs
 
 - `docs/ARCHITECTURE.md`: boundary contract.
+- `docs/ARCHITECTURE_PLAN_SOURCE.md`: imported source architecture plan.
+- `docs/MIGRATION_ROADMAP.md`: execution plan for this clone.
 - `docs/LAUNCH_WORKFLOW.md`: practical VS Code and URL launch path.
 - `docs/roadmap.md`: current single-codebase template roadmap.
 
@@ -30,6 +36,8 @@ longer edits it.
 
 - Keep the editor core generic; project-specific game rules live in game runtime
   code/data, not the editor.
+- Keep the stable `C:\Users\emret\Desktop\3DGameDev` repo untouched from this
+  workspace.
 - The editor (`src/editor/`) must stay behind the dynamic `?editor` import so it
   is excluded from the game build.
 - Project data is local: the game/editor read this repo's own `public/`

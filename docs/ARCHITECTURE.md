@@ -1,7 +1,7 @@
 # 3DGameDev Architecture Contract
 
 > Created: 2026-06-13 | Updated: 2026-06-14
-> Scope: single-codebase Three.js game template with a built-in editor mode.
+> Scope: architecture-v2 migration workspace for the single-codebase template.
 
 This document is the working contract for future Codex/Claude tasks. If a task
 conflicts with this file, update the contract first or call out the conflict
@@ -9,7 +9,8 @@ before changing code.
 
 ## Direction
 
-`3DGameDev` is a reusable, single-codebase Three.js game template. One
+`3DGameDev-architecture-v2` is the migration workspace for a reusable,
+single-codebase Three.js game template. One
 `SceneApp` serves both the player-facing game and the editor viewport, so there
 is no separate runtime to drift from the editor.
 
@@ -20,6 +21,10 @@ is no separate runtime to drift from the editor.
   layouts, and project-specific game content.
 - The editor travels with each game during development, but is gated behind the
   dev-only `?editor` dynamic import and is excluded from production builds.
+- The stable reference repo is `C:\Users\emret\Desktop\3DGameDev`; use it to
+  compare behavior while this clone moves toward the architecture plan.
+- `docs/ARCHITECTURE_PLAN_SOURCE.md` is the imported source plan.
+- `docs/MIGRATION_ROADMAP.md` is the execution plan for this clone.
 
 Removed architecture:
 
@@ -266,7 +271,7 @@ Initial command candidates:
 ## Directory Intent
 
 ```text
-3DGameDev/
+3DGameDev-architecture-v2/
   docs/          current architecture, roadmap, and workflow notes
   public/        local manifest, layouts, and runtime assets for this copy
   src/core/      shared utility/core code
@@ -277,10 +282,11 @@ Initial command candidates:
   dist/          production build output
 ```
 
-Future package boundaries such as `editor-core`, `editor-ui`,
-`scene-runtime`, `asset-system`, `project-system`, `build-system`, and
-`shared-types` are allowed later. Do not introduce them until the current
-single-codebase route and build behavior is covered by smoke tests.
+Future package boundaries such as `engine/core`, `engine/scene`,
+`engine/render-three`, `engine/assets`, `editor/core`, `editor/gizmos`,
+`editor/inspector`, `builder/web`, `project`, and `game` are allowed only as
+the migration roadmap moves real code into them. Do not introduce empty
+architecture for its own sake beyond the documented Phase 1 skeleton.
 
 ## Not In Scope Yet
 
