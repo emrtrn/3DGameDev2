@@ -53,6 +53,7 @@ import {
 import {
   createCharacterSceneObject,
   createInstancedModelGroup,
+  entityCharacterItem,
   entityInstanceItems,
 } from "@engine/render-three/models";
 import {
@@ -94,6 +95,7 @@ import type {
   Vec3,
 } from "@engine/scene/layout";
 import {
+  characterEntity,
   instanceEntitiesForAsset,
   roomLayoutToSceneDocument,
 } from "@engine/scene/legacyRoomLayoutAdapter";
@@ -1843,7 +1845,7 @@ export class SceneApp {
   private addCharacter(gltf: GLTF | undefined, placement: LayoutCharacter): void {
     if (!gltf) return;
 
-    const character = this.createCharacterObject(gltf, placement);
+    const character = this.createCharacterObject(gltf, placement, this.characterObjects.length);
     character.userData.characterIndex = this.characterObjects.length;
     this.scene.add(character);
     this.characterObjects.push(character);
@@ -1856,7 +1858,7 @@ export class SceneApp {
     if (!gltf) return;
 
     const insertionIndex = clampIndex(index, this.layout.characters.length);
-    const character = this.createCharacterObject(gltf, placement);
+    const character = this.createCharacterObject(gltf, placement, insertionIndex);
     this.layout.characters.splice(insertionIndex, 0, cloneCharacter(placement));
     this.characterObjects.splice(insertionIndex, 0, character);
     this.scene.add(character);
@@ -2572,8 +2574,11 @@ export class SceneApp {
     if (object && character) object.visible = !(character.hidden ?? false);
   }
 
-  private createCharacterObject(gltf: GLTF, placement: LayoutCharacter): Object3D {
-    return createCharacterSceneObject(gltf, placement);
+  private createCharacterObject(gltf: GLTF, placement: LayoutCharacter, index: number): Object3D {
+    // Character objects now flow through the entity/component model: the layout
+    // character is derived into a scene entity, then into a render item. Inputs
+    // match the legacy placement path (same readRotation/readScale transform).
+    return createCharacterSceneObject(gltf, entityCharacterItem(characterEntity(index, placement)));
   }
 
   private playCharacterAnimation(

@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  characterEntity,
   characterEntityId,
   instanceEntitiesForAsset,
   instanceEntityId,
@@ -17,10 +18,10 @@ import {
   roomLayoutToSceneDocument,
 } from "../engine/scene/legacyRoomLayoutAdapter";
 import { validateSceneDocument } from "../engine/scene/sceneSerialization";
-import { readTransformComponent } from "../engine/scene/components";
+import { readMeshRendererComponent, readTransformComponent } from "../engine/scene/components";
 import { readRotation, readScale } from "../engine/scene/transform";
 import { selectionId } from "../editor/core/selection";
-import type { RoomLayout } from "../engine/scene/layout";
+import type { LayoutCharacter, RoomLayout } from "../engine/scene/layout";
 
 let checks = 0;
 const check = (label: string, fn: () => void): void => {
@@ -137,6 +138,41 @@ check("instance entities carry placement transform + hidden for render parity", 
       assert.equal(entity.tags?.includes("hidden") ?? false, placement.hidden ?? false);
     });
   }
+});
+
+// 6. Render parity: a character entity carries the exact transform, mesh
+// renderer, name-fallback, castShadow, and hidden inputs the legacy character
+// render path reads, so entity-driven character objects (entityCharacterItem)
+// match the legacy placement path (placementCharacterItem).
+check("character entity carries placement render inputs for parity", () => {
+  const characters: LayoutCharacter[] = [
+    { assetId: "hero", name: "Hero", position: [1, 2, 3], rotation: [10, 20, 30], scale: [2, 2, 2] },
+    {
+      assetId: "blob",
+      position: [0, 1, 0],
+      rotationYDeg: 45,
+      scale: 1.5,
+      castShadow: false,
+      hidden: true,
+    },
+    { assetId: "ghost", position: [4, 0, -1] },
+  ];
+  characters.forEach((character, index) => {
+    const entity = characterEntity(index, character);
+    const transform = readTransformComponent(entity);
+    const renderer = readMeshRendererComponent(entity);
+    assert.ok(transform, `transform present for character[${index}]`);
+    assert.ok(renderer, `mesh renderer present for character[${index}]`);
+    assert.deepEqual(transform.position, character.position);
+    assert.deepEqual(transform.rotation, readRotation(character));
+    assert.deepEqual(transform.scale, readScale(character));
+    assert.equal(renderer.assetId, character.assetId);
+    // Legacy name fallback: entity.name ?? assetId === placement.name ?? assetId.
+    assert.equal(entity.name ?? renderer.assetId, character.name ?? character.assetId);
+    // castShadow default-on: renderer.castShadow ?? true === placement.castShadow ?? true.
+    assert.equal(renderer.castShadow ?? true, character.castShadow ?? true);
+    assert.equal(entity.tags?.includes("hidden") ?? false, character.hidden ?? false);
+  });
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

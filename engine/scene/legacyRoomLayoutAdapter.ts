@@ -94,6 +94,23 @@ export function instanceEntitiesForAsset(
   );
 }
 
+/**
+ * Derives the entity for a single character placement at its layout index.
+ * Used by the render adapter to drive character objects from the
+ * entity/component model. The index mirrors the editor character selection id;
+ * it does not affect render output (the render builder reads only transform,
+ * mesh-renderer, and the `hidden` tag). Parent hierarchy is not resolved here
+ * because a character object bakes its own world transform like instances do.
+ */
+export function characterEntity(index: number, character: LayoutCharacter): Entity {
+  return buildEntity(
+    characterEntityId(index),
+    character.name,
+    characterComponents(character),
+    flagTags(character),
+  );
+}
+
 export function roomLayoutToSceneDocument(layout: RoomLayout): SceneDocument {
   const pending: PendingEntity[] = [];
   const nodeIdToEntityId = new Map<string, string>();

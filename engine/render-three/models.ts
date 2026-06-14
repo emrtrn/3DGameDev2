@@ -2,8 +2,8 @@ import { Group, InstancedMesh, Matrix4, Object3D } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import type { Entity } from "@engine/scene/entity";
-import { readTransformComponent } from "@engine/scene/components";
-import type { LayoutCharacter, LayoutPlacement } from "@engine/scene/layout";
+import { readMeshRendererComponent, readTransformComponent } from "@engine/scene/components";
+import type { LayoutCharacter, LayoutPlacement, Vec3 } from "@engine/scene/layout";
 import { readRotation, readScale } from "@engine/scene/transform";
 import { isRenderableMesh } from "./materials";
 import { applyEulerDegrees, composePlacementMatrix, composeTransformMatrix } from "./transforms";
@@ -90,21 +90,62 @@ export function createInstancedModelGroup(
   return { group, meshes };
 }
 
+/** Normalized character render input, decoupled from the layout format. */
+export interface CharacterRenderItem {
+  name: string;
+  position: Vec3;
+  /** XYZ-order Euler rotation in degrees. */
+  rotation: Vec3;
+  scale: Vec3;
+  hidden: boolean;
+  castShadow: boolean;
+}
+
+/** Legacy builder: derives a character render item straight from a placement. */
+export function placementCharacterItem(placement: LayoutCharacter): CharacterRenderItem {
+  return {
+    name: placement.name ?? placement.assetId,
+    position: [placement.position[0], placement.position[1], placement.position[2]],
+    rotation: readRotation(placement),
+    scale: readScale(placement),
+    hidden: placement.hidden ?? false,
+    castShadow: placement.castShadow ?? true,
+  };
+}
+
+/**
+ * Entity-driven builder: derives a character render item from a scene entity's
+ * transform/mesh-renderer components and the `hidden` tag. Produces the same
+ * inputs as `placementCharacterItem` because the adapter fills those components
+ * via the same readRotation/readScale transform read.
+ */
+export function entityCharacterItem(entity: Entity): CharacterRenderItem {
+  const transform = readTransformComponent(entity);
+  const renderer = readMeshRendererComponent(entity);
+  return {
+    name: entity.name ?? renderer?.assetId ?? "character",
+    position: transform ? [...transform.position] : [0, 0, 0],
+    rotation: transform ? [...transform.rotation] : [0, 0, 0],
+    scale: transform ? [...transform.scale] : [1, 1, 1],
+    hidden: entity.tags?.includes("hidden") ?? false,
+    castShadow: renderer?.castShadow ?? true,
+  };
+}
+
 export function createCharacterSceneObject(
   gltf: GLTF,
-  placement: LayoutCharacter,
+  item: CharacterRenderItem,
 ): Object3D {
   const character = gltf.scene.clone();
-  character.name = placement.name ?? placement.assetId;
-  character.position.set(...placement.position);
-  applyEulerDegrees(character, readRotation(placement));
-  character.scale.set(...readScale(placement));
-  character.visible = !(placement.hidden ?? false);
+  character.name = item.name;
+  character.position.set(...item.position);
+  applyEulerDegrees(character, item.rotation);
+  character.scale.set(...item.scale);
+  character.visible = !item.hidden;
 
-  const castShadow = placement.castShadow ?? true;
   character.traverse((object) => {
     if (!isRenderableMesh(object)) return;
-    object.castShadow = castShadow;
+    object.castShadow = item.castShadow;
     object.receiveShadow = true;
   });
 
