@@ -39,7 +39,7 @@ keeping the current `RoomLayout` runtime/editor path working.
 
 - [x] Add `engine/scene/entity.ts` with plain JSON-safe `EntityId`, `Entity`,
   and component-map contracts.
-- [ ] Add `engine/scene/components.ts` with the first component contracts:
+- [x] Add `engine/scene/components.ts` with the first component contracts:
   `TransformComponent`, `MeshRendererComponent`, `LightComponent`, and
   `MetadataComponent`.
 - [ ] Add `engine/scene/sceneDocument.ts` with a versioned `SceneDocument`
