@@ -41,9 +41,9 @@ Today `npm run build` emits a single ~826 kB JS chunk (800 kB warning), and
 
 ## 3. Chunking
 
-- [ ] Add `build.rollupOptions.output.manualChunks` to split the three.js vendor
+- [x] Add `build.rollupOptions.output.manualChunks` to split the three.js vendor
   (and later Rapier WASM) and the editor bundle into separate chunks.
-- [ ] Verify the game entry chunk shrinks and the 800 kB warning clears (or is
+- [x] Verify the game entry chunk shrinks and the 800 kB warning clears (or is
   intentionally re-tuned via `chunkSizeWarningLimit`).
 
 ## 4. Strict Gate
