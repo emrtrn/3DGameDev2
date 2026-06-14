@@ -37,7 +37,7 @@ keeping the current `RoomLayout` runtime/editor path working.
 
 ## 2. Minimal Scene Data Model
 
-- [ ] Add `engine/scene/entity.ts` with plain JSON-safe `EntityId`, `Entity`,
+- [x] Add `engine/scene/entity.ts` with plain JSON-safe `EntityId`, `Entity`,
   and component-map contracts.
 - [ ] Add `engine/scene/components.ts` with the first component contracts:
   `TransformComponent`, `MeshRendererComponent`, `LightComponent`, and
