@@ -72,13 +72,25 @@ Notes (2026-06-14):
 
 ## 4. First Integration Slice
 
-- [ ] Load the current `RoomLayout` as before, then derive a `SceneDocument`
+- [x] Load the current `RoomLayout` as before, then derive a `SceneDocument`
   through the adapter without changing visible behavior.
-- [ ] Add a debug/internal getter for the derived `SceneDocument` so the new
+- [x] Add a debug/internal getter for the derived `SceneDocument` so the new
   spine can be inspected without driving rendering yet.
-- [ ] Verify Game Mode and Editor Mode still render from the existing path.
-- [ ] Update `docs/MIGRATION_ROADMAP.md` with the completed engine-core and
+- [x] Verify Game Mode and Editor Mode still render from the existing path.
+- [x] Update `docs/MIGRATION_ROADMAP.md` with the completed engine-core and
   scene-data slice.
+
+Notes (2026-06-14):
+
+- `SceneApp.getSceneDocument()` derives the spine on demand from the loaded
+  layout (mirrors the existing `getLayout()` accessor). Nothing in the render
+  path consumes it, so visible behavior is unchanged.
+- Render verification: behavior is unchanged by construction (additive,
+  unused-by-render getter) and `npm run build:verify` passes in both modes with
+  only the known `/__save-layout` baseline warning. A standalone runtime check
+  confirmed the adapter derives a validating `SceneDocument` from the saved
+  `render-test-room` layout (3 entities; world settings preserved). A live
+  browser render smoke was not run this pass.
 
 ## 5. Render Adapter Preparation
 

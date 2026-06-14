@@ -324,6 +324,36 @@ Exit criteria:
 - `npm run build` passes.
 - Package verification reports runtime-only output.
 
+## Engine Core + Scene Data Spine
+
+Status (2026-06-14): in progress. Tracked in
+`docs/ENGINE_CORE_ENTITY_CHECKLIST.md`.
+
+This slice introduces a small serializable engine spine alongside the existing
+`RoomLayout` path, ahead of the Phase 7 vertical slice.
+
+Completed:
+
+- `engine/core`: `Subsystem`, `SubsystemRegistry` (deterministic forward
+  lifecycle, reverse dispose), and `EngineApp` tick coordinator.
+- `engine/scene`: JSON-safe `Entity`/component contracts
+  (`Transform`/`MeshRenderer`/`Light`/`Metadata`), a versioned `SceneDocument`,
+  and clone/validate serialization helpers.
+- `engine/scene/legacyRoomLayoutAdapter.ts`: derives a `SceneDocument` from the
+  current `RoomLayout` (instances, characters, lights), mirroring the editor
+  selection id format and collapsing the legacy `nodeId`/`parentId` hierarchy
+  into the single entity id space.
+- `SceneApp.getSceneDocument()`: inspection-only getter that derives the spine
+  from the loaded layout without driving rendering. Runtime/editor still render
+  from the existing `RoomLayout` path.
+
+Verified: `npm run build:verify` passes with only the known `/__save-layout`
+baseline warning; the adapter derives a validating `SceneDocument` from the
+saved `render-test-room` layout (3 entities, world settings preserved).
+
+Remaining: move render bindings to consume `SceneDocument` one type at a time
+(checklist sections 5-6) before the Phase 7 vertical slice.
+
 ## Phase 7 - Vertical Slice Engine
 
 Goal: prove the architecture with a tiny playable scene.
