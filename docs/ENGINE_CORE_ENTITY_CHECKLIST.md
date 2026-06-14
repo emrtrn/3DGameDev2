@@ -107,10 +107,12 @@ Testing (2026-06-14):
 
 - [x] Identify the smallest render path that can consume `SceneDocument`
   entities while the legacy `RoomLayout` path remains available.
-- [ ] Move only one render binding at a time toward entity/component input:
-  static mesh instances first, then characters, then lights.
+- [x] Move only one render binding at a time toward entity/component input:
+  static mesh instances first, then characters, then lights. (All three render
+  bindings now flow through the entity/component model.)
 - [ ] Keep compatibility wrappers until both Game Mode and Editor Mode are
-  proven against the new path.
+  proven against the new path. (Compatibility builders kept; the remaining gate
+  is the live browser smoke — see PENDING below.)
 
 Progress (2026-06-14):
 
@@ -128,13 +130,37 @@ Progress (2026-06-14):
     the equivalence reference; both compose via `composeTransformMatrix`.
   - Added `readTransformComponent`/`readMeshRendererComponent` typed readers in
     `engine/scene/components.ts`.
-- Verified: `build:verify` passes (12 engine checks). A render-parity test
-  proves instance entities carry the exact transform inputs (`position`,
-  resolved rotation/scale, `hidden`) the legacy path used, so matrices are
-  identical by construction.
+- Characters MOVED to entity/component input:
+  - `createCharacterSceneObject` now consumes a normalized `CharacterRenderItem`
+    (`name`/`position`/`rotation`/`scale`/`hidden`/`castShadow`) instead of a
+    `LayoutCharacter`.
+  - `SceneApp.createCharacterObject` feeds it `entityCharacterItem(
+    characterEntity(index, placement))`.
+  - `placementCharacterItem` (legacy) is the compatibility builder / equivalence
+    reference. Character `animation` stays in `SceneApp` (intentionally
+    unmapped); the name fallback is `entity.name ?? meshRenderer.assetId`.
+- Lights MOVED to entity/component input:
+  - Added `readLightComponent` typed reader in `engine/scene/components.ts`.
+  - `createLightObject` / `syncLightObject` / `buildLightGizmo` (+ icon helpers)
+    now consume a normalized `LightRenderItem` / `SceneLightType` instead of a
+    `LayoutLightActor`.
+  - Added `lightEntity(index, actor)` in the adapter and routed the document
+    light loop through it. The actor display name (`name ?? id`) is resolved
+    into `entity.name` because the light `id` is not a component field.
+  - `SceneApp.createLightObject` / `refreshLightObject` feed the render path via
+    `entityLightItem(lightEntity(index, actor))`. Sun detection /
+    `DEFAULT_SUN_ID` matching stays on the actor (unchanged). `actorLightItem`
+    (legacy) is the compatibility builder / equivalence reference.
+  - Object3D/light `.name` is cosmetic only (the outliner labels read the actor,
+    picking uses `userData.lightIndex`), so the name resolution change is
+    render-safe.
+- Verified: `build:verify` passes (14 engine checks). Render-parity tests prove
+  instance/character/light entities carry the exact transform + render inputs
+  the legacy paths used, so the Three.js output is identical by construction.
 - PENDING (item 3): live browser smoke in Game Mode and Editor Mode to confirm
-  the static scene renders and instance selection still works, before moving
-  characters then lights.
+  the static scene, characters, and lights (incl. shadows + gizmos) render and
+  that selection still works against the entity-driven path. This is the
+  remaining gate before closing item 3 and section 6.
 
 ## 6. Vertical Slice Readiness Gate
 

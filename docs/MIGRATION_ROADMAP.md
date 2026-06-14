@@ -351,8 +351,17 @@ Verified: `npm run build:verify` passes with only the known `/__save-layout`
 baseline warning; the adapter derives a validating `SceneDocument` from the
 saved `render-test-room` layout (3 entities, world settings preserved).
 
-Remaining: move render bindings to consume `SceneDocument` one type at a time
-(checklist sections 5-6) before the Phase 7 vertical slice.
+Render-binding migration (checklist section 5, item 2): all three bindings now
+flow through the entity/component model — static mesh instances
+(`entityInstanceItems`), characters (`entityCharacterItem` /
+`createCharacterSceneObject`), and lights (`entityLightItem` /
+`createLightObject` / `syncLightObject`). Each has an equivalence/compatibility
+builder (`placementInstanceItems`, `placementCharacterItem`, `actorLightItem`)
+and a render-parity test. `build:verify` passes with 14 engine checks.
+
+Remaining: live browser smoke of Game Mode + Editor Mode against the
+entity-driven path (checklist section 5 item 3) and the section 6 readiness
+gate before the Phase 7 vertical slice.
 
 ## Phase 7 - Vertical Slice Engine
 
