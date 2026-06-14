@@ -20,6 +20,7 @@ import { ActionMap, type ActionBindings } from "@engine/input/actionMap";
 import { InputSubsystem } from "@engine/input/inputSubsystem";
 import { BehaviorSubsystem } from "@engine/behavior/behaviorSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
+import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { loadActiveProject, type ActiveProject } from "@/project/ProjectSystem";
@@ -89,6 +90,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly inputActions = new ActionMap(DEFAULT_INPUT_BINDINGS);
   private readonly inputSubsystem = new InputSubsystem(this.inputActions);
   private readonly physicsSubsystem = new PhysicsSubsystem({ backend: "rapier" });
+  private readonly audioSubsystem = new AudioSubsystem({ backend: "web-audio" });
   private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
   private readonly behaviorSubsystem: BehaviorSubsystem;
   private frameHandle = 0;
@@ -132,8 +134,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.inputActions,
       this.syncEntityTransform,
       this.physicsSubsystem,
+      this.audioSubsystem,
     );
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
+    this.engineApp.registerSubsystem(this.audioSubsystem);
     this.keyboardInput.attach();
 
     void this.loadActiveProjectScene();

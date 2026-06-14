@@ -26,19 +26,41 @@ const spin: BehaviorUpdate = ({ engine, params, transform }) => {
  * Moves an entity on the XZ plane from the named movement actions at `speed`
  * units per second. Demonstrates the spine driving gameplay from input.
  */
-const inputMove: BehaviorUpdate = ({ engine, actions, params, transform }) => {
+const collisionAudioPlayed = new Set<string>();
+
+function playCollisionAudioOnce(
+  context: Parameters<BehaviorUpdate>[0],
+): void {
+  const { audio, audioComponent, entityId, physics } = context;
+  if (!audio || !audioComponent) return;
+  if ((physics?.contactsForEntity(entityId).length ?? 0) === 0) return;
+  if (collisionAudioPlayed.has(entityId)) return;
+  collisionAudioPlayed.add(entityId);
+  audio.playOneShot(audioComponent.clipId, {
+    volume: audioComponent.volume,
+    loop: audioComponent.loop,
+    spatial: audioComponent.spatial,
+  });
+}
+
+const inputMove: BehaviorUpdate = (context) => {
+  const { engine, actions, params, transform } = context;
   const step = numberParam(params.speed, 3) * engine.deltaSeconds;
   if (actions.held("move-forward")) transform.position[2] -= step;
   if (actions.held("move-back")) transform.position[2] += step;
   if (actions.held("move-left")) transform.position[0] -= step;
   if (actions.held("move-right")) transform.position[0] += step;
+  playCollisionAudioOnce(context);
 };
+
+const collisionChime: BehaviorUpdate = playCollisionAudioOnce;
 
 /** Builds the runtime behavior registry used by the BehaviorSubsystem. */
 export function createBehaviorRegistry(): BehaviorRegistry {
   const behaviors = new Map<string, BehaviorUpdate>([
     ["spin", spin],
     ["input-move", inputMove],
+    ["collision-chime", collisionChime],
   ]);
   return { get: (scriptId) => behaviors.get(scriptId) };
 }

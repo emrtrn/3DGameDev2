@@ -150,6 +150,12 @@
         "params": {
           "speed": 2
         }
+      },
+      "audio": {
+        "clipId": "collision-chime",
+        "volume": 0.35,
+        "loop": false,
+        "spatial": false
       }
     }
   ],

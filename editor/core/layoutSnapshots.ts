@@ -48,6 +48,7 @@ export function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
   if (placement.castShadow !== undefined) clone.castShadow = placement.castShadow;
   if (placement.collision !== undefined) clone.collision = placement.collision;
   if (placement.metadata !== undefined) clone.metadata = cloneMetadata(placement.metadata);
+  if (placement.audio !== undefined) clone.audio = { ...placement.audio };
   if (placement.nodeId !== undefined) clone.nodeId = placement.nodeId;
   if (placement.parentId !== undefined) clone.parentId = placement.parentId;
   return clone;
@@ -76,6 +77,7 @@ export function cloneCharacter(character: LayoutCharacter): LayoutCharacter {
   if (character.castShadow !== undefined) clone.castShadow = character.castShadow;
   if (character.collision !== undefined) clone.collision = character.collision;
   if (character.metadata !== undefined) clone.metadata = cloneMetadata(character.metadata);
+  if (character.audio !== undefined) clone.audio = { ...character.audio };
   if (character.nodeId !== undefined) clone.nodeId = character.nodeId;
   if (character.parentId !== undefined) clone.parentId = character.parentId;
   if (character.animation !== undefined) clone.animation = character.animation;

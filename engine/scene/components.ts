@@ -7,6 +7,7 @@ export const LIGHT_COMPONENT = "Light";
 export const METADATA_COMPONENT = "Metadata";
 export const BEHAVIOR_COMPONENT = "Behavior";
 export const COLLIDER_COMPONENT = "Collider";
+export const AUDIO_COMPONENT = "Audio";
 
 export type SceneLightType = "directional" | "point" | "spot";
 export type ColliderShape = "box" | "sphere" | "capsule";
@@ -53,6 +54,13 @@ export interface ColliderComponent {
   size: Vec3;
   isStatic: boolean;
   isSensor: boolean;
+}
+
+export interface AudioComponent {
+  clipId: string;
+  volume: number;
+  loop: boolean;
+  spatial: boolean;
 }
 
 function readVec3(value: SceneJsonValue | undefined): Vec3 | undefined {
@@ -123,6 +131,21 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
     size,
     isStatic: data.isStatic,
     isSensor: data.isSensor,
+  };
+}
+
+/** Reads a typed audio cue from an entity's serializable component data. */
+export function readAudioComponent(entity: Entity): AudioComponent | undefined {
+  const data = entity.components[AUDIO_COMPONENT];
+  if (!data) return undefined;
+  if (typeof data.clipId !== "string" || data.clipId.length === 0) return undefined;
+  if (typeof data.volume !== "number" || !Number.isFinite(data.volume)) return undefined;
+  if (typeof data.loop !== "boolean" || typeof data.spatial !== "boolean") return undefined;
+  return {
+    clipId: data.clipId,
+    volume: data.volume,
+    loop: data.loop,
+    spatial: data.spatial,
   };
 }
 

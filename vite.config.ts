@@ -195,6 +195,30 @@ function validateBehavior(value: unknown, label: string): Record<string, unknown
   return behavior;
 }
 
+/** Validates an optional audio cue reference (`{ clipId, volume?, loop?, spatial? }`). */
+function validateAudio(value: unknown, label: string): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} audio must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.clipId !== "string" || input.clipId.length === 0) {
+    throw new Error(`${label} audio.clipId must be a non-empty string`);
+  }
+  const audio: Record<string, unknown> = { clipId: input.clipId };
+  const volume = validateOptionalNumber(input.volume, `${label} audio.volume`, 0, 1);
+  if (volume !== undefined) audio.volume = volume;
+  if (input.loop !== undefined) {
+    if (typeof input.loop !== "boolean") throw new Error(`${label} audio.loop must be boolean`);
+    audio.loop = input.loop;
+  }
+  if (input.spatial !== undefined) {
+    if (typeof input.spatial !== "boolean") throw new Error(`${label} audio.spatial must be boolean`);
+    audio.spatial = input.spatial;
+  }
+  return audio;
+}
+
 /** Copies the optional transform/authoring fields onto `target`, validating each. */
 function applyTransformFields(
   entry: Record<string, unknown>,
@@ -214,6 +238,8 @@ function applyTransformFields(
   if (metadata) target.metadata = metadata;
   const behavior = validateBehavior(entry.behavior, label);
   if (behavior) target.behavior = behavior;
+  const audio = validateAudio(entry.audio, label);
+  if (audio) target.audio = audio;
 
   if (entry.rotationYDeg !== undefined) {
     target.rotationYDeg = validateRotationDeg(entry.rotationYDeg, `${label} rotationYDeg`);

@@ -20,6 +20,7 @@ import {
 } from "../engine/scene/legacyRoomLayoutAdapter";
 import { validateSceneDocument } from "../engine/scene/sceneSerialization";
 import {
+  readAudioComponent,
   readBehaviorComponent,
   readColliderComponent,
   readLightComponent,
@@ -36,6 +37,8 @@ import { InputSubsystem } from "../engine/input/inputSubsystem";
 import { BehaviorSubsystem } from "../engine/behavior/behaviorSubsystem";
 import type { BehaviorRegistry } from "../engine/behavior/behaviorSubsystem";
 import { PhysicsSubsystem } from "../engine/physics/physicsSubsystem";
+import { AudioSubsystem } from "../engine/audio/audioSubsystem";
+import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/audio";
 import { KeyboardInputSource } from "../src/input/keyboardInputSource";
 import type { Entity } from "../engine/scene/entity";
 import { selectionId } from "../editor/core/selection";
@@ -480,6 +483,46 @@ check("layout collision flags map to readable collider components", () => {
   );
 });
 
+check("layout audio maps to a readable audio component", () => {
+  const fixture: RoomLayout = {
+    schema: 1,
+    name: "audio-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "speaker",
+        placements: [
+          {
+            position: [0, 0, 0],
+            audio: { clipId: "collision-chime", volume: 0.4, loop: false, spatial: true },
+          },
+        ],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+
+  const entity = roomLayoutToSceneDocument(fixture).entities.find(
+    (candidate) => candidate.id === instanceEntityId("speaker", 0),
+  );
+  assert.deepEqual(entity ? readAudioComponent(entity) : undefined, {
+    clipId: "collision-chime",
+    volume: 0.4,
+    loop: false,
+    spatial: true,
+  });
+});
+
+check("audio clip manifest resolves default collision chime", () => {
+  assert.deepEqual(audioClipById(DEFAULT_AUDIO_CLIP_MANIFEST, "collision-chime"), {
+    id: "collision-chime",
+    type: "tone",
+    frequencyHz: 660,
+    durationSeconds: 0.09,
+  });
+});
+
 // 6.1.4 The behavior subsystem ticks behaviors against a derived entity set,
 // mutating each entity's transform deterministically and syncing it out. Input
 // advances first (registered before), so a behavior reads current-tick actions.
@@ -659,6 +702,63 @@ check("behavior can react to physics contacts from the engine tick", () => {
   assert.deepEqual(synced.at(-1), { id: "mover", z: 7 });
 });
 
+check("audio subsystem records one-shot requests from a collision behavior", () => {
+  const physics = new PhysicsSubsystem();
+  const audio = new AudioSubsystem();
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId !== "contact-audio") return undefined;
+      return ({ audio: audioBus, audioComponent, entityId, physics: physicsQuery }) => {
+        if (!audioBus || !audioComponent) return;
+        if ((physicsQuery?.contactsForEntity(entityId).length ?? 0) === 0) return;
+        audioBus.playOneShot(audioComponent.clipId, {
+          volume: audioComponent.volume,
+          loop: audioComponent.loop,
+          spatial: audioComponent.spatial,
+        });
+      };
+    },
+  };
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    physics,
+    audio,
+  );
+  const entities: Entity[] = [
+    {
+      id: "mover",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+        Behavior: { scriptId: "contact-audio" },
+        Audio: { clipId: "collision-chime", volume: 0.5, loop: false, spatial: false },
+      },
+    },
+    {
+      id: "wall",
+      components: {
+        Transform: { position: [0.25, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: false },
+      },
+    },
+  ];
+
+  physics.setEntities(entities);
+  behavior.setEntities(entities);
+
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+  app.registerSubsystem(audio);
+  app.update(0.016);
+
+  assert.deepEqual(audio.playedRequests(), [
+    { clipId: "collision-chime", volume: 0.5, loop: false, spatial: false },
+  ]);
+});
+
 // 6.1.5 The real KeyboardInputSource feeds raw DOM key codes into the action
 // map (the only runtime input link a browser would otherwise be needed to
 // exercise). Uses an injected fake window, so no DOM/jsdom is required.
@@ -786,6 +886,16 @@ check("saved layout carries the input-driven demo character behavior", () => {
   assert.ok(
     behaviored.some((behavior) => behavior?.scriptId === "input-move"),
     "expected a character with the input-move behavior in the saved layout",
+  );
+});
+
+check("saved layout carries the collision audio demo cue", () => {
+  const audioComponents = doc.entities
+    .map((entity) => readAudioComponent(entity))
+    .filter((audio) => audio !== undefined);
+  assert.ok(
+    audioComponents.some((audio) => audio?.clipId === "collision-chime"),
+    "expected a collision-chime audio cue in the saved layout",
   );
 });
 

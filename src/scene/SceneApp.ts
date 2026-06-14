@@ -40,6 +40,7 @@ import { ActionMap, type ActionBindings } from "@engine/input/actionMap";
 import { InputSubsystem } from "@engine/input/inputSubsystem";
 import { BehaviorSubsystem } from "@engine/behavior/behaviorSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
+import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import type { AssetManifest, EditableAsset } from "@engine/assets/manifest";
@@ -323,6 +324,7 @@ export class SceneApp {
   private readonly inputActions = new ActionMap(DEFAULT_INPUT_BINDINGS);
   private readonly inputSubsystem = new InputSubsystem(this.inputActions);
   private readonly physicsSubsystem = new PhysicsSubsystem({ backend: "rapier" });
+  private readonly audioSubsystem = new AudioSubsystem({ backend: "web-audio" });
   /** Browser keyboard -> action map bridge (observer only, both modes). */
   private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
   /** Ticks scene behaviors against the derived entity set (assigned in ctor). */
@@ -438,8 +440,10 @@ export class SceneApp {
       this.inputActions,
       this.syncEntityTransform,
       this.physicsSubsystem,
+      this.audioSubsystem,
     );
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
+    this.engineApp.registerSubsystem(this.audioSubsystem);
 
     // Observer-only keyboard source: records raw codes into the action map in
     // both modes without consuming events, so editor shortcuts/camera nav are

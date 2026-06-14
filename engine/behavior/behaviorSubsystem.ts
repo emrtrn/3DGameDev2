@@ -10,20 +10,24 @@
  * Pure: no Three.js or DOM. Value imports use relative paths because the
  * engine-test bundler (tools/run-engine-tests.mjs) resolves no path aliases.
  */
-import { readBehaviorComponent, readTransformComponent } from "../scene/components";
-import type { TransformComponent } from "../scene/components";
+import { readAudioComponent, readBehaviorComponent, readTransformComponent } from "../scene/components";
+import type { AudioComponent, TransformComponent } from "../scene/components";
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import type { Entity, EntityId, SceneJsonValue } from "../scene/entity";
 import type { ActionMap } from "../input/actionMap";
+import type { AudioBus } from "../audio/audioSubsystem";
 
 /** Stable registry id for the behavior subsystem. */
 export const BEHAVIOR_SUBSYSTEM_ID = "behavior";
 
 /** Per-tick context handed to a behavior update function. */
 export interface BehaviorContext {
+  readonly entityId: EntityId;
   readonly engine: EngineUpdateContext;
   readonly actions: ActionMap;
   readonly physics?: PhysicsQuery;
+  readonly audio?: AudioBus;
+  readonly audioComponent?: AudioComponent;
   readonly params: Record<string, SceneJsonValue>;
   /** This entity's transform; behaviors mutate it in place. */
   readonly transform: TransformComponent;
@@ -54,6 +58,7 @@ interface BehaviorInstance {
   update: BehaviorUpdate;
   params: Record<string, SceneJsonValue>;
   transform: TransformComponent;
+  audioComponent: AudioComponent | undefined;
 }
 
 export class BehaviorSubsystem implements Subsystem {
@@ -65,6 +70,7 @@ export class BehaviorSubsystem implements Subsystem {
     private readonly actions: ActionMap,
     private readonly sink: TransformSink,
     private readonly physics?: PhysicsQuery,
+    private readonly audio?: AudioBus,
   ) {}
 
   /**
@@ -87,6 +93,7 @@ export class BehaviorSubsystem implements Subsystem {
         update,
         params: behavior.params ?? {},
         transform: cloneTransform(transform),
+        audioComponent: readAudioComponent(entity),
       });
     }
     this.instances = instances;
@@ -100,6 +107,7 @@ export class BehaviorSubsystem implements Subsystem {
   update(engine: EngineUpdateContext): void {
     for (const instance of this.instances) {
       const context: BehaviorContext = {
+        entityId: instance.id,
         engine,
         actions: this.actions,
         params: instance.params,
@@ -107,6 +115,13 @@ export class BehaviorSubsystem implements Subsystem {
       };
       if (this.physics) {
         (context as BehaviorContext & { physics: PhysicsQuery }).physics = this.physics;
+      }
+      if (this.audio) {
+        (context as BehaviorContext & { audio: AudioBus }).audio = this.audio;
+      }
+      if (instance.audioComponent) {
+        (context as BehaviorContext & { audioComponent: AudioComponent }).audioComponent =
+          instance.audioComponent;
       }
       instance.update(context);
       this.sink(instance.id, instance.transform);

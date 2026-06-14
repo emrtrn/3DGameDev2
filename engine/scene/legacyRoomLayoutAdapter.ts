@@ -32,6 +32,7 @@
  */
 import {
   type LayoutBehavior,
+  type LayoutAudio,
   type LayoutCharacter,
   type LayoutLightActor,
   type LayoutMetadata,
@@ -44,11 +45,13 @@ import { readRotation, readScale } from "./transform";
 import type { Entity, EntityComponentData, EntityComponentMap, SceneJsonValue } from "./entity";
 import {
   BEHAVIOR_COMPONENT,
+  AUDIO_COMPONENT,
   COLLIDER_COMPONENT,
   LIGHT_COMPONENT,
   MESH_RENDERER_COMPONENT,
   METADATA_COMPONENT,
   TRANSFORM_COMPONENT,
+  type AudioComponent,
   type BehaviorComponent,
   type ColliderComponent,
   type LightComponent,
@@ -218,6 +221,8 @@ function instanceComponents(assetId: string, placement: LayoutPlacement): Entity
   if (metadata) components[METADATA_COMPONENT] = toData(metadata);
   const behavior = behaviorComponent(placement.behavior);
   if (behavior) components[BEHAVIOR_COMPONENT] = toData(behavior);
+  const audio = audioComponent(placement.audio);
+  if (audio) components[AUDIO_COMPONENT] = toData(audio);
   return components;
 }
 
@@ -232,6 +237,8 @@ function characterComponents(character: LayoutCharacter): EntityComponentMap {
   if (metadata) components[METADATA_COMPONENT] = toData(metadata);
   const behavior = behaviorComponent(character.behavior);
   if (behavior) components[BEHAVIOR_COMPONENT] = toData(behavior);
+  const audio = audioComponent(character.audio);
+  if (audio) components[AUDIO_COMPONENT] = toData(audio);
   return components;
 }
 
@@ -299,6 +306,16 @@ function colliderComponent(
   };
 }
 
+function audioComponent(audio: LayoutAudio | undefined): AudioComponent | null {
+  if (!audio) return null;
+  return {
+    clipId: audio.clipId,
+    volume: audio.volume ?? 1,
+    loop: audio.loop ?? false,
+    spatial: audio.spatial ?? false,
+  };
+}
+
 function metadataComponent(metadata: LayoutMetadata | undefined): MetadataComponent | null {
   if (!metadata) return null;
   const entries = Object.entries(metadata);
@@ -344,7 +361,8 @@ function toData(
     | LightComponent
     | MetadataComponent
     | BehaviorComponent
-    | ColliderComponent,
+    | ColliderComponent
+    | AudioComponent,
 ): EntityComponentData {
   return component as unknown as EntityComponentData;
 }

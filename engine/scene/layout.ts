@@ -19,6 +19,13 @@ export interface LayoutBehavior {
   params?: LayoutMetadata;
 }
 
+export interface LayoutAudio {
+  clipId: string;
+  volume?: number;
+  loop?: boolean;
+  spatial?: boolean;
+}
+
 export interface LayoutPlacement {
   name?: string;
   hidden?: boolean;
@@ -51,6 +58,8 @@ export interface LayoutPlacement {
   metadata?: LayoutMetadata;
   /** Runtime behavior script reference (resolved by the behavior registry). */
   behavior?: LayoutBehavior;
+  /** Runtime audio cue attached to this object. */
+  audio?: LayoutAudio;
 }
 
 export interface LayoutModelInstances {
@@ -92,6 +101,8 @@ export interface LayoutCharacter {
   animation?: string;
   /** Runtime behavior script reference (resolved by the behavior registry). */
   behavior?: LayoutBehavior;
+  /** Runtime audio cue attached to this object. */
+  audio?: LayoutAudio;
 }
 
 export interface LayoutWorldSettings {
