@@ -17,7 +17,6 @@ import {
   DirectionalLight,
   Euler,
   Group,
-  InstancedMesh,
   Matrix4,
   Mesh,
   MeshBasicMaterial,
@@ -31,7 +30,7 @@ import {
   Vector2,
   Vector3,
 } from "three";
-import type { Intersection, PerspectiveCamera, WebGLRenderer } from "three";
+import type { InstancedMesh, Intersection, PerspectiveCamera, WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
@@ -61,6 +60,11 @@ import {
   syncLightObject,
   type LightObjectRecord,
 } from "@engine/render-three/lights";
+import {
+  findParentCharacter,
+  findParentInstancedMesh,
+  findParentLight,
+} from "@engine/render-three/picking";
 import {
   applyResponsiveCameraViewport,
   createSceneCamera,
@@ -4041,31 +4045,4 @@ function matrixToTransform(matrix: Matrix4): EditableTransform {
     rotation: [euler.x * RAD_TO_DEG, euler.y * RAD_TO_DEG, euler.z * RAD_TO_DEG],
     scale: [scale.x, scale.y, scale.z],
   };
-}
-
-function findParentInstancedMesh(object: Object3D): InstancedMesh | null {
-  let current: Object3D | null = object;
-  while (current) {
-    if (current instanceof InstancedMesh) return current;
-    current = current.parent;
-  }
-  return null;
-}
-
-function findParentCharacter(object: Object3D): Object3D | null {
-  let current: Object3D | null = object;
-  while (current) {
-    if (current.userData.characterIndex !== undefined) return current;
-    current = current.parent;
-  }
-  return null;
-}
-
-function findParentLight(object: Object3D): Object3D | null {
-  let current: Object3D | null = object;
-  while (current) {
-    if (current.userData.lightIndex !== undefined) return current;
-    current = current.parent;
-  }
-  return null;
 }

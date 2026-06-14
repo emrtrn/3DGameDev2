@@ -262,6 +262,7 @@ Completed:
 - Added `editor/input/keyboard.ts` for editor keyboard filters and
   editable-target guards.
 - Moved project path dirname normalization into `src/project/ProjectSystem.ts`.
+- Added `engine/render-three/picking.ts` for raycast parent traversal helpers.
 - Added `editor/core/layoutSnapshots.ts` for layout actor/metadata deep-copy
   helpers and transform equality checks used by undo/redo snapshots.
 - Added `editor/core/editableScene.ts` for editor-facing project info, snap

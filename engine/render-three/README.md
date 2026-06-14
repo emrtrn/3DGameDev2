@@ -19,6 +19,7 @@ Current files:
   application helpers.
 - `models.ts`: GLTF scene binding for instanced static meshes and character
   scene objects.
+- `picking.ts`: parent-object traversal helpers used by raycast picking.
 
 Rules:
 
