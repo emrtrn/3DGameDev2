@@ -56,7 +56,7 @@ state, the command/undo stack, gizmo interaction, and editor input binding.
 
 ## 5. Boundary Check
 
-- [ ] Confirm Game Mode imports no editor state module (extend the
+- [x] Confirm Game Mode imports no editor state module (extend the
   `verify-dist` string check or add an import-boundary check).
-- [ ] Record the `SceneApp.ts` line-count reduction in
+- [x] Record the `SceneApp.ts` line-count reduction in
   `MIGRATION_ROADMAP.md` Phase 5.
