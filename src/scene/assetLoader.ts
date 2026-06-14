@@ -18,7 +18,7 @@ import type {
   EditableAsset,
 } from "@engine/assets/manifest";
 import type { MetadataSchema } from "@engine/scene/metadataSchema";
-import { GltfModelLoader } from "./gltfModelLoader";
+import { GltfModelLoader } from "@engine/render-three/gltfModelLoader";
 
 export type {
   AssetCatalog,

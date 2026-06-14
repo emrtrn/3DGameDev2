@@ -200,12 +200,22 @@ Notes:
 - Manifest/catalog fetches remain in `src/scene/assetLoader.ts` because they use
   project public URLs. Moving generic fetch/loading to `engine/assets` should
   wait until the project/public URL boundary is migrated.
-- `src/scene/gltfModelLoader.ts` is the current render-adapter candidate for a
-  future `engine/render-three` move.
+- The GLTF adapter was later moved in Phase 4; `src/scene/gltfModelLoader.ts`
+  remains only as a compatibility export.
 
 ## Phase 4 - Extract Render-Three Adapter
 
 Goal: separate Three.js binding from scene/editor state.
+
+Status (2026-06-14): started.
+
+Completed:
+
+- Added `engine/render-three/README.md` to define the render adapter boundary.
+- Moved `GltfModelLoader` into `engine/render-three/gltfModelLoader.ts`.
+- Kept `src/scene/gltfModelLoader.ts` as a compatibility export.
+- Updated `src/scene/assetLoader.ts` to import the GLTF adapter from
+  `@engine/render-three/gltfModelLoader`.
 
 Tasks:
 
