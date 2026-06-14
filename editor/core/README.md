@@ -5,6 +5,7 @@ Editor-owned state helpers live here as they are extracted from `SceneApp` and
 
 Current files:
 
+- `commandLabels.ts`: editor command label helpers for undoable flag changes.
 - `selection.ts`: editor selection cloning, identity, parsing, equality,
   selected-map state helpers, and deterministic delete/restore ordering helpers.
 - `tools.ts`: shared editor tool and transform-space contracts plus tool cycling.

@@ -250,6 +250,8 @@ Status (2026-06-14): started.
 
 Completed:
 
+- Added `editor/core/commandLabels.ts` for editor command label helpers used by
+  undoable flag changes.
 - Added `editor/core/selection.ts` for editor selection cloning, identity,
   parsing, equality, selected-map state helpers, and deterministic
   delete/restore ordering helpers.

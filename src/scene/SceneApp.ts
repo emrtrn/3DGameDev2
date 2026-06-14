@@ -119,6 +119,12 @@ import {
   snapStatus,
   snapValue,
 } from "@editor/core/numeric";
+import {
+  defaultTrueFlagCommandLabel,
+  flagCommandLabel,
+  type EditorDefaultTrueFlagCommand,
+  type EditorFlagCommand,
+} from "@editor/core/commandLabels";
 import type { EditorTool, TransformSpace } from "@editor/core/tools";
 import {
   selectionToTransform,
@@ -214,20 +220,6 @@ const DEFAULT_SUN_ID = "sun";
 const DEFAULT_BACKGROUND_COLOR = "#d7d7c7";
 const DEFAULT_AMBIENT_COLOR = "#ffffff";
 const DEFAULT_AMBIENT_INTENSITY = 0;
-
-const FLAG_LABELS: Record<"hidden" | "locked" | "scaleLocked", { on: string; off: string }> = {
-  hidden: { on: "Hide object", off: "Show object" },
-  locked: { on: "Lock object", off: "Unlock object" },
-  scaleLocked: { on: "Lock scale ratio", off: "Unlock scale ratio" },
-};
-
-const DEFAULT_TRUE_FLAG_LABELS: Record<
-  "castShadow" | "collision",
-  { on: string; off: string }
-> = {
-  castShadow: { on: "Enable cast shadow", off: "Disable cast shadow" },
-  collision: { on: "Enable collision", off: "Disable collision" },
-};
 
 interface LinkedMoveStart {
   selection: Selection;
@@ -2296,7 +2288,7 @@ export class SceneApp {
    */
   private setSelectionDefaultTrueFlag(
     selection: Selection,
-    field: "castShadow" | "collision",
+    field: EditorDefaultTrueFlagCommand,
     value: boolean,
   ): void {
     if (selection.kind === "light") return;
@@ -2305,7 +2297,7 @@ export class SceneApp {
     const previous = target[field] ?? true;
     if (previous === value) return;
 
-    const label = DEFAULT_TRUE_FLAG_LABELS[field][value ? "on" : "off"];
+    const label = defaultTrueFlagCommandLabel(field, value);
     const commandSelection = cloneSelection(selection);
 
     this.executeCommand({
@@ -2317,7 +2309,7 @@ export class SceneApp {
 
   private applyDefaultTrueFlag(
     selection: Selection,
-    field: "castShadow" | "collision",
+    field: EditorDefaultTrueFlagCommand,
     value: boolean,
   ): void {
     if (selection.kind === "light") return;
@@ -2448,7 +2440,7 @@ export class SceneApp {
 
   private setSelectionFlag(
     selection: Selection,
-    flag: "hidden" | "locked" | "scaleLocked",
+    flag: EditorFlagCommand,
     value: boolean,
   ): void {
     const target = this.getMutableTransform(selection);
@@ -2456,7 +2448,7 @@ export class SceneApp {
     const previous = Boolean(target[flag]);
     if (previous === value) return;
 
-    const label = FLAG_LABELS[flag][value ? "on" : "off"];
+    const label = flagCommandLabel(flag, value);
 
     this.executeCommand({
       label,
@@ -2467,7 +2459,7 @@ export class SceneApp {
 
   private setSelectionsFlag(
     selections: Selection[],
-    flag: "hidden" | "locked" | "scaleLocked",
+    flag: EditorFlagCommand,
     value: boolean,
     label: string,
   ): void {
@@ -2506,7 +2498,7 @@ export class SceneApp {
 
   private applyFlag(
     selection: Selection,
-    flag: "hidden" | "locked" | "scaleLocked",
+    flag: EditorFlagCommand,
     value: boolean,
     options: { notify?: boolean } = {},
   ): void {
