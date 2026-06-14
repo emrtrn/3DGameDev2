@@ -12,7 +12,8 @@ Current files:
   equality checks used by editor undo/redo snapshots.
 - `editableScene.ts`: editor-facing project info, snap settings, scene object,
   selection transform, and world settings contracts consumed by the editor UI.
-- `history.ts`: editor command contracts plus undo/redo history stack behavior.
+- `history.ts`: editor command contracts, undo/redo history stack behavior, and
+  action result labels for command status updates.
 - `hierarchy.ts`: selection grouping, direct child lookup, and cycle-safe
   descendant traversal helpers.
 - `ids.ts`: collision-checked editor id generation for grouping/hierarchy helpers.

@@ -606,17 +606,17 @@ export class SceneApp {
   }
 
   undo(): void {
-    const command = this.history.undo();
-    if (!command) return;
+    const result = this.history.undoWithResult();
+    if (!result) return;
     this.emitHistoryChanged();
-    this.onStatus?.(`Undo: ${command.label}`, "info");
+    this.onStatus?.(result.statusMessage, result.statusTone);
   }
 
   redo(): void {
-    const command = this.history.redo();
-    if (!command) return;
+    const result = this.history.redoWithResult();
+    if (!result) return;
     this.emitHistoryChanged();
-    this.onStatus?.(`Redo: ${command.label}`, "info");
+    this.onStatus?.(result.statusMessage, result.statusTone);
   }
 
   setEditorTool(tool: EditorTool): void {
@@ -3919,9 +3919,9 @@ export class SceneApp {
   }
 
   private executeCommand(command: EditorCommand): void {
-    this.history.execute(command);
+    const result = this.history.executeWithResult(command);
     this.emitHistoryChanged();
-    this.onStatus?.(command.label, "success");
+    this.onStatus?.(result.statusMessage, result.statusTone);
   }
 
   private emitSelectionChanged(): void {

@@ -11,6 +11,14 @@ export interface EditorHistoryState {
   redoLabel: string | null;
 }
 
+export type EditorHistoryStatusTone = "info" | "success";
+
+export interface EditorHistoryActionResult {
+  command: EditorCommand;
+  statusMessage: string;
+  statusTone: EditorHistoryStatusTone;
+}
+
 export class EditorHistory {
   private readonly undoStack: EditorCommand[] = [];
   private readonly redoStack: EditorCommand[] = [];
@@ -31,6 +39,15 @@ export class EditorHistory {
     return command;
   }
 
+  executeWithResult(command: EditorCommand): EditorHistoryActionResult {
+    const executed = this.execute(command);
+    return {
+      command: executed,
+      statusMessage: executed.label,
+      statusTone: "success",
+    };
+  }
+
   undo(): EditorCommand | null {
     const command = this.undoStack.pop();
     if (!command) return null;
@@ -39,11 +56,31 @@ export class EditorHistory {
     return command;
   }
 
+  undoWithResult(): EditorHistoryActionResult | null {
+    const command = this.undo();
+    if (!command) return null;
+    return {
+      command,
+      statusMessage: `Undo: ${command.label}`,
+      statusTone: "info",
+    };
+  }
+
   redo(): EditorCommand | null {
     const command = this.redoStack.pop();
     if (!command) return null;
     command.redo();
     this.undoStack.push(command);
     return command;
+  }
+
+  redoWithResult(): EditorHistoryActionResult | null {
+    const command = this.redo();
+    if (!command) return null;
+    return {
+      command,
+      statusMessage: `Redo: ${command.label}`,
+      statusTone: "info",
+    };
   }
 }
