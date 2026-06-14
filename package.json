@@ -13,7 +13,7 @@
     "build": "tsc --noEmit && vite build",
     "verify:dist": "node builder/web/verify-dist.mjs",
     "test:engine": "node tools/run-engine-tests.mjs",
-    "build:verify": "npm run build && npm run test:engine && npm run verify:dist",
+    "build:verify": "npm run build && npm run test:engine && npm run verify:dist -- --strict",
     "preview": "vite preview",
     "preview:local": "vite preview --host 127.0.0.1 --port 4173 --strictPort"
   },
