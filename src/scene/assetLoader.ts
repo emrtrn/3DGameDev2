@@ -7,60 +7,29 @@ import {
   projectPublicFileUrl,
   type ProjectManifest,
 } from "@/project/ProjectSystem";
+import {
+  assetRecordById,
+  editableAssetsFromManifest,
+  recordsForGroup,
+  totalBytesForGroups,
+} from "@engine/assets/manifest";
+import type {
+  AssetCatalog,
+  AssetManifest,
+  AssetRecord,
+  EditableAsset,
+} from "@engine/assets/manifest";
 import type { MetadataSchema } from "@engine/scene/metadataSchema";
 
-export interface AssetRecord {
-  id: string;
-  file: string;
-  type: "model";
-  category: string;
-  loadGroup: string;
-  source: {
-    origin: string;
-    pack?: string;
-    packVersion?: string;
-    url?: string;
-  };
-  license: string;
-  bytes: number;
-}
-
-export interface AssetManifest {
-  version: number;
-  generated: string;
-  ktx2: boolean;
-  assets: AssetRecord[];
-}
-
-export type PlacementSurface = "floor" | "wall" | "room" | "character";
-
-export interface AssetCatalogRecord {
-  id: string;
-  name: string;
-  type: "model";
-  category: string;
-  model: string;
-  preview?: string;
-  placement: {
-    surface: PlacementSurface;
-    snapToWall: boolean;
-    allowRotation: boolean;
-    allowScale: boolean;
-  };
-  tags?: string[];
-}
-
-export interface AssetCatalog {
-  schema: 1;
-  assets: AssetCatalogRecord[];
-}
-
-export interface EditableAsset extends AssetRecord {
-  displayName: string;
-  catalogCategory: string;
-  placement: AssetCatalogRecord["placement"];
-  tags: string[];
-}
+export type {
+  AssetCatalog,
+  AssetCatalogRecord,
+  AssetManifest,
+  AssetPlacementRules,
+  AssetRecord,
+  EditableAsset,
+  PlacementSurface,
+} from "@engine/assets/manifest";
 
 export class AssetLoader {
   private manifestPromise: Promise<AssetManifest> | null = null;
@@ -116,25 +85,12 @@ export class AssetLoader {
       this.loadManifest(),
       this.loadCatalog().catch(() => null),
     ]);
-    const catalogById = new Map(catalog?.assets.map((asset) => [asset.id, asset]));
-    return manifest.assets
-      .filter((asset) => asset.type === "model")
-      .map((asset) => {
-        const catalogAsset = catalogById.get(asset.id);
-        return {
-          ...asset,
-          displayName: catalogAsset?.name ?? asset.id,
-          catalogCategory: catalogAsset?.category ?? asset.category,
-          placement:
-            catalogAsset?.placement ?? defaultPlacementForCategory(asset.category),
-          tags: catalogAsset?.tags ?? [],
-        };
-      });
+    return editableAssetsFromManifest(manifest, catalog);
   }
 
   async recordsForGroup(loadGroup: string): Promise<AssetRecord[]> {
     const manifest = await this.loadManifest();
-    return manifest.assets.filter((asset) => asset.loadGroup === loadGroup);
+    return recordsForGroup(manifest, loadGroup);
   }
 
   async loadGroup(loadGroup: string): Promise<Map<string, GLTF>> {
@@ -167,41 +123,13 @@ export class AssetLoader {
 
   async totalBytesForGroups(loadGroups: string[]): Promise<number> {
     const manifest = await this.loadManifest();
-    const groupSet = new Set(loadGroups);
-    return manifest.assets
-      .filter((asset) => groupSet.has(asset.loadGroup))
-      .reduce((total, asset) => total + asset.bytes, 0);
+    return totalBytesForGroups(manifest, loadGroups);
   }
 
   private async loadModelRecord(id: string): Promise<GLTF> {
     const manifest = await this.loadManifest();
-    const record = manifest.assets.find((asset) => asset.id === id);
+    const record = assetRecordById(manifest, id);
     if (!record) throw new Error(`Asset not found in manifest: ${id}`);
     return this.gltfLoader.loadAsync(projectPublicFileUrl(this.project, record.file));
   }
-}
-
-function defaultPlacementForCategory(category: string): AssetCatalogRecord["placement"] {
-  if (category === "room-shell") {
-    return {
-      surface: "room",
-      snapToWall: false,
-      allowRotation: true,
-      allowScale: false,
-    };
-  }
-  if (category === "customer-character") {
-    return {
-      surface: "character",
-      snapToWall: false,
-      allowRotation: true,
-      allowScale: true,
-    };
-  }
-  return {
-    surface: "floor",
-    snapToWall: false,
-    allowRotation: true,
-    allowScale: true,
-  };
 }

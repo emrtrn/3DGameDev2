@@ -1,4 +1,4 @@
-import type { EditableAsset } from "@/scene/assetLoader";
+import type { EditableAsset } from "@engine/assets/manifest";
 import type {
   EditableSceneObject,
   EditableSelection,

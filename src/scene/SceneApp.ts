@@ -48,7 +48,8 @@ import {
 import type { Intersection, Material } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-import { AssetLoader, type AssetManifest, type EditableAsset } from "./assetLoader";
+import { AssetLoader } from "./assetLoader";
+import type { AssetManifest, EditableAsset } from "@engine/assets/manifest";
 import { loadActiveProject, type ActiveProject } from "@/project/ProjectSystem";
 import {
   degreesToRadians,

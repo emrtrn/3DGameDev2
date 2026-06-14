@@ -164,6 +164,23 @@ Notes:
 
 Goal: isolate asset lookup and manifest loading.
 
+Status (2026-06-14): complete for the first asset-contract extraction slice.
+
+Completed:
+
+- Added `engine/assets/manifest.ts` for serializable asset manifest/catalog
+  contracts.
+- Moved pure asset lookup helpers into the engine boundary:
+  `assetRecordById`, `recordsForGroup`, `totalBytesForGroups`, and
+  `editableAssetsFromManifest`.
+- Moved type-only consumers to `@engine/assets/manifest` where practical.
+- Kept GLTF/Three loading in `src/scene/assetLoader.ts`; this file is still the
+  current adapter that fetches public URLs and resolves models.
+- Documented asset ID/path rules in `engine/assets/README.md`.
+- `npm run build` passed after extraction.
+- `engine/assets` string/dependency check found no Three.js, DOM, or
+  `import.meta` usage.
+
 Tasks:
 
 - Move asset manifest types and lookup helpers into `engine/assets`.
@@ -174,6 +191,12 @@ Exit criteria:
 
 - Content Browser still lists assets.
 - Runtime still loads models from `public/assets/manifest.json`.
+
+Notes:
+
+- Manifest/catalog fetches remain in `src/scene/assetLoader.ts` because they use
+  project public URLs. Moving generic fetch/loading to `engine/assets` should
+  wait until the project/public URL boundary is migrated.
 
 ## Phase 4 - Extract Render-Three Adapter
 
