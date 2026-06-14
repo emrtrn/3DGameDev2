@@ -13,6 +13,8 @@ Current files:
   material conversion helpers.
 - `lights.ts`: Three.js light shadow configuration plus editor light icon and
   wire gizmo construction/disposal helpers.
+- `renderer.ts`: WebGLRenderer creation, baseline shadow-map configuration, and
+  render statistics helpers.
 
 Rules:
 

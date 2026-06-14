@@ -23,7 +23,6 @@ import {
   Mesh,
   MeshBasicMaterial,
   Object3D,
-  PCFSoftShadowMap,
   PerspectiveCamera,
   Plane,
   PlaneGeometry,
@@ -35,9 +34,8 @@ import {
   TorusGeometry,
   Vector2,
   Vector3,
-  WebGLRenderer,
 } from "three";
-import type { Intersection } from "three";
+import type { Intersection, WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
@@ -59,6 +57,10 @@ import {
   configureShadowCastingLight,
   disposeLightGizmo,
 } from "@engine/render-three/lights";
+import {
+  createSceneRenderer,
+  readRenderStats,
+} from "@engine/render-three/renderer";
 import {
   defaultLightIntensity,
   formatLightType,
@@ -393,19 +395,7 @@ export class SceneApp {
     this.canvas = canvas;
     this.editorEnabled = options.enabled;
 
-    if (!canvas.getContext("webgl2")) {
-      throw new Error("WebGL2 is not supported on this device/browser.");
-    }
-
-    this.renderer = new WebGLRenderer({
-      canvas,
-      antialias: true,
-      powerPreference: "high-performance",
-    });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, MAX_PIXEL_RATIO));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = PCFSoftShadowMap;
-
+    this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
     this.scene.background = new Color(0xd7d7c7);
     this.camera = new PerspectiveCamera(44, 1, 0.1, 100);
 
@@ -447,8 +437,7 @@ export class SceneApp {
   }
 
   getRenderStats(): { drawCalls: number; triangles: number } {
-    const { calls, triangles } = this.renderer.info.render;
-    return { drawCalls: calls, triangles };
+    return readRenderStats(this.renderer);
   }
 
   async getManifest(): Promise<AssetManifest> {

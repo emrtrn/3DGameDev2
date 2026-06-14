@@ -223,6 +223,8 @@ Completed:
 - Moved pure light naming/default helpers into `engine/scene/lights.ts`.
 - Moved Three.js light shadow and gizmo helpers into
   `engine/render-three/lights.ts`.
+- Moved WebGLRenderer creation/shadow defaults and render-stat reading into
+  `engine/render-three/renderer.ts`.
 
 Tasks:
 
