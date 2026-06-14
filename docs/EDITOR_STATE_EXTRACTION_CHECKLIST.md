@@ -50,9 +50,9 @@ state, the command/undo stack, gizmo interaction, and editor input binding.
 
 ## 4. Editor Input Binding
 
-- [ ] Move `bindEditorPointerEvents` and the editor `handleKeyDown`/`handleKeyUp`
+- [x] Move `bindEditorPointerEvents` and the editor `handleKeyDown`/`handleKeyUp`
   handlers into `editor/input` wiring; the runtime path binds none of them.
-- [ ] Verify editor pointer/keyboard, camera nav, and shortcuts are unchanged.
+- [x] Verify editor pointer/keyboard, camera nav, and shortcuts are unchanged.
 
 ## 5. Boundary Check
 
