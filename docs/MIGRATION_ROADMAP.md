@@ -134,8 +134,10 @@ Completed:
 - Moved the first serializable layout contract into `engine/scene/layout.ts`.
 - Moved schema-driven metadata contracts/helpers into
   `engine/scene/metadataSchema.ts`.
+- Moved pure transform helpers (`degreesToRadians`, `readRotation`,
+  `readScale`, `readPivot`) into `engine/scene/transform.ts`.
 - Kept `src/scene/roomLayout.ts` as the compatibility wrapper for layout loading
-  helpers and legacy imports.
+  and legacy imports.
 - Kept `src/scene/metadataSchema.ts` as a compatibility wrapper for legacy
   imports.
 - `npm run build` passed after extraction.
@@ -157,8 +159,6 @@ Notes:
 
 - This phase did not move layout loading yet; `src/scene/roomLayout.ts` still
   owns the Vite/public URL fetch helper because it uses `import.meta.env`.
-- Future phases can move pure transform helper functions into `engine/scene`
-  once runtime URL loading and render adapter boundaries are clearer.
 
 ## Phase 3 - Extract Asset System
 
