@@ -15,7 +15,6 @@ import {
   ConeGeometry,
   CylinderGeometry,
   DirectionalLight,
-  DoubleSide,
   Euler,
   Group,
   InstancedMesh,
@@ -162,6 +161,12 @@ import {
   type GizmoPlaneAxis,
   type GizmoVectorAxis,
 } from "@editor/gizmos/axes";
+import {
+  createGizmoHandleMaterial,
+  gizmoHandlesEqual,
+  registerGizmoHandlePickables,
+  type GizmoHandle,
+} from "@editor/gizmos/handles";
 
 export type {
   EditableSceneObject,
@@ -178,13 +183,6 @@ export type {
 /** Perf budget: clamp DPR so 1080p+ phones don't render 3x fragments. */
 const MAX_PIXEL_RATIO = 2;
 const CAMERA_TARGET = new Vector3(0, 0.65, -0.2);
-const GIZMO_RENDER_ORDER = 1000;
-const GIZMO_OPACITY = 0.42;
-const GIZMO_ACTIVE_OPACITY = 0.62;
-const GIZMO_ACTIVE_COLOR = 0xff9f1a;
-/** Lighter amber + extra opacity used while the cursor hovers a handle. */
-const GIZMO_HOVER_COLOR = 0xffc24d;
-const GIZMO_HOVER_OPACITY = 0.9;
 const CAMERA_MOVE_SPEED = 5.5;
 const CAMERA_MIN_MOVE_SPEED = 0.8;
 const CAMERA_MAX_MOVE_SPEED = 28;
@@ -215,11 +213,6 @@ const DEFAULT_TRUE_FLAG_LABELS: Record<
   castShadow: { on: "Enable cast shadow", off: "Disable cast shadow" },
   collision: { on: "Enable collision", off: "Disable collision" },
 };
-
-interface GizmoHandle {
-  tool: EditorTool;
-  axis: GizmoAxis;
-}
 
 interface LinkedMoveStart {
   selection: Selection;
@@ -3260,9 +3253,7 @@ export class SceneApp {
   private updateGizmoHover(clientX: number, clientY: number): void {
     if (this.cameraDrag || this.cameraNavigationActive) return;
     const handle = this.gizmoGroup.visible ? this.pickGizmoHandle(clientX, clientY) : null;
-    const changed =
-      (handle?.tool ?? null) !== (this.hoveredGizmoHandle?.tool ?? null) ||
-      (handle?.axis ?? null) !== (this.hoveredGizmoHandle?.axis ?? null);
+    const changed = !gizmoHandlesEqual(handle, this.hoveredGizmoHandle);
     if (!changed) return;
     this.hoveredGizmoHandle = handle ? { ...handle } : null;
     this.canvas.style.cursor = handle ? "pointer" : "";
@@ -3738,7 +3729,6 @@ export class SceneApp {
     const size = 0.2;
     const reach = 0.34;
     const material = this.gizmoMaterialFor(tool, axis, color);
-    material.side = DoubleSide;
     const quad = new Mesh(new PlaneGeometry(size, size), material);
     quad.name = `${tool}-${axis}-plane`;
     if (axis === "xy") {
@@ -3790,30 +3780,16 @@ export class SceneApp {
   }
 
   private gizmoMaterialFor(tool: EditorTool, axis: GizmoAxis, color: number): MeshBasicMaterial {
-    if (this.isActiveGizmoHandle(tool, axis)) {
-      return gizmoMaterial(GIZMO_ACTIVE_COLOR, GIZMO_ACTIVE_OPACITY);
-    }
-    if (this.isHoveredGizmoHandle(tool, axis)) {
-      return gizmoMaterial(GIZMO_HOVER_COLOR, GIZMO_HOVER_OPACITY);
-    }
-    return gizmoMaterial(color, GIZMO_OPACITY);
-  }
-
-  private isActiveGizmoHandle(tool: EditorTool, axis: GizmoAxis): boolean {
-    return this.activeGizmoHandle?.tool === tool && this.activeGizmoHandle.axis === axis;
-  }
-
-  private isHoveredGizmoHandle(tool: EditorTool, axis: GizmoAxis): boolean {
-    return this.hoveredGizmoHandle?.tool === tool && this.hoveredGizmoHandle.axis === axis;
+    return createGizmoHandleMaterial(
+      { tool, axis },
+      color,
+      this.activeGizmoHandle,
+      this.hoveredGizmoHandle,
+    );
   }
 
   private registerGizmoHandle(object: Object3D, handle: GizmoHandle): void {
-    object.userData.gizmoHandle = handle;
-    object.traverse((child) => {
-      child.userData.gizmoHandle = handle;
-      child.renderOrder = GIZMO_RENDER_ORDER;
-      if (child instanceof Mesh) this.gizmoPickables.push(child);
-    });
+    registerGizmoHandlePickables(object, handle, this.gizmoPickables);
   }
 
   private getMutableTransform(
@@ -4110,15 +4086,4 @@ function isEditableTarget(target: EventTarget | null): boolean {
     target instanceof HTMLSelectElement ||
     (target instanceof HTMLElement && target.isContentEditable)
   );
-}
-
-function gizmoMaterial(color: number, opacity: number): MeshBasicMaterial {
-  return new MeshBasicMaterial({
-    color,
-    depthTest: false,
-    depthWrite: false,
-    transparent: true,
-    opacity,
-    side: DoubleSide,
-  });
 }

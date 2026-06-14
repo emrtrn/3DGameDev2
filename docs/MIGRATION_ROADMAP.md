@@ -257,6 +257,8 @@ Completed:
   contracts plus tool cycling.
 - Added `editor/gizmos/axes.ts` for transform gizmo axis contracts and
   axis-index helpers.
+- Added `editor/gizmos/handles.ts` for transform gizmo handle contracts,
+  material/highlight creation, and pickable registration.
 - Added `editor/core/layoutSnapshots.ts` for layout actor/metadata deep-copy
   helpers and transform equality checks used by undo/redo snapshots.
 - Added `editor/core/editableScene.ts` for editor-facing project info, snap

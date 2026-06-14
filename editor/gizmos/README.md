@@ -5,6 +5,7 @@ Editor transform gizmo helpers live here as they are extracted from `SceneApp`.
 Current files:
 
 - `axes.ts`: transform gizmo axis contracts and axis-index helpers.
+- `handles.ts`: transform gizmo handle contracts, materials, and pickable registration.
 
 Rules:
 
