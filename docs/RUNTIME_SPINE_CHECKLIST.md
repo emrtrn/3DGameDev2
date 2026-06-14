@@ -54,14 +54,21 @@ inspection-only. This checklist makes the spine actually run.
 
 ## 3. Input Action Map
 
-- [ ] Add `engine/input/actionMap.ts`: a pure, DOM-free mapping from raw
+- [x] Add `engine/input/actionMap.ts`: a pure, DOM-free mapping from raw
   key/pointer codes to named actions and per-tick action state (pressed/held/
-  released). No `engine/core` or render imports.
-- [ ] Add a DOM input source (runtime/editor location) that feeds raw events
+  released). No `engine/core` or render imports. (Plus `engine/input/README.md`
+  with the folder rules.)
+- [x] Add a DOM input source (runtime/editor location) that feeds raw events
   into the action map; keep existing editor camera/keyboard handling intact.
-- [ ] Add an `InputSubsystem` that advances action state each tick.
-- [ ] Verify: a logged/test action fires on a key press without breaking editor
-  shortcuts or camera navigation.
+  (`src/input/keyboardInputSource.ts` — observer only, never `preventDefault`,
+  attached in both modes; editor camera/keyboard listeners are untouched.)
+- [x] Add an `InputSubsystem` that advances action state each tick
+  (`engine/input/inputSubsystem.ts`, registered after AnimationSubsystem and
+  before any future behavior subsystem).
+- [x] Verify: covered by the `input subsystem maps raw codes to named action
+  edges per tick` engine test (raw->named mapping + pressed/held/released edges
+  via `EngineApp.update`). Editor shortcuts/camera nav are structurally safe
+  (observer-only source); live browser confirmation still recommended.
 
 ## 4. Behavior / Script Update
 

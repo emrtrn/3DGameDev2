@@ -29,6 +29,8 @@ import { readRotation, readScale } from "../engine/scene/transform";
 import { EngineApp } from "../engine/core/EngineApp";
 import type { Subsystem } from "../engine/core/Subsystem";
 import { AnimationSubsystem } from "../engine/render-three/animationSubsystem";
+import { ActionMap } from "../engine/input/actionMap";
+import { InputSubsystem } from "../engine/input/inputSubsystem";
 import { selectionId } from "../editor/core/selection";
 import type { LayoutCharacter, LayoutLightActor, RoomLayout } from "../engine/scene/layout";
 import type { AnimationMixer } from "three";
@@ -324,6 +326,55 @@ check("animation subsystem ticks mixers with engine deltaSeconds", () => {
   animation.clear();
   app.update(0.1);
   assert.deepEqual(deltas, [0.5, 0.25]);
+});
+
+// 6.1.2 The action map turns raw codes into named-action pressed/held/released
+// edges, advanced once per tick by the InputSubsystem. Proves the raw->named
+// mapping and the per-tick edge contract the behavior layer will read.
+check("input subsystem maps raw codes to named action edges per tick", () => {
+  const actions = new ActionMap({ KeyW: "move-forward", ArrowUp: "move-forward" });
+  const app = new EngineApp();
+  app.registerSubsystem(new InputSubsystem(actions));
+
+  // Untouched: idle.
+  app.update(0.016);
+  assert.deepEqual(actions.get("move-forward"), {
+    pressed: false,
+    held: false,
+    released: false,
+  });
+
+  // Key down -> pressed + held on the next tick.
+  actions.handleDown("KeyW");
+  app.update(0.016);
+  assert.deepEqual(actions.get("move-forward"), { pressed: true, held: true, released: false });
+
+  // Still down -> held only (press edge consumed).
+  app.update(0.016);
+  assert.deepEqual(actions.get("move-forward"), { pressed: false, held: true, released: false });
+
+  // A second bound code keeps the action held; releasing only the first does not
+  // drop it.
+  actions.handleDown("ArrowUp");
+  actions.handleUp("KeyW");
+  app.update(0.016);
+  assert.deepEqual(actions.get("move-forward"), { pressed: false, held: true, released: false });
+
+  // Last code up -> released for exactly one tick, then idle.
+  actions.handleUp("ArrowUp");
+  app.update(0.016);
+  assert.deepEqual(actions.get("move-forward"), { pressed: false, held: false, released: true });
+  app.update(0.016);
+  assert.deepEqual(actions.get("move-forward"), {
+    pressed: false,
+    held: false,
+    released: false,
+  });
+
+  // Unbound codes never produce an action.
+  actions.handleDown("KeyX");
+  app.update(0.016);
+  assert.equal(actions.get("move-forward").held, false);
 });
 
 // 6.2 The scene model can represent a mesh entity, a light entity, metadata,

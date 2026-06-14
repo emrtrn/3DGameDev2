@@ -36,6 +36,9 @@ import { AssetLoader } from "./assetLoader";
 import { EngineApp } from "@engine/core/EngineApp";
 import type { Subsystem } from "@engine/core/Subsystem";
 import { AnimationSubsystem } from "@engine/render-three/animationSubsystem";
+import { ActionMap, type ActionBindings } from "@engine/input/actionMap";
+import { InputSubsystem } from "@engine/input/inputSubsystem";
+import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import type { AssetManifest, EditableAsset } from "@engine/assets/manifest";
 import {
   dirnameProjectPath,
@@ -235,6 +238,23 @@ const DEFAULT_BACKGROUND_COLOR = "#d7d7c7";
 const DEFAULT_AMBIENT_COLOR = "#ffffff";
 const DEFAULT_AMBIENT_INTENSITY = 0;
 
+/**
+ * Default raw-code -> action bindings for the runtime input map. Game-specific
+ * config lives in runtime code, not the engine. Observer-only: these share keys
+ * with editor camera navigation (WASD) without consuming the events.
+ */
+const DEFAULT_INPUT_BINDINGS: ActionBindings = {
+  KeyW: "move-forward",
+  ArrowUp: "move-forward",
+  KeyS: "move-back",
+  ArrowDown: "move-back",
+  KeyA: "move-left",
+  ArrowLeft: "move-left",
+  KeyD: "move-right",
+  ArrowRight: "move-right",
+  Space: "jump",
+};
+
 interface LinkedMoveStart {
   selection: Selection;
   startTransform: EditableTransform;
@@ -280,6 +300,11 @@ export class SceneApp {
   private readonly projectReady: Promise<void>;
   /** Drives Three.js AnimationMixers through the engine-core tick. */
   private readonly animationSubsystem = new AnimationSubsystem();
+  /** Raw-code -> named-action map; advanced each tick by the InputSubsystem. */
+  private readonly inputActions = new ActionMap(DEFAULT_INPUT_BINDINGS);
+  private readonly inputSubsystem = new InputSubsystem(this.inputActions);
+  /** Browser keyboard -> action map bridge (observer only, both modes). */
+  private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
   private readonly canvas: HTMLCanvasElement;
   private readonly editorEnabled: boolean;
   private readonly raycaster = new Raycaster();
@@ -404,8 +429,15 @@ export class SceneApp {
 
     // Register subsystems before scene load adds work to them (e.g. character
     // animations push mixers during loadActiveProjectScene) and before the
-    // engine init()/start() that load triggers.
+    // engine init()/start() that load triggers. Input advances before any later
+    // behavior subsystem so behaviors read current-tick action state.
     this.engineApp.registerSubsystem(this.animationSubsystem);
+    this.engineApp.registerSubsystem(this.inputSubsystem);
+
+    // Observer-only keyboard source: records raw codes into the action map in
+    // both modes without consuming events, so editor shortcuts/camera nav are
+    // untouched.
+    this.keyboardInput.attach();
 
     this.projectReady = this.loadActiveProjectScene();
 
@@ -451,6 +483,7 @@ export class SceneApp {
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("keyup", this.handleKeyUp);
+    this.keyboardInput.detach();
     // EngineApp.dispose() is async (subsystems may release async resources);
     // SceneApp.dispose() is sync, so fire-and-forget like the renderer teardown.
     void this.engineApp.dispose();
