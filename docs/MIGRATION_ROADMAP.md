@@ -260,6 +260,8 @@ Completed:
   history stack behavior.
 - Added `editor/core/layoutTransforms.ts` for pure layout rotation/scale write
   helpers used when committing editor transform changes.
+- Added `editor/core/numeric.ts` for numeric clamp, rounding, and snap
+  display/value helpers.
 - Kept selection state ownership in `SceneApp` for now; this step only moved
   pure editor-core helper logic.
 

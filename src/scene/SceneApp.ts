@@ -107,6 +107,13 @@ import {
   writeScale,
 } from "@editor/core/layoutTransforms";
 import {
+  clamp,
+  clampIndex,
+  round,
+  snapStatus,
+  snapValue,
+} from "@editor/core/numeric";
+import {
   selectionToTransform,
   worldSettingsEqual,
   type EditableSceneObject,
@@ -4129,11 +4136,6 @@ function planeAxisIndices(axis: GizmoPlaneAxis): [0 | 1 | 2, 0 | 1 | 2] {
   return [0, 2];
 }
 
-function clampIndex(index: number, length: number): number {
-  if (!Number.isFinite(index)) return length;
-  return Math.max(0, Math.min(length, Math.trunc(index)));
-}
-
 function findParentInstancedMesh(object: Object3D): InstancedMesh | null {
   let current: Object3D | null = object;
   while (current) {
@@ -4161,27 +4163,10 @@ function findParentLight(object: Object3D): Object3D | null {
   return null;
 }
 
-function round(value: number): number {
-  return Number(value.toFixed(2));
-}
-
 function dirnameProjectPath(path: string): string {
   const normalized = path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
   const slash = normalized.lastIndexOf("/");
   return slash >= 0 ? normalized.slice(0, slash) : "";
-}
-
-function snapValue(value: number, step: number, enabled = true): number {
-  if (!enabled || !Number.isFinite(step) || step <= 0) return round(value);
-  return round(Math.round(value / step) * step);
-}
-
-function snapStatus(enabled: boolean, step: number): string {
-  return enabled ? String(step) : "off";
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function isCameraNavigationKey(code: string): boolean {

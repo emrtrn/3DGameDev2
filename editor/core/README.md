@@ -14,6 +14,7 @@ Current files:
 - `history.ts`: editor command contracts plus undo/redo history stack behavior.
 - `layoutTransforms.ts`: pure layout rotation/scale write helpers used when
   committing editor transform changes.
+- `numeric.ts`: numeric clamp, rounding, and snap display/value helpers.
 
 Rules:
 
