@@ -33,6 +33,8 @@ import type { InstancedMesh, Intersection, PerspectiveCamera, WebGLRenderer } fr
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
+import { EngineApp } from "@engine/core/EngineApp";
+import type { Subsystem } from "@engine/core/Subsystem";
 import type { AssetManifest, EditableAsset } from "@engine/assets/manifest";
 import {
   dirnameProjectPath,
@@ -266,6 +268,12 @@ export class SceneApp {
   private autoSaveTimer = 0;
   private frameHandle = 0;
   private lastTime = 0;
+  /**
+   * Engine-core spine. Owns the subsystem registry and per-tick fan-out. The
+   * SceneApp rAF loop drives `engineApp.update()` each frame (see `start()`);
+   * subsystems registered via `registerSubsystem()` attach to the same tick.
+   */
+  private readonly engineApp = new EngineApp();
   private assetLoader: AssetLoader | null = null;
   private activeProject: ActiveProject | null = null;
   private readonly projectReady: Promise<void>;
@@ -406,9 +414,15 @@ export class SceneApp {
       this.frameHandle = requestAnimationFrame(loop);
       const deltaMs = Math.min(now - this.lastTime, 100);
       this.lastTime = now;
+      const deltaSeconds = deltaMs / 1000;
 
-      for (const mixer of this.mixers) mixer.update(deltaMs / 1000);
-      this.updateCameraNavigation(deltaMs / 1000);
+      // Engine-core tick. No registered subsystems yet, so this only advances
+      // the engine's frame/time counters today — the per-frame work below is
+      // unchanged. Later sections move that work into subsystems.
+      this.engineApp.update(deltaSeconds);
+
+      for (const mixer of this.mixers) mixer.update(deltaSeconds);
+      this.updateCameraNavigation(deltaSeconds);
       this.updateGizmoScreenScale();
 
       this.renderer.render(this.scene, this.camera);
@@ -417,11 +431,23 @@ export class SceneApp {
     this.frameHandle = requestAnimationFrame(loop);
   }
 
+  /**
+   * Registers a subsystem on the engine-core spine so it ticks with the rAF
+   * loop. Thin pass-through to {@link EngineApp.registerSubsystem}; returns the
+   * subsystem for convenient capture at the call site.
+   */
+  registerSubsystem(subsystem: Subsystem): Subsystem {
+    return this.engineApp.registerSubsystem(subsystem);
+  }
+
   dispose(): void {
     cancelAnimationFrame(this.frameHandle);
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("keyup", this.handleKeyUp);
+    // EngineApp.dispose() is async (subsystems may release async resources);
+    // SceneApp.dispose() is sync, so fire-and-forget like the renderer teardown.
+    void this.engineApp.dispose();
     this.renderer.dispose();
   }
 
@@ -1766,6 +1792,13 @@ export class SceneApp {
             : "Runtime model materials are lit and can receive dynamic lighting.",
       }),
     );
+
+    // Bring the engine-core spine online now that the scene is fully built.
+    // Subsystems registered during load (later sections) initialise/start here;
+    // the rAF loop's engineApp.update() has been ticking the (empty) registry
+    // since start(), so this changes no visible behavior today.
+    await this.engineApp.init();
+    await this.engineApp.start();
   }
 
   private createInstancedModel(assetId: string, placements: LayoutPlacement[]): Group {

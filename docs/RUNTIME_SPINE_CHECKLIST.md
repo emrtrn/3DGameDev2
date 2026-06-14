@@ -26,16 +26,16 @@ inspection-only. This checklist makes the spine actually run.
 
 ## 0. Tracking
 
-- [ ] Create this checklist in `docs/`.
+- [x] Create this checklist in `docs/`.
 
 ## 1. Tick Ownership
 
-- [ ] Instantiate an `EngineApp` in `SceneApp` and call
+- [x] Instantiate an `EngineApp` in `SceneApp` and call
   `engineApp.update(deltaSeconds)` inside the existing `start()` loop, alongside
   the current per-frame work, with **no behavior change** yet.
-- [ ] Call `engineApp.init()` / `start()` during scene load and
+- [x] Call `engineApp.init()` / `start()` during scene load and
   `engineApp.dispose()` from `SceneApp.dispose()`.
-- [ ] Expose a way to register subsystems so later sections can attach to the
+- [x] Expose a way to register subsystems so later sections can attach to the
   same tick.
 
 ## 2. Prove the Tick Drives Real Work
