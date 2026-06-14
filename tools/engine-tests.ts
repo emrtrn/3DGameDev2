@@ -35,6 +35,7 @@ import { ActionMap } from "../engine/input/actionMap";
 import { InputSubsystem } from "../engine/input/inputSubsystem";
 import { BehaviorSubsystem } from "../engine/behavior/behaviorSubsystem";
 import type { BehaviorRegistry } from "../engine/behavior/behaviorSubsystem";
+import { PhysicsSubsystem } from "../engine/physics/physicsSubsystem";
 import { KeyboardInputSource } from "../src/input/keyboardInputSource";
 import type { Entity } from "../engine/scene/entity";
 import { selectionId } from "../editor/core/selection";
@@ -541,6 +542,92 @@ check("behavior subsystem ticks behaviors and mutates transforms deterministical
   assert.equal(synced.length, 4); // 2 behaviored entities x 2 ticks (inert excluded)
   assert.equal(synced.filter((s) => s.id === "character:0").at(-1)?.rotationY, 90);
   assert.equal(synced.filter((s) => s.id === "character:1").at(-1)?.x, 1);
+});
+
+check("physics subsystem reports deterministic placeholder contacts", () => {
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([
+    {
+      id: "dynamic",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+      },
+    },
+    {
+      id: "wall",
+      components: {
+        Transform: { position: [4, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: false },
+      },
+    },
+  ]);
+
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.update(0.016);
+  assert.deepEqual(physics.contactsForEntity("dynamic"), []);
+
+  physics.setEntityTransform("dynamic", {
+    position: [3.25, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  app.update(0.016);
+  assert.deepEqual(physics.contactsForEntity("dynamic"), [
+    { a: "dynamic", b: "wall", isSensor: false },
+  ]);
+});
+
+check("behavior can react to physics contacts from the engine tick", () => {
+  const physics = new PhysicsSubsystem();
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId !== "contact-react") return undefined;
+      return ({ physics: physicsQuery, transform }) => {
+        if ((physicsQuery?.contactsForEntity("mover").length ?? 0) > 0) {
+          transform.position[2] = 7;
+        }
+      };
+    },
+  };
+  const synced: Array<{ id: string; z: number }> = [];
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    (id, transform) => synced.push({ id, z: transform.position[2] }),
+    physics,
+  );
+  const entities: Entity[] = [
+    {
+      id: "mover",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+        Behavior: { scriptId: "contact-react" },
+      },
+    },
+    {
+      id: "sensor",
+      components: {
+        Transform: { position: [0.25, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      },
+    },
+  ];
+
+  physics.setEntities(entities);
+  behavior.setEntities(entities);
+
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+  app.update(0.016);
+
+  assert.deepEqual(physics.contactsForEntity("mover"), [
+    { a: "mover", b: "sensor", isSensor: true },
+  ]);
+  assert.deepEqual(synced.at(-1), { id: "mover", z: 7 });
 });
 
 // 6.1.5 The real KeyboardInputSource feeds raw DOM key codes into the action

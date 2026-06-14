@@ -23,12 +23,23 @@ export const BEHAVIOR_SUBSYSTEM_ID = "behavior";
 export interface BehaviorContext {
   readonly engine: EngineUpdateContext;
   readonly actions: ActionMap;
+  readonly physics?: PhysicsQuery;
   readonly params: Record<string, SceneJsonValue>;
   /** This entity's transform; behaviors mutate it in place. */
   readonly transform: TransformComponent;
 }
 
 export type BehaviorUpdate = (context: BehaviorContext) => void;
+
+export interface PhysicsContact {
+  readonly a: EntityId;
+  readonly b: EntityId;
+  readonly isSensor: boolean;
+}
+
+export interface PhysicsQuery {
+  contactsForEntity(entityId: EntityId): readonly PhysicsContact[];
+}
 
 /** Resolves a script id to its update function. Runtime/game-owned. */
 export interface BehaviorRegistry {
@@ -53,6 +64,7 @@ export class BehaviorSubsystem implements Subsystem {
     private readonly registry: BehaviorRegistry,
     private readonly actions: ActionMap,
     private readonly sink: TransformSink,
+    private readonly physics?: PhysicsQuery,
   ) {}
 
   /**
@@ -87,12 +99,16 @@ export class BehaviorSubsystem implements Subsystem {
 
   update(engine: EngineUpdateContext): void {
     for (const instance of this.instances) {
-      instance.update({
+      const context: BehaviorContext = {
         engine,
         actions: this.actions,
         params: instance.params,
         transform: instance.transform,
-      });
+      };
+      if (this.physics) {
+        (context as BehaviorContext & { physics: PhysicsQuery }).physics = this.physics;
+      }
+      instance.update(context);
       this.sink(instance.id, instance.transform);
     }
   }

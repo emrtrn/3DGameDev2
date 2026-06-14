@@ -39,6 +39,7 @@ import { AnimationSubsystem } from "@engine/render-three/animationSubsystem";
 import { ActionMap, type ActionBindings } from "@engine/input/actionMap";
 import { InputSubsystem } from "@engine/input/inputSubsystem";
 import { BehaviorSubsystem } from "@engine/behavior/behaviorSubsystem";
+import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import type { AssetManifest, EditableAsset } from "@engine/assets/manifest";
@@ -321,6 +322,7 @@ export class SceneApp {
   /** Raw-code -> named-action map; advanced each tick by the InputSubsystem. */
   private readonly inputActions = new ActionMap(DEFAULT_INPUT_BINDINGS);
   private readonly inputSubsystem = new InputSubsystem(this.inputActions);
+  private readonly physicsSubsystem = new PhysicsSubsystem();
   /** Browser keyboard -> action map bridge (observer only, both modes). */
   private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
   /** Ticks scene behaviors against the derived entity set (assigned in ctor). */
@@ -339,6 +341,7 @@ export class SceneApp {
     object.position.set(transform.position[0], transform.position[1], transform.position[2]);
     applyEulerDegrees(object, transform.rotation);
     object.scale.set(transform.scale[0], transform.scale[1], transform.scale[2]);
+    this.physicsSubsystem.setEntityTransform(entityId, transform);
   };
   private readonly canvas: HTMLCanvasElement;
   private readonly editorEnabled: boolean;
@@ -428,11 +431,13 @@ export class SceneApp {
     // behavior subsystem so behaviors read current-tick action state.
     this.engineApp.registerSubsystem(this.animationSubsystem);
     this.engineApp.registerSubsystem(this.inputSubsystem);
+    this.engineApp.registerSubsystem(this.physicsSubsystem);
     // Registered after input so behaviors read current-tick action state.
     this.behaviorSubsystem = new BehaviorSubsystem(
       createBehaviorRegistry(),
       this.inputActions,
       this.syncEntityTransform,
+      this.physicsSubsystem,
     );
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
 
@@ -1833,7 +1838,9 @@ export class SceneApp {
     // SceneDocument starts acting as a runtime source of truth here: behaviors
     // mutate per-entity transform copies, synced back to the rendered objects
     // each tick via syncEntityTransform.
-    this.behaviorSubsystem.setEntities(this.getSceneDocument().entities);
+    const sceneDocument = this.getSceneDocument();
+    this.physicsSubsystem.setEntities(sceneDocument.entities);
+    this.behaviorSubsystem.setEntities(sceneDocument.entities);
 
     // Bring the engine-core spine online now that the scene is fully built.
     // The rAF loop's engineApp.update() has been ticking the registry since
