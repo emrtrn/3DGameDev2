@@ -30,7 +30,7 @@ keeping the current `RoomLayout` runtime/editor path working.
   contract: `init`, `start`, `update`, and `dispose` hooks.
 - [x] Add `engine/core/SubsystemRegistry.ts` with deterministic registration,
   lookup, forward lifecycle order, and reverse dispose order.
-- [ ] Add `engine/core/EngineApp.ts` as the lifecycle coordinator for the
+- [x] Add `engine/core/EngineApp.ts` as the lifecycle coordinator for the
   registry and tick/update calls.
 - [ ] Add a short `engine/core/README.md` documenting ownership rules and
   forbidden dependencies.
