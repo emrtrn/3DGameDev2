@@ -6,8 +6,10 @@ export const MESH_RENDERER_COMPONENT = "MeshRenderer";
 export const LIGHT_COMPONENT = "Light";
 export const METADATA_COMPONENT = "Metadata";
 export const BEHAVIOR_COMPONENT = "Behavior";
+export const COLLIDER_COMPONENT = "Collider";
 
 export type SceneLightType = "directional" | "point" | "spot";
+export type ColliderShape = "box" | "sphere" | "capsule";
 
 export interface TransformComponent {
   position: Vec3;
@@ -44,6 +46,13 @@ export interface MetadataComponent {
 export interface BehaviorComponent {
   scriptId: string;
   params?: Record<string, SceneJsonValue>;
+}
+
+export interface ColliderComponent {
+  shape: ColliderShape;
+  size: Vec3;
+  isStatic: boolean;
+  isSensor: boolean;
 }
 
 function readVec3(value: SceneJsonValue | undefined): Vec3 | undefined {
@@ -95,6 +104,26 @@ export function readBehaviorComponent(entity: Entity): BehaviorComponent | undef
     component.params = { ...(params as Record<string, SceneJsonValue>) };
   }
   return component;
+}
+
+const COLLIDER_SHAPES: readonly ColliderShape[] = ["box", "sphere", "capsule"];
+
+/** Reads a typed collider from an entity's serializable component data. */
+export function readColliderComponent(entity: Entity): ColliderComponent | undefined {
+  const data = entity.components[COLLIDER_COMPONENT];
+  if (!data) return undefined;
+  if (typeof data.shape !== "string" || !COLLIDER_SHAPES.includes(data.shape as ColliderShape)) {
+    return undefined;
+  }
+  const size = readVec3(data.size);
+  if (!size) return undefined;
+  if (typeof data.isStatic !== "boolean" || typeof data.isSensor !== "boolean") return undefined;
+  return {
+    shape: data.shape as ColliderShape,
+    size,
+    isStatic: data.isStatic,
+    isSensor: data.isSensor,
+  };
 }
 
 const LIGHT_TYPES: readonly SceneLightType[] = ["directional", "point", "spot"];

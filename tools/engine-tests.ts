@@ -21,6 +21,7 @@ import {
 import { validateSceneDocument } from "../engine/scene/sceneSerialization";
 import {
   readBehaviorComponent,
+  readColliderComponent,
   readLightComponent,
   readMeshRendererComponent,
   readMetadataComponent,
@@ -419,6 +420,63 @@ check("layout behavior maps to a readable behavior component", () => {
   const move = hero ? readBehaviorComponent(hero) : undefined;
   assert.equal(move?.scriptId, "input-move");
   assert.equal(move?.params, undefined);
+});
+
+// 6.1.3b Legacy collision flags now derive Collider components. Missing
+// `collision` keeps the legacy default-on behavior; explicit false suppresses
+// the collider so old layouts can opt out without changing schema.
+check("layout collision flags map to readable collider components", () => {
+  const fixture: RoomLayout = {
+    schema: 1,
+    name: "collider-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "crate",
+        placements: [
+          { position: [0, 0, 0], collision: true },
+          { position: [1, 0, 0] },
+          { position: [2, 0, 0], collision: false },
+        ],
+      },
+    ],
+    characters: [
+      { assetId: "hero", position: [0, 0, 1] },
+      { assetId: "ghost", position: [0, 0, 2], collision: false },
+    ],
+    lights: [],
+  };
+
+  const document = roomLayoutToSceneDocument(fixture);
+  const explicit = document.entities.find((entity) => entity.id === instanceEntityId("crate", 0));
+  const defaulted = document.entities.find((entity) => entity.id === instanceEntityId("crate", 1));
+  const disabled = document.entities.find((entity) => entity.id === instanceEntityId("crate", 2));
+  const characterDefault = document.entities.find((entity) => entity.id === characterEntityId(0));
+  const characterDisabled = document.entities.find((entity) => entity.id === characterEntityId(1));
+
+  assert.deepEqual(explicit ? readColliderComponent(explicit) : undefined, {
+    shape: "box",
+    size: [1, 1, 1],
+    isStatic: true,
+    isSensor: false,
+  });
+  assert.deepEqual(defaulted ? readColliderComponent(defaulted) : undefined, {
+    shape: "box",
+    size: [1, 1, 1],
+    isStatic: true,
+    isSensor: false,
+  });
+  assert.equal(disabled ? readColliderComponent(disabled) : undefined, undefined);
+  assert.deepEqual(characterDefault ? readColliderComponent(characterDefault) : undefined, {
+    shape: "box",
+    size: [1, 1, 1],
+    isStatic: false,
+    isSensor: false,
+  });
+  assert.equal(
+    characterDisabled ? readColliderComponent(characterDisabled) : undefined,
+    undefined,
+  );
 });
 
 // 6.1.4 The behavior subsystem ticks behaviors against a derived entity set,

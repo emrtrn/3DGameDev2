@@ -27,7 +27,6 @@
  *   - `groupId`     editor multi-select grouping
  *   - `pivot`       editor authoring pivot (runtime consumes the baked transform)
  *   - `scaleLocked` editor proportional-scale hint
- *   - `collision`   runtime physics hint (future Collider component)
  *   - `animation`   character animation (future animation/character component)
  *   - per-object `receiveShadow` (world-level static shadow flags are used)
  */
@@ -45,11 +44,13 @@ import { readRotation, readScale } from "./transform";
 import type { Entity, EntityComponentData, EntityComponentMap, SceneJsonValue } from "./entity";
 import {
   BEHAVIOR_COMPONENT,
+  COLLIDER_COMPONENT,
   LIGHT_COMPONENT,
   MESH_RENDERER_COMPONENT,
   METADATA_COMPONENT,
   TRANSFORM_COMPONENT,
   type BehaviorComponent,
+  type ColliderComponent,
   type LightComponent,
   type MeshRendererComponent,
   type MetadataComponent,
@@ -211,6 +212,8 @@ function instanceComponents(assetId: string, placement: LayoutPlacement): Entity
     [TRANSFORM_COMPONENT]: toData(transformComponent(placement)),
     [MESH_RENDERER_COMPONENT]: toData(meshRendererComponent(assetId, placement.castShadow)),
   };
+  const collider = colliderComponent(placement, true);
+  if (collider) components[COLLIDER_COMPONENT] = toData(collider);
   const metadata = metadataComponent(placement.metadata);
   if (metadata) components[METADATA_COMPONENT] = toData(metadata);
   const behavior = behaviorComponent(placement.behavior);
@@ -223,6 +226,8 @@ function characterComponents(character: LayoutCharacter): EntityComponentMap {
     [TRANSFORM_COMPONENT]: toData(transformComponent(character)),
     [MESH_RENDERER_COMPONENT]: toData(meshRendererComponent(character.assetId, character.castShadow)),
   };
+  const collider = colliderComponent(character, false);
+  if (collider) components[COLLIDER_COMPONENT] = toData(collider);
   const metadata = metadataComponent(character.metadata);
   if (metadata) components[METADATA_COMPONENT] = toData(metadata);
   const behavior = behaviorComponent(character.behavior);
@@ -281,6 +286,19 @@ function behaviorComponent(behavior: LayoutBehavior | undefined): BehaviorCompon
   return component;
 }
 
+function colliderComponent(
+  source: { collision?: boolean },
+  isStatic: boolean,
+): ColliderComponent | null {
+  if (source.collision === false) return null;
+  return {
+    shape: "box",
+    size: [1, 1, 1],
+    isStatic,
+    isSensor: false,
+  };
+}
+
 function metadataComponent(metadata: LayoutMetadata | undefined): MetadataComponent | null {
   if (!metadata) return null;
   const entries = Object.entries(metadata);
@@ -325,7 +343,8 @@ function toData(
     | MeshRendererComponent
     | LightComponent
     | MetadataComponent
-    | BehaviorComponent,
+    | BehaviorComponent
+    | ColliderComponent,
 ): EntityComponentData {
   return component as unknown as EntityComponentData;
 }
