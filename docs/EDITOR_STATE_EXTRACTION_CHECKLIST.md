@@ -42,11 +42,11 @@ state, the command/undo stack, gizmo interaction, and editor input binding.
 
 ## 3. Gizmo Interaction
 
-- [ ] Move gizmo drag/hover/screen-scale logic (`activeGizmoHandle`,
+- [x] Move gizmo drag/hover/screen-scale logic (`activeGizmoHandle`,
   `hoveredGizmoHandle`, `startGizmoDrag`, `pickGizmoHandle`,
   `updateGizmoScreenScale`) toward `editor/gizmos`, keeping only the viewport
   render hook in `SceneApp`.
-- [ ] Verify move/rotate/scale + plane handles + hover highlight are unchanged.
+- [x] Verify move/rotate/scale + plane handles + hover highlight are unchanged.
 
 ## 4. Editor Input Binding
 
