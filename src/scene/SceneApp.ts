@@ -92,6 +92,8 @@ import type {
   RoomLayout,
   Vec3,
 } from "@engine/scene/layout";
+import { roomLayoutToSceneDocument } from "@engine/scene/legacyRoomLayoutAdapter";
+import type { SceneDocument } from "@engine/scene/sceneDocument";
 import {
   metadataValuesEqual,
   type MetadataSchema,
@@ -445,6 +447,17 @@ export class SceneApp {
   getLayout(): RoomLayout {
     if (!this.layout) throw new Error("Layout is not loaded yet.");
     return structuredClone(this.layout);
+  }
+
+  /**
+   * Derives the engine `SceneDocument` from the currently loaded layout via the
+   * legacy adapter. Inspection-only: this does NOT drive rendering yet. The
+   * runtime and editor still render from the existing `RoomLayout` path, so the
+   * derived spine can be observed without changing visible behavior.
+   */
+  getSceneDocument(): SceneDocument {
+    if (!this.layout) throw new Error("Layout is not loaded yet.");
+    return roomLayoutToSceneDocument(this.layout);
   }
 
   getSceneObjects(): EditableSceneObject[] {
