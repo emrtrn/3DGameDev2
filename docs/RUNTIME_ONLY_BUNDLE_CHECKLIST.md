@@ -23,14 +23,14 @@ Today `npm run build` emits a single ~826 kB JS chunk (800 kB warning), and
 
 ## 0. Tracking
 
-- [ ] Create this checklist in `docs/`.
+- [x] Create this checklist in `docs/`.
 
 ## 1. Save Endpoint Isolation
 
-- [ ] Move the `/__save-layout` fetch (and any other `/__*` dev endpoint calls)
+- [x] Move the `/__save-layout` fetch (and any other `/__*` dev endpoint calls)
   out of `SceneApp` into an editor/dev-only module loaded under the dynamic
   `?editor` import.
-- [ ] Verify the game chunk contains **no** `/__save-layout` string (this clears
+- [x] Verify the game chunk contains **no** `/__save-layout` string (this clears
   the current `verify:dist` baseline warning).
 
 ## 2. Editor Code-Split Audit

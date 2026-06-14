@@ -26,7 +26,7 @@ adapter intentionally leaves unmapped, and no audio component or manifest.
 
 ## 0. Tracking
 
-- [ ] Create this checklist in `docs/`.
+- [x] Create this checklist in `docs/`.
 
 ## 1. Collider Data Model
 
