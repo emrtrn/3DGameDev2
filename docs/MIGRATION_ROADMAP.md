@@ -225,6 +225,8 @@ Completed:
   `engine/render-three/lights.ts`.
 - Moved WebGLRenderer creation/shadow defaults and render-stat reading into
   `engine/render-three/renderer.ts`.
+- Moved scene camera creation and responsive viewport/FOV application into
+  `engine/render-three/camera.ts`.
 
 Tasks:
 

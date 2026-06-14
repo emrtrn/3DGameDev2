@@ -15,6 +15,8 @@ Current files:
   wire gizmo construction/disposal helpers.
 - `renderer.ts`: WebGLRenderer creation, baseline shadow-map configuration, and
   render statistics helpers.
+- `camera.ts`: perspective scene camera creation and responsive viewport/FOV
+  application helpers.
 
 Rules:
 

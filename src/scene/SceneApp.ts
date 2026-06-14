@@ -23,7 +23,6 @@ import {
   Mesh,
   MeshBasicMaterial,
   Object3D,
-  PerspectiveCamera,
   Plane,
   PlaneGeometry,
   PointLight,
@@ -35,7 +34,7 @@ import {
   Vector2,
   Vector3,
 } from "three";
-import type { Intersection, WebGLRenderer } from "three";
+import type { Intersection, PerspectiveCamera, WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
@@ -57,6 +56,10 @@ import {
   configureShadowCastingLight,
   disposeLightGizmo,
 } from "@engine/render-three/lights";
+import {
+  applyResponsiveCameraViewport,
+  createSceneCamera,
+} from "@engine/render-three/camera";
 import {
   createSceneRenderer,
   readRenderStats,
@@ -397,7 +400,7 @@ export class SceneApp {
 
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
     this.scene.background = new Color(0xd7d7c7);
-    this.camera = new PerspectiveCamera(44, 1, 0.1, 100);
+    this.camera = createSceneCamera();
 
     this.gizmoGroup.name = "editor-transform-gizmo";
     this.gizmoGroup.visible = false;
@@ -4218,20 +4221,15 @@ export class SceneApp {
   private handleResize = (): void => {
     const width = window.innerWidth;
     const height = window.innerHeight;
-    const portrait = height >= width;
-
-    this.camera.aspect = width / height;
-    this.camera.fov = portrait ? 42 : 46;
-    if (!this.cameraNavigationTouched) {
-      this.camera.position.set(
-        portrait ? 4.5 : 5.4,
-        portrait ? 6.3 : 5.2,
-        portrait ? 7.2 : 5.7,
-      );
-      this.camera.lookAt(CAMERA_TARGET);
+    const resetView = applyResponsiveCameraViewport(this.camera, {
+      width,
+      height,
+      target: CAMERA_TARGET,
+      viewTouched: this.cameraNavigationTouched,
+    });
+    if (resetView) {
       this.syncCameraAnglesFromCurrentView();
     }
-    this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
   };
 }
