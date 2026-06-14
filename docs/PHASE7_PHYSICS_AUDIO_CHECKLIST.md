@@ -30,11 +30,11 @@ adapter intentionally leaves unmapped, and no audio component or manifest.
 
 ## 1. Collider Data Model
 
-- [ ] Add a `ColliderComponent` to `engine/scene/components.ts`
+- [x] Add a `ColliderComponent` to `engine/scene/components.ts`
   (shape: box/sphere/capsule + size, `isStatic`, `isSensor`) with a typed reader.
-- [ ] Map the legacy `collision` flag into a default collider in
+- [x] Map the legacy `collision` flag into a default collider in
   `legacyRoomLayoutAdapter.ts` (closes the documented adapter gap).
-- [ ] Add adapter coverage to `tools/engine-tests.ts` (collision flag ->
+- [x] Add adapter coverage to `tools/engine-tests.ts` (collision flag ->
   collider component; absent -> documented default).
 
 ## 2. Physics Subsystem (Placeholder First)
