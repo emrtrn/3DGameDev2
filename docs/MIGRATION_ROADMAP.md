@@ -246,6 +246,15 @@ Exit criteria:
 
 Goal: make editor-only code visibly editor-owned.
 
+Status (2026-06-14): started.
+
+Completed:
+
+- Added `editor/core/selection.ts` for editor selection identity, parsing,
+  equality, and deterministic delete/restore ordering helpers.
+- Kept selection state ownership in `SceneApp` for now; this step only moved
+  pure editor-core helper logic.
+
 Tasks:
 
 - Move editor command/selection/undo state into `editor/core`.
