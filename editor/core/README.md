@@ -11,6 +11,8 @@ Current files:
   equality checks used by editor undo/redo snapshots.
 - `editableScene.ts`: editor-facing scene object, selection transform, and world
   settings contracts consumed by the editor UI.
+- `layoutTransforms.ts`: pure layout rotation/scale write helpers used when
+  committing editor transform changes.
 
 Rules:
 

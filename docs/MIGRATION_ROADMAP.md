@@ -256,6 +256,8 @@ Completed:
   helpers and transform equality checks used by undo/redo snapshots.
 - Added `editor/core/editableScene.ts` for editor-facing scene object,
   selection transform, and world settings contracts consumed by the editor UI.
+- Added `editor/core/layoutTransforms.ts` for pure layout rotation/scale write
+  helpers used when committing editor transform changes.
 - Kept selection state ownership in `SceneApp` for now; this step only moved
   pure editor-core helper logic.
 

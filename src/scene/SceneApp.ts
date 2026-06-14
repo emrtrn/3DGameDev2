@@ -103,6 +103,10 @@ import {
   transformsEqual,
 } from "@editor/core/layoutSnapshots";
 import {
+  writeRotation,
+  writeScale,
+} from "@editor/core/layoutTransforms";
+import {
   selectionToTransform,
   worldSettingsEqual,
   type EditableSceneObject,
@@ -4139,37 +4143,6 @@ function planeAxisIndices(axis: GizmoPlaneAxis): [0 | 1 | 2, 0 | 1 | 2] {
   if (axis === "xy") return [0, 1];
   if (axis === "yz") return [1, 2];
   return [0, 2];
-}
-
-/**
- * Writes a rotation vector back to a placement. Y-only rotations stay in the
- * legacy `rotationYDeg` field (runtime-compatible); X/Z components promote to
- * the full `rotation` array, keeping `rotationYDeg` as a graceful fallback.
- */
-function writeRotation(
-  target: LayoutPlacement | LayoutCharacter | LayoutLightActor,
-  rotation: Vec3,
-): void {
-  const [x, y, z] = [round(rotation[0]), round(rotation[1]), round(rotation[2])];
-  if ("assetId" in target) {
-    // Instances/characters: keep Y in the legacy field (runtime-compatible) and
-    // promote X/Z to the full rotation array only when they are non-zero.
-    target.rotationYDeg = y;
-    if (x === 0 && z === 0) delete target.rotation;
-    else target.rotation = [x, y, z];
-  } else {
-    // Lights have no legacy Y field, so a Y-only rotation must live in `rotation`
-    // too — otherwise rotating a light around Y is silently dropped.
-    if (x === 0 && y === 0 && z === 0) delete target.rotation;
-    else target.rotation = [x, y, z];
-  }
-}
-
-/** Writes a scale vector back to a placement (scalar when uniform, else array). */
-function writeScale(target: LayoutPlacement | LayoutCharacter | LayoutLightActor, scale: Vec3): void {
-  if ("type" in target) return;
-  const [x, y, z] = [round(scale[0]), round(scale[1]), round(scale[2])];
-  target.scale = x === y && y === z ? x : [x, y, z];
 }
 
 function cloneSelection(selection: Selection): Selection {
