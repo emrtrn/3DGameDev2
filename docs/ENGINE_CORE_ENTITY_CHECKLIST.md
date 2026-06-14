@@ -49,14 +49,26 @@ keeping the current `RoomLayout` runtime/editor path working.
 
 ## 3. Legacy Layout Adapter
 
-- [ ] Add `engine/scene/legacyRoomLayoutAdapter.ts` to convert current
+- [x] Add `engine/scene/legacyRoomLayoutAdapter.ts` to convert current
   `RoomLayout.instances`, `characters`, and `lights` into `SceneDocument`
   entities.
-- [ ] Preserve stable identity mapping for legacy selections where possible
+- [x] Preserve stable identity mapping for legacy selections where possible
   (`instance:<assetId>:<index>`, `character:<index>`, `light:<index>`).
-- [ ] Add adapter coverage for transform, mesh/model reference, light data,
+- [x] Add adapter coverage for transform, mesh/model reference, light data,
   visibility/lock flags, hierarchy ids, and metadata.
-- [ ] Keep `RoomLayout` as the saved authoring format for this stage.
+- [x] Keep `RoomLayout` as the saved authoring format for this stage.
+
+Notes (2026-06-14):
+
+- Entity ids mirror `editor/core/selection.ts#selectionId` byte-for-byte;
+  the format is duplicated in the adapter on purpose because `engine/*` must
+  not import `editor/*`. Keep the two in sync.
+- The legacy dual id space (`nodeId`/`parentId`) is collapsed into the single
+  `SceneDocument` id space: a child's `entity.parentId` is resolved to the
+  parent entity id; dangling parent refs are dropped.
+- Visibility/lock flags are carried as entity `tags` (`hidden`, `locked`).
+- Intentionally not mapped yet: `groupId`, `pivot`, `scaleLocked`, `collision`
+  (future Collider), character `animation`, and per-object `receiveShadow`.
 
 ## 4. First Integration Slice
 
