@@ -60,6 +60,11 @@ const FAIL_TOKENS = [
   { token: "Project Browser", reason: "legacy project-browser UI string in dist" },
   { token: "__studio", reason: "legacy studio endpoint/string in dist" },
   { token: "__project-file", reason: "legacy project-file endpoint/string in dist" },
+  { token: "SelectionStore", reason: "editor selection state store leaked into the runtime bundle" },
+  { token: "EditorCommandStore", reason: "editor command/undo state store leaked into the runtime bundle" },
+  { token: "GizmoInteractionStore", reason: "editor gizmo interaction state leaked into the runtime bundle" },
+  { token: "bindEditorInputEvents", reason: "editor DOM input binding leaked into the runtime bundle" },
+  { token: "createGizmoPointerDrag", reason: "editor gizmo drag setup leaked into the runtime bundle" },
 ];
 
 // Warnings: known authoring-code-in-game-chunk debt, expected to disappear once

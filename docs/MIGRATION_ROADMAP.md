@@ -207,7 +207,7 @@ Notes:
 
 Goal: separate Three.js binding from scene/editor state.
 
-Status (2026-06-14): started.
+Status (2026-06-15): editor state extraction complete.
 
 Completed:
 
@@ -246,7 +246,7 @@ Exit criteria:
 
 Goal: make editor-only code visibly editor-owned.
 
-Status (2026-06-14): started.
+Status (2026-06-15): editor state extraction complete.
 
 Completed:
 
@@ -282,14 +282,21 @@ Completed:
   helpers used when committing editor transform changes.
 - Added `editor/core/numeric.ts` for numeric clamp, rounding, and snap
   display/value helpers.
-- Kept selection state ownership in `SceneApp` for now; this step only moved
-  pure editor-core helper logic.
+- Added `editor/core/selectionStore.ts` so active selection and multi-select
+  state are owned by `editor/core`, with `SceneApp` delegating selection changes.
+- Added `EditorCommandStore` in `editor/core/history.ts` so command/undo stack
+  ownership is editor-core state, not `SceneApp` state.
+- Added `editor/gizmos/interaction.ts` for active/hovered gizmo handle state,
+  screen-scale, picking, plane/basis helpers, and drag-state setup.
+- Added `editor/input/bindings.ts` for editor-only DOM listener wiring and
+  cleanup.
+- Reduced `src/scene/SceneApp.ts` from the checklist baseline of 3672 lines to
+  3603 lines after the state extraction pass.
 
 Tasks:
 
-- Move editor command/selection/undo state into `editor/core`.
-- Move Details panel code toward `editor/inspector`.
-- Move gizmo and placement code toward `editor/gizmos` and
+- Continue moving Details panel code toward `editor/inspector`.
+- Continue moving placement code toward `editor/gizmos` and
   `editor/level-design`.
 
 Exit criteria:
