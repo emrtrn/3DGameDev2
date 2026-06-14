@@ -38,7 +38,9 @@ import type { Subsystem } from "@engine/core/Subsystem";
 import { AnimationSubsystem } from "@engine/render-three/animationSubsystem";
 import { ActionMap, type ActionBindings } from "@engine/input/actionMap";
 import { InputSubsystem } from "@engine/input/inputSubsystem";
+import { BehaviorSubsystem } from "@engine/behavior/behaviorSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
+import { createBehaviorRegistry } from "@/game/behaviors";
 import type { AssetManifest, EditableAsset } from "@engine/assets/manifest";
 import {
   dirnameProjectPath,
@@ -108,6 +110,7 @@ import {
   roomLayoutToSceneDocument,
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
+import type { TransformComponent } from "@engine/scene/components";
 import {
   metadataValuesEqual,
   type MetadataSchema,
@@ -305,6 +308,23 @@ export class SceneApp {
   private readonly inputSubsystem = new InputSubsystem(this.inputActions);
   /** Browser keyboard -> action map bridge (observer only, both modes). */
   private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
+  /** Ticks scene behaviors against the derived entity set (assigned in ctor). */
+  private readonly behaviorSubsystem: BehaviorSubsystem;
+  /**
+   * BehaviorSubsystem transform sink: writes a behavior-mutated entity transform
+   * back onto its rendered object. This slice targets characters (each is its
+   * own Object3D); instanced static meshes and lights are not synced yet. Bound
+   * arrow so it can be passed as a callback.
+   */
+  private readonly syncEntityTransform = (entityId: string, transform: TransformComponent): void => {
+    const selection = parseSelectionId(entityId);
+    if (!selection || selection.kind !== "character") return;
+    const object = this.characterObjects[selection.index];
+    if (!object) return;
+    object.position.set(transform.position[0], transform.position[1], transform.position[2]);
+    applyEulerDegrees(object, transform.rotation);
+    object.scale.set(transform.scale[0], transform.scale[1], transform.scale[2]);
+  };
   private readonly canvas: HTMLCanvasElement;
   private readonly editorEnabled: boolean;
   private readonly raycaster = new Raycaster();
@@ -433,6 +453,13 @@ export class SceneApp {
     // behavior subsystem so behaviors read current-tick action state.
     this.engineApp.registerSubsystem(this.animationSubsystem);
     this.engineApp.registerSubsystem(this.inputSubsystem);
+    // Registered after input so behaviors read current-tick action state.
+    this.behaviorSubsystem = new BehaviorSubsystem(
+      createBehaviorRegistry(),
+      this.inputActions,
+      this.syncEntityTransform,
+    );
+    this.engineApp.registerSubsystem(this.behaviorSubsystem);
 
     // Observer-only keyboard source: records raw codes into the action map in
     // both modes without consuming events, so editor shortcuts/camera nav are
@@ -1832,10 +1859,15 @@ export class SceneApp {
       }),
     );
 
+    // Derive the runtime entity set once and hand it to the behavior subsystem.
+    // SceneDocument starts acting as a runtime source of truth here: behaviors
+    // mutate per-entity transform copies, synced back to the rendered objects
+    // each tick via syncEntityTransform.
+    this.behaviorSubsystem.setEntities(this.getSceneDocument().entities);
+
     // Bring the engine-core spine online now that the scene is fully built.
-    // Subsystems registered during load (later sections) initialise/start here;
-    // the rAF loop's engineApp.update() has been ticking the (empty) registry
-    // since start(), so this changes no visible behavior today.
+    // The rAF loop's engineApp.update() has been ticking the registry since
+    // start(); behaviors only have entities to act on from here.
     await this.engineApp.init();
     await this.engineApp.start();
   }

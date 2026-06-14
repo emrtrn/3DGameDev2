@@ -74,13 +74,15 @@ inspection-only. This checklist makes the spine actually run.
 
 - [x] Add a minimal `BehaviorComponent` to `engine/scene/components.ts`
   (script id + JSON params) plus a typed reader (`readBehaviorComponent`).
-- [ ] Add a behavior registry (script id -> update function) in a runtime/game
-  location; behaviors receive `EngineUpdateContext` + input actions and may
-  read/write entity transforms.
-- [ ] Add a `BehaviorSubsystem` that ticks behaviors against the live entity set
-  derived from the scene. This is where `SceneDocument` begins to be a runtime
-  source of truth (derive once, let behaviors mutate, sync transforms back to
-  the rendered objects).
+- [x] Add a behavior registry (script id -> update function) in a runtime/game
+  location (`src/game/behaviors.ts`: `spin` + input-driven `input-move`);
+  behaviors receive `EngineUpdateContext` + input actions + params and mutate the
+  entity transform.
+- [x] Add a `BehaviorSubsystem` that ticks behaviors against the live entity set
+  derived from the scene (`SceneApp` derives `getSceneDocument().entities` once
+  at load and calls `setEntities`). `SceneDocument` is now a runtime source of
+  truth: behaviors mutate per-entity transform copies, synced back to the
+  rendered character objects each tick via `syncEntityTransform`.
 - [x] Map the legacy authoring path so a placement/character can carry a
   behavior (`LayoutBehavior` field -> adapter `BehaviorComponent` mapping ->
   `vite.config.ts` `validateBehavior` in the save-validator allowlist).
