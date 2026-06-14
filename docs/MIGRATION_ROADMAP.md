@@ -371,6 +371,27 @@ checks and only the known `/__save-layout` baseline warning.
 
 The engine-core + scene-data spine is ready for the Phase 7 vertical slice.
 
+## Active Checklists (next work)
+
+The spine is built but **inert** (`EngineApp`/`SubsystemRegistry` are unused in
+`src/`; `SceneApp` still owns the runtime loop, editor state, and a ~826 kB
+single-chunk build). The next work is tracked in four focused checklists:
+
+1. `RUNTIME_SPINE_CHECKLIST.md` — wire the tick into the runtime and add the
+   first real subsystems (input action map -> behavior update). **Foundational;
+   do first.**
+2. `EDITOR_STATE_EXTRACTION_CHECKLIST.md` — finish Phase 5: move selection /
+   command / gizmo / input **state** out of the 3672-line `SceneApp`. De-risks
+   later work; can run in parallel.
+3. `PHASE7_PHYSICS_AUDIO_CHECKLIST.md` — collider/physics + audio subsystems.
+   Depends on (1).
+4. `RUNTIME_ONLY_BUNDLE_CHECKLIST.md` — isolate `/__save-layout`, code-split the
+   editor + vendor, clear the chunk warning. Cleaner after (2); coordinates with
+   Rapier in (3).
+
+Recommended order: **1 -> 2 -> (3 + 4)**. Apply one checklist at a time; each
+step still follows build:verify -> commit -> push.
+
 ## Phase 7 - Vertical Slice Engine
 
 Goal: prove the architecture with a tiny playable scene.
