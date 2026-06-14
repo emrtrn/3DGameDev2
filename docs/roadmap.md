@@ -8,6 +8,8 @@ single-codebase game template. The stable reference remains
 
 - Use `docs/ARCHITECTURE_PLAN_SOURCE.md` as the source architecture reference.
 - Use `docs/MIGRATION_ROADMAP.md` as the execution plan.
+- Use `docs/ENGINE_CORE_ENTITY_CHECKLIST.md` to track the next engine-core and
+  entity/component spine work.
 - Keep one working `SceneApp` for both Game Mode (`/`) and Editor Mode
   (`/?editor`) until each extracted boundary is proven.
 - Keep project data local under `public/` until the `project/` boundary is
