@@ -24,14 +24,14 @@ state, the command/undo stack, gizmo interaction, and editor input binding.
 
 ## 0. Tracking
 
-- [ ] Create this checklist in `docs/`.
+- [x] Create this checklist in `docs/`.
 
 ## 1. Selection Store
 
-- [ ] Move `selection` + `selectedSelections` (and their emit/equality logic,
+- [x] Move `selection` + `selectedSelections` (and their emit/equality logic,
   `SceneApp.ts:301-302`) into an `editor/core` selection store that owns the
   state; `SceneApp` delegates to it.
-- [ ] Verify selection / multi-select / outliner sync are unchanged.
+- [x] Verify selection / multi-select / outliner sync are unchanged.
 
 ## 2. History / Command Store
 
