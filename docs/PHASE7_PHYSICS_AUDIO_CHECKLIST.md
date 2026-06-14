@@ -39,12 +39,12 @@ adapter intentionally leaves unmapped, and no audio component or manifest.
 
 ## 2. Physics Subsystem (Placeholder First)
 
-- [ ] Add a `PhysicsSubsystem` with a deterministic placeholder step
+- [x] Add a `PhysicsSubsystem` with a deterministic placeholder step
   (e.g. AABB overlap from collider + transform) that exposes contacts/sensor
   events. Render-free and engine-clean.
-- [ ] Drive it from `EngineApp.update`; expose contacts to behaviors/events so
+- [x] Drive it from `EngineApp.update`; expose contacts to behaviors/events so
   a scripted entity can react.
-- [ ] Headless test: a moving entity overlaps a static collider and the step
+- [x] Headless test: a moving entity overlaps a static collider and the step
   reports the contact deterministically.
 
 ## 3. Rapier-Backed Implementation (After Placeholder)
