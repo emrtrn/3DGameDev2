@@ -195,6 +195,7 @@ import {
 import { bindEditorInputEvents } from "@editor/input/bindings";
 import { EditorCameraController } from "@editor/input/editorCameraController";
 import { ScenePicker } from "@editor/render-three/scenePicker";
+import { computeWallSnap } from "@editor/render-three/wallSnap";
 import {
   matrixToTransform,
   transformToMatrix,
@@ -831,91 +832,19 @@ export class SceneApp {
 
     const before = this.captureTransform(selection);
     if (!before) return;
-    const snap = this.computeWallSnap(
-      selection.assetId,
-      before.position,
-      before.rotation[1],
-      before.scale,
-    );
-    if (!snap) {
+    const bounds = this.localBounds.get(selection.assetId);
+    const room = this.getRoomBounds();
+    if (!bounds || !room) {
       this.onStatus?.("No room walls found to snap to.", "warning");
       return;
     }
+    const snap = computeWallSnap(bounds, room, before.position, before.rotation[1], before.scale);
 
     this.updateSelectedTransform({
       position: snap.position,
       rotation: [before.rotation[0], snap.rotationYDeg, before.rotation[2]],
     });
     this.commitTransformChange(selection, before, "Wall snap");
-  }
-
-  /**
-   * Snaps a wall asset flush against the nearest of the room's four bounding
-   * walls (derived from the room-shell world AABB) and orients it to face the
-   * room interior. Returns the target transform, or null if no room is loaded.
-   */
-  private computeWallSnap(
-    assetId: string,
-    position: [number, number, number],
-    currentRotationYDeg: number,
-    scale: number | Vec3,
-  ): { position: [number, number, number]; rotationYDeg: number } | null {
-    const bounds = this.localBounds.get(assetId);
-    const room = this.getRoomBounds();
-    if (!bounds || !room) return null;
-
-    const center = bounds
-      .clone()
-      .applyMatrix4(
-        composePlacementMatrix({ position, rotationYDeg: currentRotationYDeg, scale }),
-      )
-      .getCenter(new Vector3());
-
-    const toMinX = center.x - room.min.x;
-    const toMaxX = room.max.x - center.x;
-    const toMinZ = center.z - room.min.z;
-    const toMaxZ = room.max.z - center.z;
-    const nearest = Math.min(toMinX, toMaxX, toMinZ, toMaxZ);
-
-    // Asset front assumed to face +Z; rotate so it faces the room interior.
-    let rotationYDeg: number;
-    let axis: "x" | "z";
-    let wallCoord: number;
-    let side: "min" | "max";
-    if (nearest === toMinX) {
-      rotationYDeg = 90;
-      axis = "x";
-      wallCoord = room.min.x;
-      side = "min";
-    } else if (nearest === toMaxX) {
-      rotationYDeg = 270;
-      axis = "x";
-      wallCoord = room.max.x;
-      side = "max";
-    } else if (nearest === toMinZ) {
-      rotationYDeg = 0;
-      axis = "z";
-      wallCoord = room.min.z;
-      side = "min";
-    } else {
-      rotationYDeg = 180;
-      axis = "z";
-      wallCoord = room.max.z;
-      side = "max";
-    }
-
-    // World box at the snapped rotation tells us how far to slide so the
-    // back face sits flush against the wall (origin-agnostic).
-    const probe = bounds
-      .clone()
-      .applyMatrix4(composePlacementMatrix({ position, rotationYDeg, scale }));
-    const next: [number, number, number] = [...position];
-    if (axis === "x") {
-      next[0] = round(position[0] + (side === "min" ? wallCoord - probe.min.x : wallCoord - probe.max.x));
-    } else {
-      next[2] = round(position[2] + (side === "min" ? wallCoord - probe.min.z : wallCoord - probe.max.z));
-    }
-    return { position: next, rotationYDeg };
   }
 
   /** Fits the sun's shadow frustum to the room AABB so shadows stay crisp. */
@@ -1521,8 +1450,10 @@ export class SceneApp {
 
     // Wall assets dropped near a wall mount flush against it, facing the room.
     if (this.isWallAsset(assetId)) {
-      const snap = this.computeWallSnap(assetId, placement.position, placement.rotationYDeg ?? 0, 1);
-      if (snap) {
+      const bounds = this.localBounds.get(assetId);
+      const room = this.getRoomBounds();
+      if (bounds && room) {
+        const snap = computeWallSnap(bounds, room, placement.position, placement.rotationYDeg ?? 0, 1);
         placement.position = snap.position;
         placement.rotationYDeg = snap.rotationYDeg;
       }

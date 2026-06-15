@@ -315,6 +315,17 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
 
+- *2026-06-15* — **Item 3 Piece 6 done — wall-snap geometry extracted + unit-tested.**
+  Moved the pure `computeWallSnap` (nearest-wall slide + interior-facing
+  orientation) into `editor/render-three/wallSnap.ts`, taking the asset/room
+  AABBs as parameters (caller now guards `localBounds`/`getRoomBounds`). Both
+  callers (`performWallSnap`, `addAssetAt`) delegate; behavior identical (the
+  old null-return path == the new bounds/room guard). Added 1 engine test
+  (40 checks) pinning the +Z-wall snap (180° + flush slide to 4.9).
+  `SceneApp.ts` 3272 → 3203 lines. Gate green (tsc, 40 tests, build). Running
+  total: 3999 → 3203 (−796, ~20%) across 6 green, pushed, editor-only pieces.
+  Next: continue pure extractions (selection helpers, duplicate/clone logic).
+
 - *2026-06-15* — **Item 3 Piece 5 done — pointer-drag transform MATH extracted + unit-tested.**
   Per the agreed approach (safe + tests; user decision 2026-06-15): extracted the
   *pure* drag arithmetic into `editor/gizmos/transformDrag.ts`
