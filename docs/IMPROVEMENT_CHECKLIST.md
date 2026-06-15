@@ -315,6 +315,18 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
 
+- *2026-06-15* — **Item 3 Piece 1 done — gizmo visual builders extracted.**
+  Moved `clearGizmo` + all `add*Gizmo`/`add*Handle`/`addRotateRing` +
+  `gizmoMaterialFor` + `registerGizmoHandle` out of `SceneApp` into a new
+  `editor/gizmos/builder.ts` (`buildGizmoHandles`, `clearGizmoGroup`,
+  `GizmoHighlight`). `SceneApp.updateGizmo` now delegates, passing the
+  `GizmoInteractionStore` directly as the highlight source (its
+  `activeHandle`/`hoveredHandle` getters satisfy `GizmoHighlight`). Dropped the
+  now-unused Three.js geometry/material imports and the gizmo axis/handle
+  imports that moved with the code. `SceneApp.ts` 3999 → 3841 lines. Gate green
+  (tsc clean, 32 engine tests, build; game `index` chunk 33.27 kB, editor code
+  stays out of it). Next: Piece 2 (editor camera controller).
+
 - *2026-06-15* — **Item 3 inventory (no code yet).** Mapped all of
   `SceneApp.ts` (3999 lines) into KEEP (shared render) vs MOVE (editor
   authoring). Baseline gate green (tsc clean, 32 engine tests). Acceptance

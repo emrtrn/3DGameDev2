@@ -10,22 +10,15 @@ import {
   AnimationMixer,
   Box3,
   Box3Helper,
-  BoxGeometry,
   Color,
-  ConeGeometry,
-  CylinderGeometry,
   DirectionalLight,
   Group,
   Matrix4,
-  Mesh,
-  MeshBasicMaterial,
   Object3D,
   Plane,
-  PlaneGeometry,
   Quaternion,
   Raycaster,
   Scene,
-  TorusGeometry,
   Vector2,
   Vector3,
 } from "three";
@@ -188,15 +181,9 @@ import {
   axisToIndex,
   isPlaneAxis,
   planeAxisIndices,
-  type GizmoAxis,
-  type GizmoPlaneAxis,
-  type GizmoVectorAxis,
 } from "@editor/gizmos/axes";
-import {
-  createGizmoHandleMaterial,
-  registerGizmoHandlePickables,
-  type GizmoHandle,
-} from "@editor/gizmos/handles";
+import { type GizmoHandle } from "@editor/gizmos/handles";
+import { buildGizmoHandles, clearGizmoGroup } from "@editor/gizmos/builder";
 import {
   calculateGizmoScreenScale,
   createGizmoMovePlane,
@@ -3597,7 +3584,7 @@ export class SceneApp {
   }
 
   private updateGizmo(): void {
-    this.clearGizmo();
+    clearGizmoGroup(this.gizmoGroup, this.gizmoPickables);
     if (!this.selection) return;
 
     const selected = this.getSelected();
@@ -3617,12 +3604,8 @@ export class SceneApp {
     }
 
     const tool = pivotEditing ? "move" : this.activeTool;
-    if (tool === "move") {
-      this.addMoveGizmo();
-    } else if (tool === "rotate") {
-      this.addRotateGizmo();
-    } else if (tool === "scale") {
-      this.addScaleGizmo();
+    if (tool === "move" || tool === "rotate" || tool === "scale") {
+      buildGizmoHandles(tool, this.gizmoGroup, this.gizmoPickables, this.gizmoInteraction);
     }
     this.updateGizmoScreenScale();
   }
@@ -3636,147 +3619,6 @@ export class SceneApp {
       viewportHeight,
     );
     this.gizmoGroup.scale.setScalar(scale);
-  }
-
-  private clearGizmo(): void {
-    for (const child of [...this.gizmoGroup.children]) {
-      child.traverse((object) => {
-        if (object instanceof Mesh) {
-          object.geometry.dispose();
-          const materials = Array.isArray(object.material) ? object.material : [object.material];
-          for (const material of materials) material.dispose();
-        }
-      });
-      child.removeFromParent();
-    }
-    this.gizmoPickables.length = 0;
-    this.gizmoGroup.scale.setScalar(1);
-    this.gizmoGroup.visible = false;
-  }
-
-  private addMoveGizmo(): void {
-    this.addArrowHandle("x", 0xe15b5b);
-    this.addArrowHandle("y", 0x69d282);
-    this.addArrowHandle("z", 0x5b8fe1);
-
-    // Two-axis plane handles, colored by the axis they are perpendicular to.
-    this.addPlaneHandle("move", "xy", 0x5b8fe1);
-    this.addPlaneHandle("move", "xz", 0x69d282);
-    this.addPlaneHandle("move", "yz", 0xe15b5b);
-
-    const center = new Mesh(
-      new BoxGeometry(0.18, 0.18, 0.18),
-      this.gizmoMaterialFor("move", "xyz", 0xf3cc5c),
-    );
-    center.name = "move-xyz-free";
-    this.registerGizmoHandle(center, { tool: "move", axis: "xyz" });
-    this.gizmoGroup.add(center);
-  }
-
-  private addRotateGizmo(): void {
-    this.addRotateRing("x", 0xe15b5b);
-    this.addRotateRing("y", 0x69d282);
-    this.addRotateRing("z", 0x5b8fe1);
-  }
-
-  private addRotateRing(axis: GizmoVectorAxis, color: number): void {
-    const ring = new Mesh(
-      new TorusGeometry(0.72, 0.01, 10, 96),
-      this.gizmoMaterialFor("rotate", axis, color),
-    );
-    ring.name = `rotate-${axis}-ring`;
-    // A torus lies in its local XY plane (normal +Z); orient each ring so its
-    // normal points down the axis it rotates about.
-    if (axis === "x") ring.rotation.y = Math.PI / 2;
-    else if (axis === "y") ring.rotation.x = Math.PI / 2;
-    this.registerGizmoHandle(ring, { tool: "rotate", axis });
-    this.gizmoGroup.add(ring);
-  }
-
-  private addScaleGizmo(): void {
-    const center = new Mesh(
-      new BoxGeometry(0.16, 0.16, 0.16),
-      this.gizmoMaterialFor("scale", "uniform", 0xf3cc5c),
-    );
-    center.name = "scale-uniform";
-    this.registerGizmoHandle(center, { tool: "scale", axis: "uniform" });
-    this.gizmoGroup.add(center);
-
-    this.addScaleHandle("x", 0xe15b5b);
-    this.addScaleHandle("y", 0x69d282);
-    this.addScaleHandle("z", 0x5b8fe1);
-
-    this.addPlaneHandle("scale", "xy", 0x5b8fe1);
-    this.addPlaneHandle("scale", "xz", 0x69d282);
-    this.addPlaneHandle("scale", "yz", 0xe15b5b);
-  }
-
-  /** Small square handle for two-axis (planar) move/scale, like Unreal's gizmo. */
-  private addPlaneHandle(tool: "move" | "scale", axis: GizmoPlaneAxis, color: number): void {
-    const size = 0.2;
-    const reach = 0.34;
-    const material = this.gizmoMaterialFor(tool, axis, color);
-    const quad = new Mesh(new PlaneGeometry(size, size), material);
-    quad.name = `${tool}-${axis}-plane`;
-    if (axis === "xy") {
-      quad.position.set(reach, reach, 0);
-    } else if (axis === "xz") {
-      quad.position.set(reach, 0, reach);
-      quad.rotation.x = -Math.PI / 2;
-    } else {
-      quad.position.set(0, reach, reach);
-      quad.rotation.y = Math.PI / 2;
-    }
-    this.registerGizmoHandle(quad, { tool, axis });
-    this.gizmoGroup.add(quad);
-  }
-
-  private addArrowHandle(axis: GizmoVectorAxis, color: number): void {
-    const group = new Group();
-    group.name = `move-${axis}-axis`;
-
-    const material = this.gizmoMaterialFor("move", axis, color);
-    const shaft = new Mesh(new CylinderGeometry(0.012, 0.012, 0.62, 8), material.clone());
-    const head = new Mesh(new ConeGeometry(0.055, 0.14, 14), material.clone());
-    shaft.position.y = 0.31;
-    head.position.y = 0.69;
-    group.add(shaft, head);
-
-    if (axis === "x") group.rotation.z = -Math.PI / 2;
-    if (axis === "z") group.rotation.x = Math.PI / 2;
-
-    this.registerGizmoHandle(group, { tool: "move", axis });
-    this.gizmoGroup.add(group);
-  }
-
-  private addScaleHandle(axis: GizmoVectorAxis, color: number): void {
-    const group = new Group();
-    group.name = `scale-${axis}-axis`;
-
-    const material = this.gizmoMaterialFor("scale", axis, color);
-    const shaft = new Mesh(new CylinderGeometry(0.01, 0.01, 0.52, 8), material.clone());
-    const handle = new Mesh(new BoxGeometry(0.11, 0.11, 0.11), material.clone());
-    shaft.position.y = 0.26;
-    handle.position.y = 0.58;
-    group.add(shaft, handle);
-
-    if (axis === "x") group.rotation.z = -Math.PI / 2;
-    if (axis === "z") group.rotation.x = Math.PI / 2;
-    this.registerGizmoHandle(group, { tool: "scale", axis });
-    this.gizmoGroup.add(group);
-  }
-
-  private gizmoMaterialFor(tool: EditorTool, axis: GizmoAxis, color: number): MeshBasicMaterial {
-    return createGizmoHandleMaterial(
-      { tool, axis },
-      color,
-      this.gizmoInteraction.activeHandle,
-      this.gizmoInteraction.hoveredHandle,
-    );
-  }
-
-  private registerGizmoHandle(object: Object3D, handle: GizmoHandle): void {
-    registerGizmoHandlePickables(object, handle, this.gizmoPickables);
   }
 
   private getMutableTransform(
