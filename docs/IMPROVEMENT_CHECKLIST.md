@@ -315,6 +315,22 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
 
+- *2026-06-15* — **Item 3 Piece 3 done — viewport raycasting extracted (ScenePicker).**
+  (Re-scoped: did picking before drag math, since the drag methods reuse
+  `clientToFloor`/`clientToPlane`.) New `editor/render-three/scenePicker.ts`
+  (`ScenePicker`) owns the scratch raycaster + NDC vector + floor plane and the
+  pointer→scene resolution: `pickSelection`, `pickGizmoHandle`, `clientToFloor`,
+  `clientToSurface`, `clientToPlane`, `raycastSurfaceBelow`, `isSelfHit`,
+  `setPointerNdc`. It reads the live scene through supplier callbacks
+  (`pickables`/`surfacePickables`/`gizmo`) so it stays correct as the scene
+  mutates. SceneApp keeps its own `raycaster`+`floorPlane` only for the
+  selection-aware orbit target (`getCameraOrbitTarget`); the `pointerNdc`+
+  `floorHit` fields and the moved imports (`findParent*`, `Intersection`,
+  `Vector2`, `pickGizmoHandle`) were dropped. Call sites delegate to
+  `this.picker.*`. Logic byte-identical. `SceneApp.ts` 3615 → 3514 lines. Gate
+  green (tsc, 32 tests, build; editor-only). Next: drag-math controller (reuses
+  the picker), then wall/surface snapping.
+
 - *2026-06-15* — **Item 3 Piece 2 done — editor camera controller extracted.**
   New `editor/input/editorCameraController.ts` (`EditorCameraController`) owns
   all viewport-camera navigation state (fly/orbit/pan/dolly, yaw/pitch, move

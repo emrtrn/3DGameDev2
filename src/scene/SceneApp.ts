@@ -19,10 +19,9 @@ import {
   Quaternion,
   Raycaster,
   Scene,
-  Vector2,
   Vector3,
 } from "three";
-import type { InstancedMesh, Intersection, PerspectiveCamera, WebGLRenderer } from "three";
+import type { InstancedMesh, PerspectiveCamera, WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
@@ -65,11 +64,6 @@ import {
   syncLightObject,
   type LightObjectRecord,
 } from "@engine/render-three/lights";
-import {
-  findParentCharacter,
-  findParentInstancedMesh,
-  findParentLight,
-} from "@engine/render-three/picking";
 import {
   applyResponsiveCameraViewport,
   createSceneCamera,
@@ -190,13 +184,13 @@ import {
   createGizmoPointerDrag,
   gizmoDragBaseWorld,
   GizmoInteractionStore,
-  pickGizmoHandle as pickGizmoHandleFromObjects,
   screenSpaceMoveBasis,
   type GizmoPointerDrag,
   type LinkedMoveStart,
 } from "@editor/gizmos/interaction";
 import { bindEditorInputEvents } from "@editor/input/bindings";
 import { EditorCameraController } from "@editor/input/editorCameraController";
+import { ScenePicker } from "@editor/render-three/scenePicker";
 import {
   matrixToTransform,
   transformToMatrix,
@@ -311,12 +305,13 @@ export class SceneApp {
   };
   private readonly canvas: HTMLCanvasElement;
   private readonly editorEnabled: boolean;
+  /** Scratch raycaster + floor plane for the selection-aware orbit target. */
   private readonly raycaster = new Raycaster();
-  private readonly pointerNdc = new Vector2();
   private readonly floorPlane = new Plane(new Vector3(0, 1, 0), 0);
-  private readonly floorHit = new Vector3();
   /** Editor viewport camera (fly / orbit / pan / dolly). Editor-only. */
   private readonly cameraController: EditorCameraController;
+  /** Editor viewport raycasting (selection / gizmo / surface picks). */
+  private readonly picker: ScenePicker;
 
   private manifest: AssetManifest | null = null;
   private metadataSchema: MetadataSchema | null = null;
@@ -386,6 +381,24 @@ export class SceneApp {
         this.pendingAssetId = null;
       },
       onStatus: (message, tone) => this.onStatus?.(message, tone),
+    });
+    this.picker = new ScenePicker({
+      camera: this.camera,
+      canvas: this.canvas,
+      pickables: () => {
+        const objects: Object3D[] = [];
+        for (const meshes of this.instanceMeshes.values()) objects.push(...meshes);
+        objects.push(...this.characterObjects);
+        for (const record of this.lightObjects) objects.push(record.root);
+        return objects;
+      },
+      surfacePickables: () => {
+        const objects: Object3D[] = [];
+        for (const meshes of this.instanceMeshes.values()) objects.push(...meshes);
+        objects.push(...this.characterObjects);
+        return objects;
+      },
+      gizmo: () => ({ visible: this.gizmoGroup.visible, pickables: this.gizmoPickables }),
     });
 
     this.gizmoGroup.name = "editor-transform-gizmo";
@@ -835,7 +848,7 @@ export class SceneApp {
     const centerZ = (box.min.z + box.max.z) / 2;
     // Start a hair above the bottom so a surface flush with it still registers.
     const origin = new Vector3(centerX, box.min.y + 0.02, centerZ);
-    const surfaceY = this.raycastSurfaceBelow(origin, this.selection);
+    const surfaceY = this.picker.raycastSurfaceBelow(origin, this.selection);
     // Fall back to the floor plane (y = 0) when nothing solid is underneath.
     const restY = surfaceY ?? 0;
     const deltaY = restY - box.min.y;
@@ -856,35 +869,6 @@ export class SceneApp {
       before,
       surfaceY === null ? "Surface snap (floor)" : "Surface snap",
     );
-  }
-
-  private raycastSurfaceBelow(origin: Vector3, exclude: Selection): number | null {
-    const ray = new Raycaster(origin, new Vector3(0, -1, 0), 0, 1000);
-
-    const pickables: Object3D[] = [];
-    for (const meshes of this.instanceMeshes.values()) pickables.push(...meshes);
-    pickables.push(...this.characterObjects);
-    pickables.push(...this.lightObjects.map((entry) => entry.root));
-
-    const hits = ray.intersectObjects(pickables, true);
-    for (const hit of hits) {
-      if (this.isSelfHit(hit, exclude)) continue;
-      return hit.point.y;
-    }
-    return null;
-  }
-
-  private isSelfHit(hit: Intersection, selection: Selection): boolean {
-    if (selection.kind === "instance") {
-      const mesh = findParentInstancedMesh(hit.object);
-      return Boolean(
-        mesh &&
-          String(mesh.userData.assetId ?? "") === selection.assetId &&
-          hit.instanceId === selection.placementIndex,
-      );
-    }
-    const character = findParentCharacter(hit.object);
-    return character ? Number(character.userData.characterIndex) === selection.index : false;
   }
 
   /** End / "Snap" button entry: wall-snaps wall assets, otherwise surface-snaps. */
@@ -1642,7 +1626,7 @@ export class SceneApp {
 
   addAssetAt(assetId: string, clientX: number, clientY: number): void {
     if (!this.layout || !this.models.has(assetId)) return;
-    const hit = this.clientToSurface(clientX, clientY);
+    const hit = this.picker.clientToSurface(clientX, clientY);
     if (!hit) return;
 
     const x = snapValue(hit.x, this.snapSettings.move, this.snapSettings.moveEnabled);
@@ -2666,11 +2650,11 @@ export class SceneApp {
         this.pendingAssetId = null;
         return true;
       },
-      pickGizmoHandle: (clientX, clientY) => this.pickGizmoHandle(clientX, clientY),
+      pickGizmoHandle: (clientX, clientY) => this.picker.pickGizmoHandle(clientX, clientY),
       startGizmoDrag: (handle, event) => this.startGizmoDrag(handle, event),
       beginAltCameraDrag: (event) => this.cameraController.beginAltDrag(event),
       beginCameraNavigation: (event) => this.cameraController.beginNavigation(event),
-      pickSelection: (clientX, clientY) => this.pickSelection(clientX, clientY),
+      pickSelection: (clientX, clientY) => this.picker.pickSelection(clientX, clientY),
       toggleSelection: (selection) => this.toggleSelection(selection),
       select: (selection) => this.select(selection),
       isCameraNavigationActive: () => this.cameraController.isNavigating,
@@ -2758,7 +2742,7 @@ export class SceneApp {
     const base = gizmoDragBaseWorld(selected, pivotWorld, pivotEditing);
     const movePlane = createGizmoMovePlane(handle, base, this.gizmoGroup.quaternion);
     const planeStartHit = movePlane
-      ? this.clientToPlane(event.clientX, event.clientY, movePlane) ?? base.clone()
+      ? this.picker.clientToPlane(event.clientX, event.clientY, movePlane) ?? base.clone()
       : undefined;
     this.pointerDrag = createGizmoPointerDrag({
       handle,
@@ -2767,7 +2751,7 @@ export class SceneApp {
       pointerId: event.pointerId,
       clientX: event.clientX,
       clientY: event.clientY,
-      floorHit: handle.tool === "move" ? this.clientToFloor(event.clientX, event.clientY) : null,
+      floorHit: handle.tool === "move" ? this.picker.clientToFloor(event.clientX, event.clientY) : null,
       freeMoveBasis: this.getScreenSpaceMoveBasis(),
       linkedTransforms,
       descendantTransforms:
@@ -2821,7 +2805,7 @@ export class SceneApp {
     }
 
     if (isPlaneAxis(this.pointerDrag.axis) && this.pointerDrag.movePlane && this.pointerDrag.planeStartHit) {
-      const hit = this.clientToPlane(event.clientX, event.clientY, this.pointerDrag.movePlane);
+      const hit = this.picker.clientToPlane(event.clientX, event.clientY, this.pointerDrag.movePlane);
       if (!hit) return;
       const delta = hit.sub(this.pointerDrag.planeStartHit);
       const start = this.pointerDrag.startPosition;
@@ -2847,7 +2831,7 @@ export class SceneApp {
       return;
     }
 
-    const hit = this.clientToFloor(event.clientX, event.clientY);
+    const hit = this.picker.clientToFloor(event.clientX, event.clientY);
     if (!hit) return;
 
     if (
@@ -3004,22 +2988,10 @@ export class SceneApp {
     this.emitSelectionChanged();
   }
 
-  private pickGizmoHandle(clientX: number, clientY: number): GizmoHandle | null {
-    if (!this.gizmoGroup.visible || this.gizmoPickables.length === 0) return null;
-    this.setPointerNdc(clientX, clientY);
-    return pickGizmoHandleFromObjects(
-      this.raycaster,
-      this.camera,
-      this.pointerNdc,
-      this.gizmoGroup.visible,
-      this.gizmoPickables,
-    );
-  }
-
   /** Highlights the handle under the cursor (idle, not dragging) so it's clear what a click will grab. */
   private updateGizmoHover(clientX: number, clientY: number): void {
     if (this.cameraController.isInteracting) return;
-    const handle = this.gizmoGroup.visible ? this.pickGizmoHandle(clientX, clientY) : null;
+    const handle = this.gizmoGroup.visible ? this.picker.pickGizmoHandle(clientX, clientY) : null;
     const changed = this.gizmoInteraction.setHover(handle);
     if (!changed) return;
     this.canvas.style.cursor = handle ? "pointer" : "";
@@ -3034,46 +3006,6 @@ export class SceneApp {
 
   private getScreenSpaceMoveBasis(): { right: Vector3; up: Vector3 } {
     return screenSpaceMoveBasis(this.camera.quaternion);
-  }
-
-  private clientToPlane(clientX: number, clientY: number, plane: Plane): Vector3 | null {
-    this.setPointerNdc(clientX, clientY);
-    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
-    const target = new Vector3();
-    return this.raycaster.ray.intersectPlane(plane, target) ? target : null;
-  }
-
-  private pickSelection(clientX: number, clientY: number): Selection | null {
-    this.setPointerNdc(clientX, clientY);
-    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
-
-    const pickables: Object3D[] = [];
-    for (const meshes of this.instanceMeshes.values()) pickables.push(...meshes);
-    pickables.push(...this.characterObjects);
-    for (const record of this.lightObjects) pickables.push(record.root);
-
-    const hits = this.raycaster.intersectObjects(pickables, true);
-    for (const hit of hits) {
-      const mesh = findParentInstancedMesh(hit.object);
-      if (mesh) {
-        const assetId = String(mesh.userData.assetId ?? "");
-        if (!assetId || hit.instanceId == null) continue;
-        return { kind: "instance", assetId, placementIndex: hit.instanceId };
-      }
-
-      const character = findParentCharacter(hit.object);
-      if (character) {
-        const index = Number(character.userData.characterIndex);
-        if (Number.isInteger(index)) return { kind: "character", index };
-      }
-
-      const light = findParentLight(hit.object);
-      if (light) {
-        const index = Number(light.userData.lightIndex);
-        if (Number.isInteger(index)) return { kind: "light", index };
-      }
-    }
-    return null;
   }
 
   private select(selection: Selection | null): void {
@@ -3563,39 +3495,6 @@ export class SceneApp {
     }
     if (selection.kind === "light") return Boolean(this.layout.lights?.[selection.index]);
     return Boolean(this.layout.characters[selection.index]);
-  }
-
-  private clientToFloor(clientX: number, clientY: number): Vector3 | null {
-    this.setPointerNdc(clientX, clientY);
-    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
-    const hit = this.raycaster.ray.intersectPlane(this.floorPlane, this.floorHit);
-    return hit ? this.floorHit.clone() : null;
-  }
-
-  /**
-   * Resolves the cursor to a placement point: the nearest scene surface under
-   * the cursor (so assets land on table/shelf tops), falling back to the floor
-   * plane (y = 0) when no geometry is hit.
-   */
-  private clientToSurface(clientX: number, clientY: number): Vector3 | null {
-    this.setPointerNdc(clientX, clientY);
-    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
-
-    const pickables: Object3D[] = [];
-    for (const meshes of this.instanceMeshes.values()) pickables.push(...meshes);
-    pickables.push(...this.characterObjects);
-
-    const hits = this.raycaster.intersectObjects(pickables, true);
-    if (hits[0]) return hits[0].point.clone();
-
-    const floor = this.raycaster.ray.intersectPlane(this.floorPlane, this.floorHit);
-    return floor ? this.floorHit.clone() : null;
-  }
-
-  private setPointerNdc(clientX: number, clientY: number): void {
-    const rect = this.canvas.getBoundingClientRect();
-    this.pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointerNdc.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
   }
 
   private handleResize = (): void => {
