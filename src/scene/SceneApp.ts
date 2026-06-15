@@ -17,10 +17,9 @@ import {
   Object3D,
   Plane,
   Raycaster,
-  Scene,
   Vector3,
 } from "three";
-import type { InstancedMesh, PerspectiveCamera, WebGLRenderer } from "three";
+import type { InstancedMesh, PerspectiveCamera, Scene, WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
@@ -63,13 +62,11 @@ import {
   type LightObjectRecord,
 } from "@engine/render-three/lights";
 import {
-  applyResponsiveCameraViewport,
-  createSceneCamera,
-} from "@engine/render-three/camera";
-import {
-  createSceneRenderer,
-  readRenderStats,
-} from "@engine/render-three/renderer";
+  createSceneRuntimeCore,
+  readSceneRuntimeStats,
+  resizeSceneRuntimeViewport,
+  SCENE_CAMERA_TARGET,
+} from "./SceneRuntimeCore";
 import {
   defaultLightIntensity,
   formatLightType,
@@ -191,8 +188,6 @@ export type {
 } from "@editor/core/history";
 
 /** Perf budget: clamp DPR so 1080p+ phones don't render 3x fragments. */
-const MAX_PIXEL_RATIO = 2;
-const CAMERA_TARGET = new Vector3(0, 0.65, -0.2);
 const DEFAULT_STATIC_OBJECTS_CAST_SHADOWS = false;
 const DEFAULT_STATIC_OBJECTS_RECEIVE_SHADOWS = true;
 const DEFAULT_LIGHT_COLOR = "#ffffff";
@@ -242,7 +237,7 @@ export type LayoutSaver = (payload: LayoutSavePayload) => Promise<LayoutSaveResu
 
 export class SceneApp {
   private renderer: WebGLRenderer;
-  private scene = new Scene();
+  private scene: Scene;
   private camera: PerspectiveCamera;
   private sun: DirectionalLight | null = null;
   private ambientLight: AmbientLight | null = null;
@@ -349,9 +344,12 @@ export class SceneApp {
     this.canvas = canvas;
     this.editorEnabled = options.enabled;
 
-    this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
-    this.scene.background = new Color(0xd7d7c7);
-    this.camera = createSceneCamera();
+    const runtimeCore = createSceneRuntimeCore(canvas, {
+      backgroundColor: DEFAULT_BACKGROUND_COLOR,
+    });
+    this.renderer = runtimeCore.renderer;
+    this.scene = runtimeCore.scene;
+    this.camera = runtimeCore.camera;
     this.editorSceneController = new EditorSceneController({
       applyCastShadow: (selection) => this.applyCastShadow(selection),
       applyGroupId: (selection, groupId, options) =>
@@ -491,7 +489,7 @@ export class SceneApp {
   }
 
   getRenderStats(): { drawCalls: number; triangles: number } {
-    return readRenderStats(this.renderer);
+    return readSceneRuntimeStats(this.renderer);
   }
 
   async getManifest(): Promise<AssetManifest> {
@@ -707,7 +705,7 @@ export class SceneApp {
     const viewDirection = new Vector3();
     this.camera.getWorldDirection(viewDirection);
     if (viewDirection.lengthSq() === 0) {
-      viewDirection.copy(CAMERA_TARGET).sub(this.camera.position).normalize();
+      viewDirection.copy(SCENE_CAMERA_TARGET).sub(this.camera.position).normalize();
     }
 
     const radius = box && !box.isEmpty() ? box.getSize(new Vector3()).length() * 0.5 : 0.8;
@@ -2467,15 +2465,15 @@ export class SceneApp {
   private handleResize = (): void => {
     const width = window.innerWidth;
     const height = window.innerHeight;
-    const resetView = applyResponsiveCameraViewport(this.camera, {
+    const resetView = resizeSceneRuntimeViewport({
+      camera: this.camera,
+      renderer: this.renderer,
       width,
       height,
-      target: CAMERA_TARGET,
       viewTouched: this.cameraController.hasTouched,
     });
     if (resetView) {
       this.cameraController.syncAnglesFromCurrentView();
     }
-    this.renderer.setSize(width, height, false);
   };
 }

@@ -6,10 +6,9 @@ import {
   DirectionalLight,
   Group,
   Object3D,
-  Scene,
   Vector3,
 } from "three";
-import type { InstancedMesh, PerspectiveCamera, WebGLRenderer } from "three";
+import type { InstancedMesh, PerspectiveCamera, Scene, WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
@@ -25,13 +24,10 @@ import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { loadActiveProject, type ActiveProject } from "@/project/ProjectSystem";
 import {
-  applyResponsiveCameraViewport,
-  createSceneCamera,
-} from "@engine/render-three/camera";
-import {
-  createSceneRenderer,
-  readRenderStats,
-} from "@engine/render-three/renderer";
+  createSceneRuntimeCore,
+  readSceneRuntimeStats,
+  resizeSceneRuntimeViewport,
+} from "./SceneRuntimeCore";
 import {
   createCharacterSceneObject,
   createInstancedModelGroup,
@@ -54,8 +50,6 @@ import {
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import type { TransformComponent } from "@engine/scene/components";
 
-const MAX_PIXEL_RATIO = 2;
-const CAMERA_TARGET = new Vector3(0, 0.65, -0.2);
 const DEFAULT_STATIC_OBJECTS_CAST_SHADOWS = false;
 const DEFAULT_STATIC_OBJECTS_RECEIVE_SHADOWS = true;
 const DEFAULT_LIGHT_COLOR = "#ffffff";
@@ -83,7 +77,7 @@ export interface RuntimeStatsApp {
 
 export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly renderer: WebGLRenderer;
-  private readonly scene = new Scene();
+  private readonly scene: Scene;
   private readonly camera: PerspectiveCamera;
   private readonly engineApp = new EngineApp();
   private readonly animationSubsystem = new AnimationSubsystem();
@@ -122,9 +116,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   };
 
   constructor(canvas: HTMLCanvasElement) {
-    this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
-    this.scene.background = new Color(DEFAULT_BACKGROUND_COLOR);
-    this.camera = createSceneCamera();
+    const runtimeCore = createSceneRuntimeCore(canvas, {
+      backgroundColor: DEFAULT_BACKGROUND_COLOR,
+    });
+    this.renderer = runtimeCore.renderer;
+    this.scene = runtimeCore.scene;
+    this.camera = runtimeCore.camera;
 
     this.engineApp.registerSubsystem(this.animationSubsystem);
     this.engineApp.registerSubsystem(this.inputSubsystem);
@@ -167,7 +164,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   getRenderStats(): { drawCalls: number; triangles: number } {
-    return readRenderStats(this.renderer);
+    return readSceneRuntimeStats(this.renderer);
   }
 
   private async loadActiveProjectScene(): Promise<void> {
@@ -356,14 +353,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   private handleResize = (): void => {
-    const resetView = applyResponsiveCameraViewport(this.camera, {
+    const resetView = resizeSceneRuntimeViewport({
+      camera: this.camera,
+      renderer: this.renderer,
       width: window.innerWidth,
       height: window.innerHeight,
-      target: CAMERA_TARGET,
       viewTouched: this.cameraViewTouched,
     });
     if (resetView) this.cameraViewTouched = false;
-    this.renderer.setSize(window.innerWidth, window.innerHeight, false);
   };
 }
 

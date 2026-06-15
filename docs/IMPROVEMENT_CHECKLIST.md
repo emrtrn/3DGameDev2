@@ -23,6 +23,7 @@ future session (Claude/Codex) can resume without re-deriving context.
 | 2 | Rapier physics always loaded at runtime | Medium (2.18 MB) | Low–Med | `[x]` |
 | 3 | Extract editor-only logic out of `SceneApp` | Medium (maintainability) | High | `[x]` |
 | 4 | Smoke tests for load/save + game/editor split | Medium (safety net) | Medium | `[x]` |
+| 5 | Consolidate `SceneApp` / `RuntimeSceneApp` shared runtime core | Medium (drift risk) | Med-High | `[~]` |
 
 Always-true gate before marking any item `[x]`:
 
@@ -321,10 +322,71 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 
 ---
 
+## Item 5 — Consolidate `SceneApp` / `RuntimeSceneApp` shared runtime core  `[~]`
+
+**Severity:** Medium — drift risk between editor viewport and game runtime.
+
+### Problem
+
+`SceneApp` and `RuntimeSceneApp` are intentionally separate shells, but they
+still duplicate shared render/runtime concerns: renderer/camera setup,
+responsive viewport resizing, render stats, asset/layout scene build, character
+and light construction, background/ambient application, sun shadow fitting, and
+engine subsystem wiring.
+
+### Root cause
+
+Item 3 prioritized moving editor-only authoring logic out of `SceneApp`. The
+remaining shared runtime duplication was explicitly deferred as Item 3b so the
+line-count milestone could land safely.
+
+### Plan
+
+1. Update the architecture contract to describe the current split:
+   `RuntimeSceneApp` for Game Mode, `SceneApp` for Editor Mode, shared helpers
+   underneath both.
+2. Extract the smallest safe shared core first: renderer/camera/stats/resize
+   helpers with no editor imports.
+3. In later pieces, move scene-build helpers (`createInstancedModel`,
+   character/light creation, default lights, sun bounds, background/ambient)
+   behind a shared scene runtime API.
+4. Leave `loadActiveProjectScene` consolidation for last; it touches the most
+   editor-specific behavior and should only move after the lower-level helpers
+   are shared.
+
+### Acceptance criteria
+
+- Game Mode still imports no editor modules.
+- `RuntimeSceneApp` and `SceneApp` both use the shared runtime helper for any
+  extracted concern.
+- `npm run build:verify` stays green after every piece.
+
+### Verification
+
+```bash
+npm run build:verify
+```
+
+---
+
 ## Progress Log
 
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
+
+- *2026-06-15* — **Item 5 Piece 1 done — architecture split documented + render core helper started.**
+  Created branch `refactor/shared-scene-runtime-core`. Updated
+  `docs/ARCHITECTURE.md` to reflect the current split: `RuntimeSceneApp` is the
+  Game Mode shell, `SceneApp` is the Editor Mode viewport shell, and shared
+  runtime concerns should move under explicit scene helpers. Added
+  `src/scene/SceneRuntimeCore.ts` with shared renderer/camera creation, render
+  stats, responsive viewport resize, and the common scene camera target. Both
+  `SceneApp` and `RuntimeSceneApp` now use this helper while keeping their own
+  view-touched policies. `SceneApp.ts` 2481 → 2479 lines;
+  `RuntimeSceneApp.ts` 374 → 370 lines. Next Item 5 pieces should target
+  scene-build helpers (`createInstancedModel`, character/light construction,
+  default lights, sun bounds, background/ambient) before touching
+  `loadActiveProjectScene`.
 
 - *2026-06-15* — **Item 3 stretch Piece 5 done — flags/default-true/metadata moved; `<2500` reached.**
   Moved hidden/locked bulk flag commands, default-true detail fields
