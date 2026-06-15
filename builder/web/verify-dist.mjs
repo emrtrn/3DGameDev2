@@ -65,6 +65,11 @@ const FAIL_TOKENS = [
   { token: "GizmoInteractionStore", reason: "editor gizmo interaction state leaked into the runtime bundle" },
   { token: "bindEditorInputEvents", reason: "editor DOM input binding leaked into the runtime bundle" },
   { token: "createGizmoPointerDrag", reason: "editor gizmo drag setup leaked into the runtime bundle" },
+  { token: "EditorCameraController", reason: "editor viewport camera leaked into the runtime bundle" },
+  { token: "ScenePicker", reason: "editor viewport raycaster leaked into the runtime bundle" },
+  // CSS guard: locks Item 1's editor-stylesheet split. `.editor-shell` is the
+  // editor UI root class (src/editor/editorUi.css); it must never reach dist.
+  { token: "editor-shell", reason: "editor UI CSS leaked into the runtime stylesheet (Item 1 regression)" },
 ];
 
 // Warnings: known authoring-code-in-game-chunk debt, expected to disappear once

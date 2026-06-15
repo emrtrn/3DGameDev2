@@ -22,7 +22,7 @@ future session (Claude/Codex) can resume without re-deriving context.
 | 1 | Editor CSS leaks into production bundle | High (contract violation) | Low | `[x]` |
 | 2 | Rapier physics always loaded at runtime | Medium (2.18 MB) | Low–Med | `[x]` |
 | 3 | Extract editor-only logic out of `SceneApp` | Medium (maintainability) | High | `[ ]` |
-| 4 | Smoke tests for load/save + game/editor split | Medium (safety net) | Medium | `[~]` |
+| 4 | Smoke tests for load/save + game/editor split | Medium (safety net) | Medium | `[x]` |
 
 Always-true gate before marking any item `[x]`:
 
@@ -260,7 +260,18 @@ npx tsc --noEmit && npm run test:engine && npm run build
 
 ---
 
-## Item 4 — Smoke tests for load/save + game/editor split  `[~]`
+## Item 4 — Smoke tests for load/save + game/editor split  `[x]`
+
+> Done 2026-06-15 (branch `test/item4-smoke-tests`). (1) Extracted the
+> `/__save-layout` validator to `tools/saveValidator.ts` and added 3 engine
+> tests: load/save round-trip idempotency on `render-test-room.json` + two
+> allowlist-footgun guards (unknown placement/light fields dropped, known kept).
+> (2) The dist editor-leak guard (`builder/web/verify-dist.mjs`) already existed
+> and is wired into `npm run build:verify` (`--strict`); strengthened it with
+> `EditorCameraController`/`ScenePicker` (Item 3 modules) and the `editor-shell`
+> CSS token (locks Item 1). `npm run build:verify` green end-to-end: build + 44
+> engine tests + strict dist scan (15 tokens, 0 leaks). All acceptance criteria
+> met.
 
 **Severity:** Medium — safety net. CLAUDE.md "Near-Term Order #2".
 
@@ -314,6 +325,18 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
+
+- *2026-06-15* — **Item 4 DONE — dist editor-leak guard strengthened + gate green.**
+  `builder/web/verify-dist.mjs` already scanned `dist` for editor/runtime
+  boundary leaks and was already wired into `npm run build:verify`
+  (`verify:dist -- --strict`); confirmed it passes strict on the current build.
+  Strengthened `FAIL_TOKENS` with `EditorCameraController` + `ScenePicker`
+  (Item 3 editor modules) and `editor-shell` (the editor UI root CSS class →
+  locks Item 1's stylesheet split). `npm run build:verify` green end-to-end:
+  build + 44 engine tests + strict dist scan (15 tokens, 0 leaks). Item 4
+  complete; all four checklist items now `[x]` except the Item 3 `<2500`
+  stretch. Next: resume Item 3 toward `<2500` (the `EditorSceneController`
+  orchestration extraction) — now backed by Item 4's save-path + boundary nets.
 
 - *2026-06-15* — **Item 4 started — save validator extracted + load/save tests.**
   (New branch `test/item4-smoke-tests` off the Item 3 tip / PR #1. Started Item 4
