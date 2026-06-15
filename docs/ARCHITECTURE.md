@@ -11,12 +11,19 @@ before changing code.
 
 ## Direction
 
-**Forge** is a reusable, single-codebase Three.js game template. One
-`SceneApp` serves both the player-facing game and the editor viewport, so there
-is no separate runtime to drift from the editor.
+**Forge** is a reusable, single-codebase Three.js game template. The
+player-facing route and the editor viewport now use separate shells over shared
+scene/runtime helpers:
+
+- `RuntimeSceneApp` owns the Game Mode shell and must stay free of editor
+  imports.
+- `SceneApp` owns the Editor Mode viewport shell and hosts editor-only
+  controllers through narrow scene callbacks.
+- Shared render, scene-build, and subsystem concerns should move into explicit
+  scene runtime helpers instead of being copied between the two shells.
 
 - Default route `/` is Game Mode: runtime render, no editor UI.
-- `/?editor` is Editor Mode: the same `SceneApp` plus `EditorUi`.
+- `/?editor` is Editor Mode: `SceneApp` plus `EditorUi`.
 - `?debug` adds the perf overlay in either mode.
 - A new game starts by copying this repository, then replacing the GDD, assets,
   layouts, and project-specific game content.
@@ -43,7 +50,8 @@ Kept dev middleware:
 
 Template/editor code lives in this repo:
 
-- `src/scene/`: shared SceneApp, runtime render path, scene loading, save hooks.
+- `src/scene/`: `RuntimeSceneApp`, editor `SceneApp`, shared scene runtime
+  helpers, scene loading, and save hooks.
 - `src/editor/`: editor UI, selection panels, authoring affordances.
 - `src/project/`: local manifest loading and project public-path helpers.
 - `public/project.3dgame.json`: this copy's project identity and editor settings.
@@ -70,9 +78,11 @@ docs, raw authoring assets, or local dev scripts.
 
 ## Dependency Rules
 
-- Game Mode must not import `src/editor/*`.
+- Game Mode (`RuntimeSceneApp` and the `/` branch in `src/main.ts`) must not
+  import `src/editor/*` or `editor/*`.
 - The `EditorUi` import must remain behind `?editor` and `import.meta.env.DEV`.
-- Editor code may depend on shared scene/project APIs.
+- Editor code may depend on shared scene/project APIs and editor-owned
+  controller modules.
 - Shared project/layout data must stay plain JSON or serializable TypeScript
   types; do not store Three.js objects in saved data.
 - Runtime code should load project files through manifest-relative public URLs,
@@ -201,7 +211,7 @@ Purpose: player-facing game route.
 
 Allowed:
 
-- shared SceneApp runtime render;
+- `RuntimeSceneApp` and shared scene runtime helpers;
 - runtime assets and layout data;
 - game UI and game systems;
 - debug overlay only when explicitly requested.
@@ -293,7 +303,7 @@ Forge/
   src/core/      shared utility/core code
   src/editor/    dev-only editor UI and authoring panels
   src/project/   local project manifest/path helpers
-  src/scene/     shared game/editor scene runtime
+  src/scene/     RuntimeSceneApp, editor SceneApp, shared scene runtime helpers
   tools/         local dev-server helpers
   dist/          production build output
 ```
