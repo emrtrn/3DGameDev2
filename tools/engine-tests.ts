@@ -1123,6 +1123,105 @@ check("EditorSceneController groups and parents through undoable host mutations"
   assert.ok(statuses.includes("Parent 1 to instance:desk:0"));
 });
 
+check("EditorSceneController duplicates and deletes layout objects through host mutations", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "controller-layout",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "chair",
+        placements: [{ position: [0, 0, 0], groupId: "g1", nodeId: "n1" }],
+      },
+    ],
+    characters: [{ assetId: "npc", position: [1, 0, 0], groupId: "g1" }],
+    lights: [{ id: "lamp", type: "point", position: [0, 2, 0], groupId: "g1" }],
+  };
+  const allSelections = (): Selection[] => [
+    ...layout.instances.flatMap((instance) =>
+      instance.placements.map((_placement, placementIndex) => ({
+        kind: "instance" as const,
+        assetId: instance.assetId,
+        placementIndex,
+      })),
+    ),
+    ...layout.characters.map((_character, index) => ({ kind: "character" as const, index })),
+    ...(layout.lights ?? []).map((_light, index) => ({ kind: "light" as const, index })),
+  ];
+  const mutableTransform = (selection: Selection): HeadlessTransform | null => {
+    if (selection.kind === "instance") {
+      return (
+        layout.instances.find((instance) => instance.assetId === selection.assetId)?.placements[
+          selection.placementIndex
+        ] ?? null
+      );
+    }
+    if (selection.kind === "character") return layout.characters[selection.index] ?? null;
+    return layout.lights?.[selection.index] ?? null;
+  };
+  const controller = new EditorSceneController({
+    applyGroupId: (selection, groupId) => {
+      const transform = mutableTransform(selection);
+      if (!transform) return;
+      if (groupId) transform.groupId = groupId;
+      else delete transform.groupId;
+    },
+    descendantsOf: () => [],
+    emitHistoryChanged: () => {},
+    emitSelectionChanged: () => {},
+    getAllSelections: allSelections,
+    getGroupedSelections: (selection) => [selection],
+    getMutableLayout: () => layout,
+    getMutableTransform: mutableTransform,
+    getSelectionLabel: (selection) => selectionId(selection),
+    hasSelection: (selection) => mutableTransform(selection) !== null,
+    createLightId: (type) => `${type}-copy`,
+    insertCharacterPlacement: (index, placement) => {
+      layout.characters.splice(index, 0, { ...placement });
+    },
+    insertInstancePlacement: (assetId, placementIndex, placement) => {
+      const instance = layout.instances.find((entry) => entry.assetId === assetId);
+      assert.ok(instance, `missing instance bucket ${assetId}`);
+      instance.placements.splice(placementIndex, 0, { ...placement });
+    },
+    insertLightActor: (index, actor) => {
+      layout.lights ??= [];
+      layout.lights.splice(index, 0, { ...actor });
+    },
+    onStatus: () => {},
+    removeCharacterPlacement: (index) => layout.characters.splice(index, 1)[0] ?? null,
+    removeInstancePlacement: (assetId, placementIndex) => {
+      const instance = layout.instances.find((entry) => entry.assetId === assetId);
+      return instance?.placements.splice(placementIndex, 1)[0] ?? null;
+    },
+    removeLightActor: (index) => layout.lights?.splice(index, 1)[0] ?? null,
+    updateGizmo: () => {},
+    updateSelectionBox: () => {},
+  });
+
+  controller.selectMany(allSelections(), allSelections()[0] ?? null);
+  controller.duplicateSelected();
+  assert.equal(layout.instances[0]?.placements.length, 2);
+  assert.equal(layout.characters.length, 2);
+  assert.equal(layout.lights?.length, 2);
+  assert.equal(layout.instances[0]?.placements[1]?.groupId, undefined);
+  assert.equal(layout.instances[0]?.placements[1]?.nodeId, "n1");
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements.length, 1);
+  assert.equal(layout.characters.length, 1);
+  assert.equal(layout.lights?.length, 1);
+
+  controller.selectMany(allSelections(), allSelections()[0] ?? null);
+  controller.deleteSelected();
+  assert.equal(layout.instances[0]?.placements.length, 0);
+  assert.equal(layout.characters.length, 0);
+  assert.equal(layout.lights?.length, 0);
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements.length, 1);
+  assert.equal(layout.characters.length, 1);
+  assert.equal(layout.lights?.length, 1);
+});
+
 // ===========================================================================
 // Section 8 - Gizmo transform-drag math (pure, extracted from SceneApp)
 // ===========================================================================

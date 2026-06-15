@@ -106,9 +106,6 @@ import {
   cloneLightActor,
   cloneMetadataValue,
   clonePlacement,
-  cloneUngroupedCharacter,
-  cloneUngroupedLightActor,
-  cloneUngroupedPlacement,
   lightActorsEqual,
   transformsEqual,
 } from "@editor/core/layoutSnapshots";
@@ -151,17 +148,10 @@ import {
 } from "@editor/core/hierarchy";
 import { uniqueEditorId } from "@editor/core/ids";
 import {
-  compareCharacterDeletes,
-  compareCharacterRestores,
-  compareInstanceDeletes,
-  compareInstanceRestores,
-  compareLightDeletes,
-  compareLightRestores,
   cloneSelection,
   parseSelectionId,
   selectionId,
   selectionsEqual,
-  type CharacterSelection,
   type InstanceSelection,
   type LightSelection,
   type Selection,
@@ -381,10 +371,20 @@ export class SceneApp {
       emitSelectionChanged: () => this.emitSelectionChanged(),
       getAllSelections: (options) => this.getAllSelections(options),
       getGroupedSelections: (selection) => this.getGroupedSelections(selection),
+      getMutableLayout: () => this.layout,
       getMutableTransform: (selection) => this.getMutableTransform(selection),
       getSelectionLabel: (selection) => this.getSelectionLabel(selection),
       hasSelection: (selection) => this.hasSelection(selection),
+      createLightId: (type) => this.createLightId(type),
+      insertCharacterPlacement: (index, placement) => this.insertCharacterPlacement(index, placement),
+      insertInstancePlacement: (assetId, placementIndex, placement) =>
+        this.insertInstancePlacement(assetId, placementIndex, placement),
+      insertLightActor: (index, actor) => this.insertLightActor(index, actor),
       onStatus: (message, tone) => this.onStatus?.(message, tone),
+      removeCharacterPlacement: (index) => this.removeCharacterPlacement(index),
+      removeInstancePlacement: (assetId, placementIndex) =>
+        this.removeInstancePlacement(assetId, placementIndex),
+      removeLightActor: (index) => this.removeLightActor(index),
       updateGizmo: () => this.updateGizmo(),
       updateSelectionBox: () => this.updateSelectionBox(),
     });
@@ -950,96 +950,11 @@ export class SceneApp {
   }
 
   deleteSelected(): void {
-    if (!this.layout) return;
-    const selections = this.getSelectedSelections();
-    if (selections.length === 0) return;
-
-    const instanceDeletes: Array<{ selection: InstanceSelection; snapshot: LayoutPlacement }> = [];
-    const characterDeletes: Array<{ selection: CharacterSelection; snapshot: LayoutCharacter }> = [];
-    const lightDeletes: Array<{ selection: LightSelection; snapshot: LayoutLightActor }> = [];
-    for (const selection of selections) {
-      if (selection.kind === "instance") {
-        const instance = this.layout?.instances.find((entry) => entry.assetId === selection.assetId);
-        const placement = instance?.placements[selection.placementIndex];
-        if (placement) {
-          instanceDeletes.push({
-            selection: cloneSelection(selection) as InstanceSelection,
-            snapshot: clonePlacement(placement),
-          });
-        }
-        continue;
-      }
-
-      if (selection.kind === "character") {
-        const character = this.layout?.characters[selection.index];
-        if (!character) continue;
-        characterDeletes.push({
-          selection: cloneSelection(selection) as CharacterSelection,
-          snapshot: cloneCharacter(character),
-        });
-        continue;
-      }
-
-      const light = this.layout?.lights?.[selection.index];
-      if (light) {
-        lightDeletes.push({
-          selection: cloneSelection(selection) as LightSelection,
-          snapshot: cloneLightActor(light),
-        });
-      }
-    }
-    if (instanceDeletes.length + characterDeletes.length + lightDeletes.length === 0) return;
-
-    const previousSelections = selections.map(cloneSelection);
-    const previousActive = this.selection ? cloneSelection(this.selection) : null;
-    this.executeCommand({
-      label:
-        selections.length === 1
-          ? `Delete ${this.getSelectionLabel(selections[0]!)}`
-          : `Delete ${selections.length} objects`,
-      redo: () => {
-        for (const entry of [...instanceDeletes].sort(compareInstanceDeletes)) {
-          this.removeInstancePlacement(entry.selection.assetId, entry.selection.placementIndex);
-        }
-        for (const entry of [...characterDeletes].sort(compareCharacterDeletes)) {
-          this.removeCharacterPlacement(entry.selection.index);
-        }
-        for (const entry of [...lightDeletes].sort(compareLightDeletes)) {
-          this.removeLightActor(entry.selection.index);
-        }
-        this.select(null);
-      },
-      undo: () => {
-        for (const entry of [...instanceDeletes].sort(compareInstanceRestores)) {
-          this.insertInstancePlacement(
-            entry.selection.assetId,
-            entry.selection.placementIndex,
-            entry.snapshot,
-          );
-        }
-        for (const entry of [...characterDeletes].sort(compareCharacterRestores)) {
-          this.insertCharacterPlacement(entry.selection.index, entry.snapshot);
-        }
-        for (const entry of [...lightDeletes].sort(compareLightRestores)) {
-          this.insertLightActor(entry.selection.index, entry.snapshot);
-        }
-        this.selectMany(previousSelections, previousActive);
-      },
-    });
+    this.editorSceneController.deleteSelected();
   }
 
   duplicateSelected(): void {
-    const selections = this.getSelectedSelections();
-    if (selections.length === 0) {
-      this.onStatus?.("No selected object to duplicate.", "warning");
-      return;
-    }
-    if (selections.length === 1) {
-      this.duplicateSelection(selections[0]!);
-      return;
-    }
-
-    this.duplicateSelections(selections);
+    this.editorSceneController.duplicateSelected();
   }
 
   hideSelected(): void {
@@ -1615,207 +1530,8 @@ export class SceneApp {
     });
   }
 
-  private duplicateSelection(selection: Selection): Selection | null {
-    if (!this.layout || !this.hasSelection(selection)) return null;
-
-    if (selection.kind === "instance") {
-      const transform = this.getMutableTransform(selection);
-      if (!transform) return null;
-      const snapshot = clonePlacement(transform);
-      delete snapshot.groupId;
-      delete snapshot.nodeId;
-      const duplicateIndex = selection.placementIndex + 1;
-      const duplicateSelection: Selection = {
-        kind: "instance",
-        assetId: selection.assetId,
-        placementIndex: duplicateIndex,
-      };
-      this.executeCommand({
-        label: `Duplicate ${selection.assetId}`,
-        redo: () => {
-          this.insertInstancePlacement(selection.assetId, duplicateIndex, snapshot);
-          this.select(duplicateSelection);
-        },
-        undo: () => {
-          this.removeInstancePlacement(selection.assetId, duplicateIndex);
-          this.select(selection);
-        },
-      });
-      return duplicateSelection;
-    }
-
-    if (selection.kind === "light") {
-      const light = this.layout.lights?.[selection.index];
-      if (!light) return null;
-      const snapshot = cloneLightActor(light);
-      snapshot.id = this.createLightId(light.type);
-      snapshot.name = uniqueActorName(light.name ?? light.id, this.layout.lights ?? []);
-      delete snapshot.groupId;
-      delete snapshot.nodeId;
-      const duplicateIndex = selection.index + 1;
-      const duplicateSelection: Selection = { kind: "light", index: duplicateIndex };
-      this.executeCommand({
-        label: `Duplicate ${light.name ?? light.id}`,
-        redo: () => {
-          this.insertLightActor(duplicateIndex, snapshot);
-          this.select(duplicateSelection);
-        },
-        undo: () => {
-          this.removeLightActor(duplicateIndex);
-          this.select(selection);
-        },
-      });
-      return duplicateSelection;
-    }
-
-    const character = this.layout.characters[selection.index];
-    if (!character) return null;
-    const snapshot = cloneCharacter(character);
-    delete snapshot.groupId;
-    delete snapshot.nodeId;
-    const duplicateIndex = selection.index + 1;
-    const duplicateSelection: Selection = { kind: "character", index: duplicateIndex };
-    this.executeCommand({
-      label: `Duplicate ${character.name ?? character.assetId}`,
-      redo: () => {
-        this.insertCharacterPlacement(duplicateIndex, snapshot);
-        this.select(duplicateSelection);
-      },
-      undo: () => {
-        this.removeCharacterPlacement(duplicateIndex);
-        this.select(selection);
-      },
-    });
-    return duplicateSelection;
-  }
-
   private duplicateSelectionForDrag(selection: Selection): Selection | null {
-    const selections = this.getSelectedSelections();
-    if (selections.length > 1 && selections.some((entry) => selectionsEqual(entry, selection))) {
-      return this.duplicateSelections(selections);
-    }
-    return this.duplicateSelection(selection);
-  }
-
-  private duplicateSelections(selections: Selection[]): Selection | null {
-    if (!this.layout) return null;
-
-    const previousSelections = selections.map(cloneSelection);
-    const previousActive = this.selection ? cloneSelection(this.selection) : null;
-    const inserts: Array<{
-      source: Selection;
-      selection: Selection;
-      snapshot: LayoutPlacement | LayoutCharacter | LayoutLightActor;
-    }> = [];
-
-    const instancesByAsset = new Map<string, Selection[]>();
-    for (const selection of selections) {
-      if (selection.kind !== "instance") continue;
-      const entries = instancesByAsset.get(selection.assetId) ?? [];
-      entries.push(cloneSelection(selection));
-      instancesByAsset.set(selection.assetId, entries);
-    }
-
-    for (const [assetId, entries] of instancesByAsset) {
-      entries.sort((left, right) => {
-        if (left.kind !== "instance" || right.kind !== "instance") return 0;
-        return left.placementIndex - right.placementIndex;
-      });
-      entries.forEach((selection, offset) => {
-        if (selection.kind !== "instance") return;
-        const transform = this.getMutableTransform(selection);
-        if (!transform) return;
-        const duplicateSelection: Selection = {
-          kind: "instance",
-          assetId,
-          placementIndex: selection.placementIndex + offset + 1,
-        };
-        inserts.push({
-          source: cloneSelection(selection),
-          selection: duplicateSelection,
-          snapshot: cloneUngroupedPlacement(transform),
-        });
-      });
-    }
-
-    const characterSelections = selections
-      .filter((selection): selection is CharacterSelection => selection.kind === "character")
-      .map((selection) => cloneSelection(selection) as CharacterSelection)
-      .sort((left, right) => left.index - right.index);
-    characterSelections.forEach((selection, offset) => {
-      const character = this.layout?.characters[selection.index];
-      if (!character) return;
-      inserts.push({
-        source: cloneSelection(selection),
-        selection: { kind: "character", index: selection.index + offset + 1 },
-        snapshot: cloneUngroupedCharacter(character),
-      });
-    });
-
-    const lightSelections = selections
-      .filter((selection): selection is LightSelection => selection.kind === "light")
-      .map((selection) => cloneSelection(selection) as LightSelection)
-      .sort((left, right) => left.index - right.index);
-    lightSelections.forEach((selection, offset) => {
-      const light = this.layout?.lights?.[selection.index];
-      if (!light) return;
-      const snapshot = cloneUngroupedLightActor(light);
-      snapshot.id = this.createLightId(light.type);
-      snapshot.name = uniqueActorName(light.name ?? light.id, this.layout?.lights ?? []);
-      inserts.push({
-        source: cloneSelection(selection),
-        selection: { kind: "light", index: selection.index + offset + 1 },
-        snapshot,
-      });
-    });
-
-    if (inserts.length === 0) return null;
-
-    const duplicateSelections = inserts.map((entry) => cloneSelection(entry.selection));
-    const activeDuplicate =
-      (previousActive &&
-        inserts.find((entry) => selectionsEqual(entry.source, previousActive))?.selection) ??
-      duplicateSelections.at(-1) ??
-      null;
-
-    this.executeCommand({
-      label: `Duplicate ${inserts.length} objects`,
-      redo: () => {
-        for (const entry of inserts) {
-          if (entry.selection.kind === "instance") {
-            this.insertInstancePlacement(
-              entry.selection.assetId,
-              entry.selection.placementIndex,
-              entry.snapshot as LayoutPlacement,
-            );
-          } else if (entry.selection.kind === "character") {
-            this.insertCharacterPlacement(
-              entry.selection.index,
-              entry.snapshot as LayoutCharacter,
-            );
-          } else {
-            this.insertLightActor(entry.selection.index, entry.snapshot as LayoutLightActor);
-          }
-        }
-        this.selectMany(
-          duplicateSelections,
-          activeDuplicate ? cloneSelection(activeDuplicate) : null,
-        );
-      },
-      undo: () => {
-        for (const entry of [...inserts].reverse()) {
-          if (entry.selection.kind === "instance") {
-            this.removeInstancePlacement(entry.selection.assetId, entry.selection.placementIndex);
-          } else if (entry.selection.kind === "character") {
-            this.removeCharacterPlacement(entry.selection.index);
-          } else {
-            this.removeLightActor(entry.selection.index);
-          }
-        }
-        this.selectMany(previousSelections, previousActive);
-      },
-    });
-    return activeDuplicate ? cloneSelection(activeDuplicate) : null;
+    return this.editorSceneController.duplicateSelectionForDrag(selection);
   }
 
   private renameSelection(selection: Selection, name: string): void {

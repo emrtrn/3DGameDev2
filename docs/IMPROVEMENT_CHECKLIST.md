@@ -326,6 +326,16 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
 
+- *2026-06-15* — **Item 3 stretch Piece 4 done — delete/duplicate orchestration moved.**
+  Moved `deleteSelected`, `duplicateSelected`, `duplicateSelectionForDrag`, and
+  duplicate helper orchestration into `EditorSceneController`. `SceneApp` now
+  hosts only live scene/layout mutation callbacks (`insert/remove`
+  placement/character/light, `createLightId`, mutable layout access) and keeps
+  same-named wrappers for UI/drag callers. Added 1 headless engine test for
+  duplicate/undo and delete/undo over a fake layout, including the current
+  `cloneUngrouped*` contract (groupId removed, nodeId preserved). Tests 46 → 47.
+  `SceneApp.ts` 2948 → 2664 lines.
+
 - *2026-06-15* — **Item 3 stretch Piece 3 done — group/parent command orchestration moved.**
   Moved `groupSelected`, `ungroupSelected`, `parentSelectionToActive`,
   `parentObjectsTo`, `unparentSelected`, plus group/node id generation into

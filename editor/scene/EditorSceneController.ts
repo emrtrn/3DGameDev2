@@ -2,12 +2,36 @@ import type { EditorCommand, EditorCommandPhase, EditorHistoryState } from "@edi
 import { EditorCommandStore } from "@editor/core/history";
 import { uniqueEditorId } from "@editor/core/ids";
 import {
+  cloneCharacter,
+  cloneLightActor,
+  clonePlacement,
+  cloneUngroupedCharacter,
+  cloneUngroupedLightActor,
+  cloneUngroupedPlacement,
+} from "@editor/core/layoutSnapshots";
+import {
+  compareCharacterDeletes,
+  compareCharacterRestores,
+  compareInstanceDeletes,
+  compareInstanceRestores,
+  compareLightDeletes,
+  compareLightRestores,
   cloneSelection,
   parseSelectionId,
   selectionsEqual,
+  type CharacterSelection,
+  type InstanceSelection,
+  type LightSelection,
   type Selection,
 } from "@editor/core/selection";
 import { SelectionStore } from "@editor/core/selectionStore";
+import { uniqueActorName } from "@engine/scene/lights";
+import type {
+  LayoutCharacter,
+  LayoutLightActor,
+  LayoutPlacement,
+  RoomLayout,
+} from "@engine/scene/layout";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
@@ -28,10 +52,18 @@ export interface EditorSceneControllerHost {
   emitSelectionChanged: () => void;
   getAllSelections: (options: { includeHidden: boolean }) => Selection[];
   getGroupedSelections: (selection: Selection) => Selection[];
+  getMutableLayout: () => RoomLayout | null;
   getMutableTransform: (selection: Selection) => MutableHierarchyTransform | null;
   getSelectionLabel: (selection: Selection) => string;
   hasSelection: (selection: Selection) => boolean;
+  createLightId: (type: LayoutLightActor["type"]) => string;
+  insertCharacterPlacement: (index: number, placement: LayoutCharacter) => void;
+  insertInstancePlacement: (assetId: string, placementIndex: number, placement: LayoutPlacement) => void;
+  insertLightActor: (index: number, actor: LayoutLightActor) => void;
   onStatus: (message: string, tone?: StatusTone) => void;
+  removeCharacterPlacement: (index: number) => LayoutCharacter | null;
+  removeInstancePlacement: (assetId: string, placementIndex: number) => LayoutPlacement | null;
+  removeLightActor: (index: number) => LayoutLightActor | null;
   updateGizmo: () => void;
   updateSelectionBox: () => void;
 }
@@ -349,6 +381,306 @@ export class EditorSceneController {
       redo: () => apply("redo"),
       undo: () => apply("undo"),
     });
+  }
+
+  deleteSelected(): void {
+    const layout = this.host.getMutableLayout();
+    if (!layout) return;
+    const selections = this.getSelectedSelections();
+    if (selections.length === 0) return;
+
+    const instanceDeletes: Array<{ selection: InstanceSelection; snapshot: LayoutPlacement }> = [];
+    const characterDeletes: Array<{ selection: CharacterSelection; snapshot: LayoutCharacter }> = [];
+    const lightDeletes: Array<{ selection: LightSelection; snapshot: LayoutLightActor }> = [];
+    for (const selection of selections) {
+      if (selection.kind === "instance") {
+        const instance = layout.instances.find((entry) => entry.assetId === selection.assetId);
+        const placement = instance?.placements[selection.placementIndex];
+        if (placement) {
+          instanceDeletes.push({
+            selection: cloneSelection(selection) as InstanceSelection,
+            snapshot: clonePlacement(placement),
+          });
+        }
+        continue;
+      }
+
+      if (selection.kind === "character") {
+        const character = layout.characters[selection.index];
+        if (!character) continue;
+        characterDeletes.push({
+          selection: cloneSelection(selection) as CharacterSelection,
+          snapshot: cloneCharacter(character),
+        });
+        continue;
+      }
+
+      const light = layout.lights?.[selection.index];
+      if (light) {
+        lightDeletes.push({
+          selection: cloneSelection(selection) as LightSelection,
+          snapshot: cloneLightActor(light),
+        });
+      }
+    }
+    if (instanceDeletes.length + characterDeletes.length + lightDeletes.length === 0) return;
+
+    const previousSelections = selections.map(cloneSelection);
+    const previousActive = this.selection ? cloneSelection(this.selection) : null;
+    this.executeCommand({
+      label:
+        selections.length === 1
+          ? `Delete ${this.host.getSelectionLabel(selections[0]!)}`
+          : `Delete ${selections.length} objects`,
+      redo: () => {
+        for (const entry of [...instanceDeletes].sort(compareInstanceDeletes)) {
+          this.host.removeInstancePlacement(entry.selection.assetId, entry.selection.placementIndex);
+        }
+        for (const entry of [...characterDeletes].sort(compareCharacterDeletes)) {
+          this.host.removeCharacterPlacement(entry.selection.index);
+        }
+        for (const entry of [...lightDeletes].sort(compareLightDeletes)) {
+          this.host.removeLightActor(entry.selection.index);
+        }
+        this.select(null);
+      },
+      undo: () => {
+        for (const entry of [...instanceDeletes].sort(compareInstanceRestores)) {
+          this.host.insertInstancePlacement(
+            entry.selection.assetId,
+            entry.selection.placementIndex,
+            entry.snapshot,
+          );
+        }
+        for (const entry of [...characterDeletes].sort(compareCharacterRestores)) {
+          this.host.insertCharacterPlacement(entry.selection.index, entry.snapshot);
+        }
+        for (const entry of [...lightDeletes].sort(compareLightRestores)) {
+          this.host.insertLightActor(entry.selection.index, entry.snapshot);
+        }
+        this.selectMany(previousSelections, previousActive);
+      },
+    });
+  }
+
+  duplicateSelected(): void {
+    const selections = this.getSelectedSelections();
+    if (selections.length === 0) {
+      this.host.onStatus("No selected object to duplicate.", "warning");
+      return;
+    }
+    if (selections.length === 1) {
+      this.duplicateSelection(selections[0]!);
+      return;
+    }
+
+    this.duplicateSelections(selections);
+  }
+
+  duplicateSelectionForDrag(selection: Selection): Selection | null {
+    const selections = this.getSelectedSelections();
+    if (selections.length > 1 && selections.some((entry) => selectionsEqual(entry, selection))) {
+      return this.duplicateSelections(selections);
+    }
+    return this.duplicateSelection(selection);
+  }
+
+  private duplicateSelection(selection: Selection): Selection | null {
+    const layout = this.host.getMutableLayout();
+    if (!layout) return null;
+    if (selection.kind === "instance") {
+      const instance = layout.instances.find((entry) => entry.assetId === selection.assetId);
+      const transform = instance?.placements[selection.placementIndex];
+      if (!transform) return null;
+      const snapshot = clonePlacement(transform);
+      delete snapshot.groupId;
+      delete snapshot.nodeId;
+      const duplicateIndex = selection.placementIndex + 1;
+      const duplicateSelection: Selection = {
+        kind: "instance",
+        assetId: selection.assetId,
+        placementIndex: duplicateIndex,
+      };
+      this.executeCommand({
+        label: `Duplicate ${selection.assetId}`,
+        redo: () => {
+          this.host.insertInstancePlacement(selection.assetId, duplicateIndex, snapshot);
+          this.select(duplicateSelection);
+        },
+        undo: () => {
+          this.host.removeInstancePlacement(selection.assetId, duplicateIndex);
+          this.select(selection);
+        },
+      });
+      return duplicateSelection;
+    }
+
+    if (selection.kind === "light") {
+      const light = layout.lights?.[selection.index];
+      if (!light) return null;
+      const snapshot = cloneLightActor(light);
+      snapshot.id = this.host.createLightId(light.type);
+      snapshot.name = uniqueActorName(light.name ?? light.id, layout.lights ?? []);
+      delete snapshot.groupId;
+      delete snapshot.nodeId;
+      const duplicateIndex = selection.index + 1;
+      const duplicateSelection: Selection = { kind: "light", index: duplicateIndex };
+      this.executeCommand({
+        label: `Duplicate ${light.name ?? light.id}`,
+        redo: () => {
+          this.host.insertLightActor(duplicateIndex, snapshot);
+          this.select(duplicateSelection);
+        },
+        undo: () => {
+          this.host.removeLightActor(duplicateIndex);
+          this.select(selection);
+        },
+      });
+      return duplicateSelection;
+    }
+
+    const character = layout.characters[selection.index];
+    if (!character) return null;
+    const snapshot = cloneCharacter(character);
+    delete snapshot.groupId;
+    delete snapshot.nodeId;
+    const duplicateIndex = selection.index + 1;
+    const duplicateSelection: Selection = { kind: "character", index: duplicateIndex };
+    this.executeCommand({
+      label: `Duplicate ${character.name ?? character.assetId}`,
+      redo: () => {
+        this.host.insertCharacterPlacement(duplicateIndex, snapshot);
+        this.select(duplicateSelection);
+      },
+      undo: () => {
+        this.host.removeCharacterPlacement(duplicateIndex);
+        this.select(selection);
+      },
+    });
+    return duplicateSelection;
+  }
+
+  private duplicateSelections(selections: Selection[]): Selection | null {
+    const layout = this.host.getMutableLayout();
+    if (!layout) return null;
+
+    const previousSelections = selections.map(cloneSelection);
+    const previousActive = this.selection ? cloneSelection(this.selection) : null;
+    const inserts: Array<{
+      source: Selection;
+      selection: Selection;
+      snapshot: LayoutPlacement | LayoutCharacter | LayoutLightActor;
+    }> = [];
+
+    const instancesByAsset = new Map<string, Selection[]>();
+    for (const selection of selections) {
+      if (selection.kind !== "instance") continue;
+      const entries = instancesByAsset.get(selection.assetId) ?? [];
+      entries.push(cloneSelection(selection));
+      instancesByAsset.set(selection.assetId, entries);
+    }
+
+    for (const [assetId, entries] of instancesByAsset) {
+      entries.sort((left, right) => {
+        if (left.kind !== "instance" || right.kind !== "instance") return 0;
+        return left.placementIndex - right.placementIndex;
+      });
+      entries.forEach((selection, offset) => {
+        if (selection.kind !== "instance") return;
+        const instance = layout.instances.find((entry) => entry.assetId === selection.assetId);
+        const transform = instance?.placements[selection.placementIndex];
+        if (!transform) return;
+        const duplicateSelection: Selection = {
+          kind: "instance",
+          assetId,
+          placementIndex: selection.placementIndex + offset + 1,
+        };
+        inserts.push({
+          source: cloneSelection(selection),
+          selection: duplicateSelection,
+          snapshot: cloneUngroupedPlacement(transform),
+        });
+      });
+    }
+
+    const characterSelections = selections
+      .filter((selection): selection is CharacterSelection => selection.kind === "character")
+      .map((selection) => cloneSelection(selection) as CharacterSelection)
+      .sort((left, right) => left.index - right.index);
+    characterSelections.forEach((selection, offset) => {
+      const character = layout.characters[selection.index];
+      if (!character) return;
+      inserts.push({
+        source: cloneSelection(selection),
+        selection: { kind: "character", index: selection.index + offset + 1 },
+        snapshot: cloneUngroupedCharacter(character),
+      });
+    });
+
+    const lightSelections = selections
+      .filter((selection): selection is LightSelection => selection.kind === "light")
+      .map((selection) => cloneSelection(selection) as LightSelection)
+      .sort((left, right) => left.index - right.index);
+    lightSelections.forEach((selection, offset) => {
+      const light = layout.lights?.[selection.index];
+      if (!light) return;
+      const snapshot = cloneUngroupedLightActor(light);
+      snapshot.id = this.host.createLightId(light.type);
+      snapshot.name = uniqueActorName(light.name ?? light.id, layout.lights ?? []);
+      inserts.push({
+        source: cloneSelection(selection),
+        selection: { kind: "light", index: selection.index + offset + 1 },
+        snapshot,
+      });
+    });
+
+    if (inserts.length === 0) return null;
+
+    const duplicateSelections = inserts.map((entry) => cloneSelection(entry.selection));
+    const activeDuplicate =
+      (previousActive &&
+        inserts.find((entry) => selectionsEqual(entry.source, previousActive))?.selection) ??
+      duplicateSelections.at(-1) ??
+      null;
+
+    this.executeCommand({
+      label: `Duplicate ${inserts.length} objects`,
+      redo: () => {
+        for (const entry of inserts) {
+          if (entry.selection.kind === "instance") {
+            this.host.insertInstancePlacement(
+              entry.selection.assetId,
+              entry.selection.placementIndex,
+              entry.snapshot as LayoutPlacement,
+            );
+          } else if (entry.selection.kind === "character") {
+            this.host.insertCharacterPlacement(
+              entry.selection.index,
+              entry.snapshot as LayoutCharacter,
+            );
+          } else {
+            this.host.insertLightActor(entry.selection.index, entry.snapshot as LayoutLightActor);
+          }
+        }
+        this.selectMany(
+          duplicateSelections,
+          activeDuplicate ? cloneSelection(activeDuplicate) : null,
+        );
+      },
+      undo: () => {
+        for (const entry of [...inserts].reverse()) {
+          if (entry.selection.kind === "instance") {
+            this.host.removeInstancePlacement(entry.selection.assetId, entry.selection.placementIndex);
+          } else if (entry.selection.kind === "character") {
+            this.host.removeCharacterPlacement(entry.selection.index);
+          } else {
+            this.host.removeLightActor(entry.selection.index);
+          }
+        }
+        this.selectMany(previousSelections, previousActive);
+      },
+    });
+    return activeDuplicate ? cloneSelection(activeDuplicate) : null;
   }
 
   private createGroupId(): string {
