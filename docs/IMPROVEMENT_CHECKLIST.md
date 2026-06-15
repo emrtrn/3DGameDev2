@@ -187,6 +187,19 @@ npm run test:engine      # both backends still pass
 
 **Severity:** Medium — maintainability. This is CLAUDE.md "Near-Term Order #1".
 
+### Working agreement (decided 2026-06-15)
+
+- **Branch:** all Item 3 work happens on `refactor/sceneapp-split` (off `main`).
+  Open a PR when the milestone below is reached. Keep `main` clean.
+- **Auto-commit, do not ask:** this is a large refactor done in many small,
+  build-passing pieces. After **each** small piece that passes the gate
+  (`npx tsc --noEmit` + `npm run test:engine` + `npm run build`), commit with a
+  semantic message and `git push` — **without pausing to ask the user** whether
+  to continue or whether to commit. The user has authorized this explicitly.
+  First push uses `git push -u origin refactor/sceneapp-split`.
+- Never commit a broken intermediate state: only commit after the gate is green.
+- Update the Progress Log below after each piece so a fresh session can resume.
+
 ### Problem
 
 `src/scene/SceneApp.ts` is **3999 lines** and mixes the shared render path with
@@ -302,6 +315,12 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
 
+- *2026-06-15* — **Item 3 setup.** Decided workflow (see Item 3 "Working
+  agreement"): branch `refactor/sceneapp-split` off `main`, auto-commit + push
+  each green sub-step without asking, PR at the end. An auto-commit Stop hook was
+  considered but the harness safety classifier blocked installing a
+  self-executing push-to-main hook — so the agent performs the commits itself
+  instead. Created the branch; Item 3 work starts next session.
 - *2026-06-15* — **Item 2 done.** Decisions: derive physics from scene
   colliders; keep placeholder backend when none. Gated Rapier's dynamic import
   in `PhysicsSubsystem.init()` behind `this.bodies.length > 0`; added
