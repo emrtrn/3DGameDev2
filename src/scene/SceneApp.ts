@@ -78,7 +78,6 @@ import {
   uniqueActorName,
 } from "@engine/scene/lights";
 import {
-  degreesToRadians,
   readPivot,
   readRotation,
   readScale,
@@ -171,13 +170,18 @@ import {
   type Selection,
 } from "@editor/core/selection";
 import { SelectionStore } from "@editor/core/selectionStore";
-import {
-  axisToIndex,
-  isPlaneAxis,
-  planeAxisIndices,
-} from "@editor/gizmos/axes";
+import { isPlaneAxis } from "@editor/gizmos/axes";
 import { type GizmoHandle } from "@editor/gizmos/handles";
 import { buildGizmoHandles, clearGizmoGroup } from "@editor/gizmos/builder";
+import {
+  axisYMoveDragPosition,
+  freeMoveDragPosition,
+  localAxisMoveDragPosition,
+  planeMoveDragPosition,
+  rotateDragRotation,
+  scaleDragScale,
+  worldAxisMoveDragPosition,
+} from "@editor/gizmos/transformDrag";
 import {
   calculateGizmoScreenScale,
   createGizmoMovePlane,
@@ -2614,111 +2618,47 @@ export class SceneApp {
   }
 
   private updateMoveDrag(event: PointerEvent, selected: EditableSelection): void {
-    if (!this.pointerDrag || this.pointerDrag.mode !== "move") return;
+    const drag = this.pointerDrag;
+    if (!drag || drag.mode !== "move") return;
 
     // When editing the pivot the object stays put, so the unchanged components
     // come from the pivot's start point (startPosition), not the object origin.
-    const position: [number, number, number] = this.pointerDrag.pivotEdit
-      ? [...this.pointerDrag.startPosition]
-      : [...selected.position];
-    if (this.pointerDrag.axis === "xyz") {
-      const deltaX = event.clientX - this.pointerDrag.startClientX;
-      const deltaY = event.clientY - this.pointerDrag.startClientY;
-      const right = this.pointerDrag.freeMoveRight ?? new Vector3(1, 0, 0);
-      const up = this.pointerDrag.freeMoveUp ?? new Vector3(0, 1, 0);
-      const offset = right
-        .clone()
-        .multiplyScalar(deltaX * 0.01)
-        .add(up.clone().multiplyScalar(-deltaY * 0.01));
-      position[0] = snapValue(
-        this.pointerDrag.startPosition[0] + offset.x,
-        this.snapSettings.move,
-        this.snapSettings.moveEnabled,
-      );
-      position[1] = snapValue(
-        this.pointerDrag.startPosition[1] + offset.y,
-        this.snapSettings.move,
-        this.snapSettings.moveEnabled,
-      );
-      position[2] = snapValue(
-        this.pointerDrag.startPosition[2] + offset.z,
-        this.snapSettings.move,
-        this.snapSettings.moveEnabled,
+    const base: Vec3 = drag.pivotEdit ? [...drag.startPosition] : [...selected.position];
+
+    if (drag.axis === "xyz") {
+      const position = freeMoveDragPosition(
+        drag,
+        event.clientX - drag.startClientX,
+        event.clientY - drag.startClientY,
+        this.snapSettings,
       );
       this.updateMoveDragPosition(position);
       return;
     }
 
-    if (isPlaneAxis(this.pointerDrag.axis) && this.pointerDrag.movePlane && this.pointerDrag.planeStartHit) {
-      const hit = this.picker.clientToPlane(event.clientX, event.clientY, this.pointerDrag.movePlane);
+    if (isPlaneAxis(drag.axis) && drag.movePlane && drag.planeStartHit) {
+      const hit = this.picker.clientToPlane(event.clientX, event.clientY, drag.movePlane);
       if (!hit) return;
-      const delta = hit.sub(this.pointerDrag.planeStartHit);
-      const start = this.pointerDrag.startPosition;
-      for (let i = 0; i < 3; i += 1) {
-        position[i] = snapValue(
-          (start[i] ?? 0) + delta.getComponent(i),
-          this.snapSettings.move,
-          this.snapSettings.moveEnabled,
-        );
-      }
-      this.updateMoveDragPosition(position);
+      this.updateMoveDragPosition(planeMoveDragPosition(drag, hit, this.snapSettings));
       return;
     }
 
-    if (this.pointerDrag.axis === "y") {
-      const deltaY = event.clientY - this.pointerDrag.startClientY;
-      position[1] = snapValue(
-        this.pointerDrag.startPosition[1] - deltaY * 0.01,
-        this.snapSettings.move,
-        this.snapSettings.moveEnabled,
+    if (drag.axis === "y") {
+      this.updateMoveDragPosition(
+        axisYMoveDragPosition(base, drag, event.clientY - drag.startClientY, this.snapSettings),
       );
-      this.updateMoveDragPosition(position);
       return;
     }
 
     const hit = this.picker.clientToFloor(event.clientX, event.clientY);
     if (!hit) return;
 
-    if (
-      this.transformSpace === "local" &&
-      (this.pointerDrag.axis === "x" || this.pointerDrag.axis === "z")
-    ) {
-      // Move along the object's local axis. Y rotation drives the floor-plane
-      // heading; X/Z tilt is ignored here since local move stays on the floor.
-      const theta = degreesToRadians(this.pointerDrag.startTransform.rotation[1]);
-      const cos = Math.cos(theta);
-      const sin = Math.sin(theta);
-      const dirX = this.pointerDrag.axis === "x" ? cos : sin;
-      const dirZ = this.pointerDrag.axis === "x" ? -sin : cos;
-      const startHitX = this.pointerDrag.startPosition[0] - this.pointerDrag.offset.x;
-      const startHitZ = this.pointerDrag.startPosition[2] - this.pointerDrag.offset.z;
-      const distance = snapValue(
-        (hit.x - startHitX) * dirX + (hit.z - startHitZ) * dirZ,
-        this.snapSettings.move,
-        this.snapSettings.moveEnabled,
-      );
-      position[0] = round(this.pointerDrag.startPosition[0] + dirX * distance);
-      position[2] = round(this.pointerDrag.startPosition[2] + dirZ * distance);
-      this.updateMoveDragPosition(position);
+    if (this.transformSpace === "local" && (drag.axis === "x" || drag.axis === "z")) {
+      this.updateMoveDragPosition(localAxisMoveDragPosition(base, drag, hit, this.snapSettings));
       return;
     }
 
-    if (this.pointerDrag.axis === "x") {
-      position[0] = snapValue(
-        hit.x + this.pointerDrag.offset.x,
-        this.snapSettings.move,
-        this.snapSettings.moveEnabled,
-      );
-    }
-    if (this.pointerDrag.axis === "z") {
-      position[2] = snapValue(
-        hit.z + this.pointerDrag.offset.z,
-        this.snapSettings.move,
-        this.snapSettings.moveEnabled,
-      );
-    }
-
-    this.updateMoveDragPosition(position);
+    this.updateMoveDragPosition(worldAxisMoveDragPosition(base, drag, hit, this.snapSettings));
   }
 
   private updateMoveDragPosition(position: Vec3): void {
@@ -2765,23 +2705,17 @@ export class SceneApp {
   }
 
   private updateRotateDrag(event: PointerEvent): void {
-    if (!this.pointerDrag || this.pointerDrag.mode !== "rotate") return;
-    const axisIndex = axisToIndex(this.pointerDrag.axis);
-    const deltaDeg = (event.clientX - this.pointerDrag.startClientX) * 0.5;
-    const rotation: Vec3 = [...this.pointerDrag.startRotation];
-    rotation[axisIndex] = snapValue(
-      this.pointerDrag.startRotation[axisIndex] + deltaDeg,
-      this.snapSettings.rotate,
-      this.snapSettings.rotateEnabled,
-    );
+    const drag = this.pointerDrag;
+    if (!drag || drag.mode !== "rotate") return;
+    const rotation = rotateDragRotation(drag, event.clientX - drag.startClientX, this.snapSettings);
     const values: { rotation: Vec3; position?: Vec3 } = { rotation };
-    if (this.pointerDrag.pivotWorld && this.pointerDrag.pivot) {
+    if (drag.pivotWorld && drag.pivot) {
       // Pivot around the offset point: keep it fixed by shifting the origin.
       values.position = this.pivotCorrectedPosition(
-        this.pointerDrag.pivotWorld,
+        drag.pivotWorld,
         rotation,
-        this.pointerDrag.startTransform.scale,
-        this.pointerDrag.pivot,
+        drag.startTransform.scale,
+        drag.pivot,
       );
     }
     this.updateSelectedTransform(values, { notifySelection: false });
@@ -2790,42 +2724,21 @@ export class SceneApp {
   }
 
   private updateScaleDrag(event: PointerEvent): void {
-    if (!this.pointerDrag || this.pointerDrag.mode !== "scale") return;
-    const delta =
-      event.clientX -
-      this.pointerDrag.startClientX -
-      (event.clientY - this.pointerDrag.startClientY);
-    const factor = delta * 0.005;
-    const start = this.pointerDrag.startScale;
-    const locked = this.pointerDrag.axis === "uniform";
-
-    const apply = (value: number): number =>
-      Math.max(
-        0.05,
-        snapValue(value + factor, this.snapSettings.scale, this.snapSettings.scaleEnabled),
-      );
-
-    let scale: Vec3;
-    if (locked) {
-      // Grow every axis by the same amount so a locked object keeps its profile.
-      scale = [apply(start[0]), apply(start[1]), apply(start[2])];
-    } else if (isPlaneAxis(this.pointerDrag.axis)) {
-      const [i, j] = planeAxisIndices(this.pointerDrag.axis);
-      scale = [...start];
-      scale[i] = apply(start[i]);
-      scale[j] = apply(start[j]);
-    } else {
-      const axisIndex = axisToIndex(this.pointerDrag.axis);
-      scale = [...start];
-      scale[axisIndex] = apply(start[axisIndex]);
-    }
+    const drag = this.pointerDrag;
+    if (!drag || drag.mode !== "scale") return;
+    const scale = scaleDragScale(
+      drag,
+      event.clientX - drag.startClientX,
+      event.clientY - drag.startClientY,
+      this.snapSettings,
+    );
     const values: { scale: Vec3; position?: Vec3 } = { scale };
-    if (this.pointerDrag.pivotWorld && this.pointerDrag.pivot) {
+    if (drag.pivotWorld && drag.pivot) {
       values.position = this.pivotCorrectedPosition(
-        this.pointerDrag.pivotWorld,
-        this.pointerDrag.startTransform.rotation,
+        drag.pivotWorld,
+        drag.startTransform.rotation,
         scale,
-        this.pointerDrag.pivot,
+        drag.pivot,
       );
     }
     this.updateSelectedTransform(values, { notifySelection: false });

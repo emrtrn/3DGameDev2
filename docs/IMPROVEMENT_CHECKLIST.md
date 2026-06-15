@@ -315,6 +315,22 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
 
+- *2026-06-15* — **Item 3 Piece 5 done — pointer-drag transform MATH extracted + unit-tested.**
+  Per the agreed approach (safe + tests; user decision 2026-06-15): extracted the
+  *pure* drag arithmetic into `editor/gizmos/transformDrag.ts`
+  (`freeMoveDragPosition`, `planeMoveDragPosition`, `axisYMoveDragPosition`,
+  `localAxisMoveDragPosition`, `worldAxisMoveDragPosition`, `rotateDragRotation`,
+  `scaleDragScale` + `DragSnapSettings`). The interactive *orchestration*
+  (raycasts via the picker, applying transforms, pivot correction, cascade,
+  emits) stays in `SceneApp.updateMove/Rotate/ScaleDrag` — only the verbose,
+  error-prone math moved. Added **7 headless engine tests** pinning the
+  arithmetic (32 → 39 checks): free/world/vertical/plane/local move, rotate
+  degrees+snap, and scale uniform/axis/planar/0.05-floor. Dropped now-unused
+  `axisToIndex`/`planeAxisIndices`/`degreesToRadians` imports. `SceneApp.ts`
+  3360 → 3272 lines. Gate green (tsc, 39 tests, build). This is the
+  no-test-coverage-risk mitigation: the drag math now has a safety net the
+  inline version never had. Next: wall/surface snapping geometry (also pure).
+
 - *2026-06-15* — **Item 3 Piece 4 done — scene-object view-model builders extracted.**
   New `editor/core/sceneObjects.ts`: `buildSceneObjects(layout, deps)` (Outliner
   rows, empty metadata) and `buildEditableSelection(layout, selection, deps)`
