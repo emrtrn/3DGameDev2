@@ -1,16 +1,16 @@
-# 3DGameDev Architecture V2 Migration
+# Forge
 
-This workspace is `3DGameDev-architecture-v2`, the migration clone for the
-architecture-v2 refactor. The stable reference repo is
-`C:\Users\emret\Desktop\3DGameDev`.
+**Forge** is a reusable Three.js **game template** whose editor is a built-in
+mode of the game (`?editor`), not a separate app. One `SceneApp` renders both
+the game and the editor viewport; the engine/editor/builder/game module
+boundaries are extracted under `engine/`, `editor/`, `builder/`, and `game/`.
+The architecture is Unreal-inspired (viewport gizmos, outliner, details,
+content browser, undo/redo, snapping, Play mode) but web-first and lightweight.
 
-The current app is still a reusable Three.js **game template** whose editor is a
-built-in mode of the game (`?editor`), not a separate app. One `SceneApp`
-renders both the game and the editor viewport while the migration extracts
-engine/editor/builder boundaries.
-
-Do not rewrite from scratch. Preserve working behavior and move code in small,
-build-passing steps according to the roadmap.
+Forge grew out of the earlier `3DGameDev` project (legacy name). The stable
+reference repo is `C:\Users\emret\Desktop\3DGameDev`; do not edit it from this
+workspace. Do not rewrite from scratch — preserve working behavior and move
+code in small, build-passing steps.
 
 `home-makeover` (`C:\Users\emret\Desktop\home-makeover`) is a separate project
 for now; it will later be rebuilt as a copy of this template. This codebase no

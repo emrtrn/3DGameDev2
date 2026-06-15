@@ -1,5 +1,5 @@
 {
-  "name": "3dgamedev-editor",
+  "name": "forge",
   "private": true,
   "version": "0.1.0",
   "description": "Reusable Three.js game template with a built-in editor mode",

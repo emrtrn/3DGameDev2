@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "name": "3dgame-template",
+  "name": "forge-template",
   "type": "three-game",
   "version": "0.1.0",
   "entry": "src/main.ts",

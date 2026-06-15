@@ -100,7 +100,7 @@ export class EditorUi {
     this.root.innerHTML = `
       <header class="editor-topbar">
         <div class="editor-brand">
-          <strong>3DGameDev Editor</strong>
+          <strong>Forge Editor</strong>
           <span data-project-name>loading project</span>
         </div>
         <div class="editor-tools" data-tools></div>

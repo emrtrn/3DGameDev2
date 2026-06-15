@@ -1,4 +1,4 @@
-# 3DGameDev Architecture Contract
+# Forge Architecture Contract
 
 > Created: 2026-06-13 | Updated: 2026-06-15
 > Scope: architecture-v2 migration workspace for the single-codebase template.
@@ -11,8 +11,7 @@ before changing code.
 
 ## Direction
 
-`3DGameDev-architecture-v2` is the migration workspace for a reusable,
-single-codebase Three.js game template. One
+**Forge** is a reusable, single-codebase Three.js game template. One
 `SceneApp` serves both the player-facing game and the editor viewport, so there
 is no separate runtime to drift from the editor.
 
@@ -107,7 +106,7 @@ Current minimum shape:
 ```json
 {
   "schema": 1,
-  "name": "3dgame-template",
+  "name": "forge-template",
   "type": "three-game",
   "version": "0.1.0",
   "entry": "src/main.ts",
@@ -283,7 +282,7 @@ Initial command candidates:
 ## Directory Intent
 
 ```text
-3DGameDev-architecture-v2/
+Forge/
   builder/       build/package verification boundary
   docs/          current architecture, roadmap, and workflow notes
   editor/        future editor-only module boundary
