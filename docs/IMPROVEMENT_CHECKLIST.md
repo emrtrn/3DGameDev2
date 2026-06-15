@@ -315,6 +315,57 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
 
+- *2026-06-15* — **Item 3 inventory (no code yet).** Mapped all of
+  `SceneApp.ts` (3999 lines) into KEEP (shared render) vs MOVE (editor
+  authoring). Baseline gate green (tsc clean, 32 engine tests). Acceptance
+  criterion "runtime path imports no editor" is **already satisfied**:
+  `main.ts` game branch uses `RuntimeSceneApp`, which imports only `@engine/*`
+  and `@/*` — no `@editor/*`. So Item 3 is purely (a) shrink `SceneApp` toward
+  <2500 lines and (b) relocate editor authoring code into `editor/*`.
+
+  **KEEP in SceneApp (shared render — mirrors `RuntimeSceneApp`):** renderer/
+  scene/camera/sun/ambient fields; engine spine + subsystems (animation, input,
+  physics, audio, behavior) and their ctor wiring; `syncEntityTransform`;
+  `start()` rAF loop; `dispose()`; `registerSubsystem`; `getRenderStats`;
+  `loadActiveProjectScene` (asset/model/light build); `createInstancedModel`,
+  `addCharacter`, `createCharacterObject`, `playCharacterAnimation`, `addLight`,
+  `createLightObject`, `ensureDefaultLights`/`createDefaultLightActor`/
+  `createLightId`/`defaultActorPosition`; `fitSunShadowToScene`/`getRoomBounds`;
+  `applyBackgroundAndAmbient` + `staticObjects*`/`backgroundColor`/`ambient*`;
+  `handleResize`. (These duplicate `RuntimeSceneApp`; Item 3b consolidation is a
+  later step, tracked separately — not blocking the line-count milestone.)
+
+  **MOVE out of SceneApp (editor authoring), grouped by cohesion:**
+  - *Gizmo visuals* — `clearGizmo`, `addMoveGizmo`/`addRotateGizmo`/
+    `addRotateRing`/`addScaleGizmo`/`addPlaneHandle`/`addArrowHandle`/
+    `addScaleHandle`, `gizmoMaterialFor`, `registerGizmoHandle`. Pure Three.js
+    construction → `editor/gizmos/builder.ts`. **(Piece 1)**
+  - *Editor camera* — all `camera*Navigation*`/`cameraDrag`/`beginAltCameraDrag`/
+    `updateCameraDrag`/`endCameraDrag`/`updateCameraLook`/`getCameraLook*`/
+    `getCameraOrbitTarget`/`dollyCamera`/`adjustCameraMoveSpeed`/
+    `updateCameraNavigation`/`getCameraBasis`/`syncCameraAnglesFromCurrentView`/
+    `applyCameraOrientation`/`handleWheel`. Self-contained interactive camera →
+    `editor/camera/editorCameraController.ts`. **(Piece 2)**
+  - *Pointer-drag transform math* — `startGizmoDrag`, `updateMoveDrag`,
+    `updateMoveDragPosition`, `updateRotateDrag`, `updateScaleDrag`,
+    `commitPointerDrag`, `cascadeActiveDragToLinks`, `applyCascadeToLinks`,
+    `captureLinkedMoveStarts`, `captureDescendantStarts` → `editor/gizmos/*`.
+    **(Piece 3)**
+  - *Picking + snapping geometry* — `pickSelection`, `pickGizmoHandle`,
+    `raycastSurfaceBelow`, `isSelfHit`, `clientToFloor`/`clientToSurface`/
+    `clientToPlane`/`setPointerNdc`, wall/surface snap (`computeWallSnap`,
+    `performWallSnap`, `wallSnapSelected`, `snapSelectedToWall`,
+    `surfaceSnapSelected`, `isWallAsset`, `isRoomAsset`). **(Piece 4)**
+  - *Remaining editor API surface* (selection store + public commands EditorUi
+    calls: select/delete/duplicate/group/parent/pivot/metadata/world-settings/
+    tools/history/save) — large; stays in `SceneApp` for now and is the
+    candidate for a later `EditorSceneController` extraction once Pieces 1–4
+    land. Not required to reach the first <2500 milestone.
+
+  **Strategy:** peel cohesive, low-coupling modules first (Pieces 1→4), each its
+  own green commit. Each piece: extract to `editor/*`, delegate from `SceneApp`,
+  run gate, commit+push. Next action: Piece 1 (gizmo builders).
+
 - *2026-06-15* — **Item 3 setup.** Decided workflow (see Item 3 "Working
   agreement"): branch `refactor/sceneapp-split` off `main`, auto-commit + push
   each green sub-step without asking, PR at the end. An auto-commit Stop hook was
