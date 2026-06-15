@@ -28,9 +28,7 @@ longer edits it.
 
 - `docs/ARCHITECTURE.md`: boundary contract.
 - `docs/ARCHITECTURE_PLAN_SOURCE.md`: imported source architecture plan.
-- `docs/MIGRATION_ROADMAP.md`: execution plan for this clone.
 - `docs/LAUNCH_WORKFLOW.md`: practical VS Code and URL launch path.
-- `docs/roadmap.md`: current single-codebase template roadmap.
 
 ## Working Rules
 

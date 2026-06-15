@@ -3,7 +3,7 @@
 Source: `C:\Users\emret\Downloads\3DGameDev Mimari Planı.docx`
 Imported: 2026-06-14
 
-> This file is a text extraction of the architecture reference document used for the architecture-v2 migration. Treat `docs/MIGRATION_ROADMAP.md` as the execution plan and this file as the source reference.
+> This file is a text extraction of the architecture reference document used for the architecture-v2 migration. Treat this file as the source reference.
 
 3DGameDev Mimari Planı
 

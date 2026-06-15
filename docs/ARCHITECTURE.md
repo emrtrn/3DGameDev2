@@ -24,7 +24,6 @@ is no separate runtime to drift from the editor.
 - The stable reference repo is `C:\Users\emret\Desktop\3DGameDev`; use it to
   compare behavior while this clone moves toward the architecture plan.
 - `docs/ARCHITECTURE_PLAN_SOURCE.md` is the imported source plan.
-- `docs/MIGRATION_ROADMAP.md` is the execution plan for this clone.
 
 Removed architecture:
 

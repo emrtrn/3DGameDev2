@@ -1,7 +1,7 @@
 # builder/web
 
 Production web build tooling and runtime-only verification for the
-Architecture V2 migration (MIGRATION_ROADMAP.md Phase 6).
+Architecture V2 migration.
 
 ## verify-dist.mjs
 

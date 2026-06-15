@@ -7,8 +7,8 @@
  * Scans the production `dist/` output after `npm run build` and reports
  * editor-only, dev-endpoint, or legacy launcher/authoring strings that leaked
  * into the shipped bundle. This turns the migration's core invariant — editor /
- * runtime / build separation (ARCHITECTURE_PLAN_SOURCE.md §20,
- * MIGRATION_ROADMAP.md Phase 6) — into an automated check.
+ * runtime / build separation (ARCHITECTURE_PLAN_SOURCE.md §20) — into an
+ * automated check.
  *
  * Two severities:
  *   FAIL  — a broken editor/runtime boundary (e.g. EditorUi in the bundle).
