@@ -1,0 +1,925 @@
+import type { EditorCommand, EditorCommandPhase, EditorHistoryState } from "@editor/core/history";
+import { EditorCommandStore } from "@editor/core/history";
+import { uniqueEditorId } from "@editor/core/ids";
+import {
+  cloneCharacter,
+  cloneLightActor,
+  cloneMetadataValue,
+  clonePlacement,
+  cloneUngroupedCharacter,
+  cloneUngroupedLightActor,
+  cloneUngroupedPlacement,
+} from "@editor/core/layoutSnapshots";
+import {
+  defaultTrueFlagCommandLabel,
+  flagCommandLabel,
+  type EditorDefaultTrueFlagCommand,
+  type EditorFlagCommand,
+} from "@editor/core/commandLabels";
+import {
+  compareCharacterDeletes,
+  compareCharacterRestores,
+  compareInstanceDeletes,
+  compareInstanceRestores,
+  compareLightDeletes,
+  compareLightRestores,
+  cloneSelection,
+  parseSelectionId,
+  selectionsEqual,
+  type CharacterSelection,
+  type InstanceSelection,
+  type LightSelection,
+  type Selection,
+} from "@editor/core/selection";
+import { SelectionStore } from "@editor/core/selectionStore";
+import { uniqueActorName } from "@engine/scene/lights";
+import type {
+  LayoutCharacter,
+  LayoutLightActor,
+  LayoutMetadata,
+  LayoutPlacement,
+  MetadataValue,
+  RoomLayout,
+} from "@engine/scene/layout";
+import { metadataValuesEqual } from "@engine/scene/metadataSchema";
+
+type StatusTone = "info" | "success" | "warning" | "error";
+
+type MutableHierarchyTransform = {
+  groupId?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  scaleLocked?: boolean;
+  castShadow?: boolean;
+  collision?: boolean;
+  metadata?: LayoutMetadata;
+  nodeId?: string;
+  parentId?: string;
+};
+
+export interface EditorSceneControllerHost {
+  applyCastShadow: (selection: Selection) => void;
+  applyGroupId: (
+    selection: Selection,
+    groupId: string | undefined,
+    options?: { notify?: boolean },
+  ) => void;
+  applyVisibility: (selection: Selection) => void;
+  descendantsOf: (selection: Selection) => Selection[];
+  emitHistoryChanged: () => void;
+  emitSelectionChanged: () => void;
+  getAllSelections: (options: { includeHidden: boolean }) => Selection[];
+  getGroupedSelections: (selection: Selection) => Selection[];
+  getMutableLayout: () => RoomLayout | null;
+  getMutableTransform: (selection: Selection) => MutableHierarchyTransform | null;
+  getSelectionLabel: (selection: Selection) => string;
+  hasSelection: (selection: Selection) => boolean;
+  createLightId: (type: LayoutLightActor["type"]) => string;
+  insertCharacterPlacement: (index: number, placement: LayoutCharacter) => void;
+  insertInstancePlacement: (assetId: string, placementIndex: number, placement: LayoutPlacement) => void;
+  insertLightActor: (index: number, actor: LayoutLightActor) => void;
+  onStatus: (message: string, tone?: StatusTone) => void;
+  removeCharacterPlacement: (index: number) => LayoutCharacter | null;
+  removeInstancePlacement: (assetId: string, placementIndex: number) => LayoutPlacement | null;
+  removeLightActor: (index: number) => LayoutLightActor | null;
+  updateGizmo: () => void;
+  updateSelectionBox: () => void;
+}
+
+/**
+ * Editor-only scene command controller. This starts as the history/command
+ * owner; tightly coupled command orchestration moves here in later slices.
+ */
+export class EditorSceneController {
+  private readonly host: EditorSceneControllerHost;
+  private readonly commandStore = new EditorCommandStore();
+  private readonly selectionStore = new SelectionStore();
+
+  constructor(host: EditorSceneControllerHost) {
+    this.host = host;
+  }
+
+  getHistoryState(): EditorHistoryState {
+    return this.commandStore.state();
+  }
+
+  get selection(): Selection | null {
+    return this.selectionStore.activeSelection;
+  }
+
+  set selection(value: Selection | null) {
+    this.selectionStore.activeSelection = value;
+  }
+
+  get selectedCount(): number {
+    return this.selectionStore.selectedCount;
+  }
+
+  undo(): void {
+    const result = this.commandStore.undo();
+    if (!result) return;
+    this.host.emitHistoryChanged();
+    this.host.onStatus(result.statusMessage, result.statusTone);
+  }
+
+  redo(): void {
+    const result = this.commandStore.redo();
+    if (!result) return;
+    this.host.emitHistoryChanged();
+    this.host.onStatus(result.statusMessage, result.statusTone);
+  }
+
+  executeCommand(command: EditorCommand): void {
+    const result = this.commandStore.execute(command);
+    this.host.emitHistoryChanged();
+    this.host.onStatus(result.statusMessage, result.statusTone);
+  }
+
+  select(selection: Selection | null): void {
+    this.selection = this.selectionStore.selectGroup(
+      selection,
+      selection ? this.host.getGroupedSelections(selection) : [],
+    );
+    this.host.updateSelectionBox();
+    this.host.updateGizmo();
+    this.host.emitSelectionChanged();
+  }
+
+  selectMany(selections: Selection[], active: Selection | null): void {
+    this.selection = this.selectionStore.selectMany(
+      selections.filter((selection) => this.host.hasSelection(selection)),
+      active,
+    );
+    this.host.updateSelectionBox();
+    this.host.updateGizmo();
+    this.host.emitSelectionChanged();
+  }
+
+  toggleSelection(selection: Selection): void {
+    this.selection = this.selectionStore.toggleGroup(
+      selection,
+      this.host.getGroupedSelections(selection),
+    );
+    this.host.updateSelectionBox();
+    this.host.updateGizmo();
+    this.host.emitSelectionChanged();
+  }
+
+  isSelectionSelected(selection: Selection): boolean {
+    return this.selectionStore.has(selection);
+  }
+
+  getSelectedSelections(): Selection[] {
+    return this.selectionStore.list((selection) => this.host.hasSelection(selection));
+  }
+
+  groupSelected(): void {
+    const selections = this.getSelectedSelections();
+    if (selections.length < 2) {
+      this.host.onStatus("Select at least two objects to group.", "warning");
+      return;
+    }
+
+    const groupId = this.createGroupId();
+    const entries = selections.flatMap((selection) => {
+      const target = this.host.getMutableTransform(selection);
+      return target
+        ? [
+            {
+              selection: cloneSelection(selection),
+              previousGroupId: target.groupId,
+            },
+          ]
+        : [];
+    });
+    if (entries.length < 2) {
+      this.host.onStatus("Select at least two objects to group.", "warning");
+      return;
+    }
+
+    const active = this.selection
+      ? cloneSelection(this.selection)
+      : cloneSelection(entries[0]!.selection);
+    const applyEntries = (mode: EditorCommandPhase): void => {
+      for (const entry of entries) {
+        this.host.applyGroupId(
+          entry.selection,
+          mode === "redo" ? groupId : entry.previousGroupId,
+          { notify: false },
+        );
+      }
+      this.selectMany(
+        entries.map((entry) => cloneSelection(entry.selection)),
+        active,
+      );
+      this.host.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: `Group ${entries.length} objects`,
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
+    });
+  }
+
+  /** Clears the group id from every member of any group in the current selection. */
+  ungroupSelected(): void {
+    const groupIds = new Set<string>();
+    for (const selection of this.getSelectedSelections()) {
+      const groupId = this.host.getMutableTransform(selection)?.groupId;
+      if (groupId) groupIds.add(groupId);
+    }
+    if (groupIds.size === 0) {
+      this.host.onStatus("Selection is not grouped.", "warning");
+      return;
+    }
+
+    const entries = this.host.getAllSelections({ includeHidden: true }).flatMap((selection) => {
+      const target = this.host.getMutableTransform(selection);
+      return target?.groupId && groupIds.has(target.groupId)
+        ? [{ selection: cloneSelection(selection), previousGroupId: target.groupId }]
+        : [];
+    });
+    if (entries.length === 0) return;
+    const active = this.selection ? cloneSelection(this.selection) : null;
+
+    const applyEntries = (mode: EditorCommandPhase): void => {
+      for (const entry of entries) {
+        this.host.applyGroupId(
+          entry.selection,
+          mode === "redo" ? undefined : entry.previousGroupId,
+          { notify: false },
+        );
+      }
+      this.selectMany(entries.map((entry) => cloneSelection(entry.selection)), active);
+      this.host.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: `Ungroup ${entries.length} objects`,
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
+    });
+  }
+
+  /** Parents the other selected objects to the active selection (the parent). */
+  parentSelectionToActive(): void {
+    if (!this.selection) return;
+    const parent = cloneSelection(this.selection);
+    const parentTarget = this.host.getMutableTransform(parent);
+    if (!parentTarget) return;
+
+    // Cycle guard: an ancestor of the parent cannot become its child.
+    const parentDescendantIds = new Set(
+      this.host
+        .descendantsOf(parent)
+        .map((entry) => this.host.getMutableTransform(entry)?.nodeId)
+        .filter((id): id is string => Boolean(id)),
+    );
+
+    const parentNodeId = parentTarget.nodeId ?? this.createNodeId();
+    const children = this.getSelectedSelections().flatMap((selection) => {
+      if (selectionsEqual(selection, parent)) return [];
+      const target = this.host.getMutableTransform(selection);
+      if (!target) return [];
+      // Skip if this object is the parent's ancestor (would form a cycle).
+      if (target.nodeId && parentDescendantIds.has(target.nodeId)) return [];
+      if (target.parentId === parentNodeId) return [];
+      return [{ selection: cloneSelection(selection), previousParentId: target.parentId }];
+    });
+    if (children.length === 0) {
+      this.host.onStatus("Select children plus a parent (active) to parent.", "warning");
+      return;
+    }
+
+    const hadParentNodeId = parentTarget.nodeId !== undefined;
+    const apply = (mode: EditorCommandPhase): void => {
+      const parentMut = this.host.getMutableTransform(parent);
+      if (parentMut) {
+        if (mode === "redo") parentMut.nodeId = parentNodeId;
+        else if (!hadParentNodeId) delete parentMut.nodeId;
+      }
+      for (const child of children) {
+        const target = this.host.getMutableTransform(child.selection);
+        if (!target) continue;
+        if (mode === "redo") target.parentId = parentNodeId;
+        else if (child.previousParentId === undefined) delete target.parentId;
+        else target.parentId = child.previousParentId;
+      }
+      this.host.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: `Parent ${children.length} to ${this.host.getSelectionLabel(parent)}`,
+      redo: () => apply("redo"),
+      undo: () => apply("undo"),
+    });
+  }
+
+  /**
+   * Parents one or more objects (by scene-object id) to a target object.
+   * Used by outliner drag-and-drop: drag child rows onto a parent row.
+   * Cycle-safe (a target that is a descendant of a dragged object is skipped).
+   */
+  parentObjectsTo(childIds: string[], parentId: string): void {
+    const parent = parseSelectionId(parentId);
+    if (!parent || !this.host.hasSelection(parent)) return;
+    const parentTarget = this.host.getMutableTransform(parent);
+    if (!parentTarget) return;
+
+    const parentNodeId = parentTarget.nodeId ?? this.createNodeId();
+    const children = childIds.flatMap((childId) => {
+      const selection = parseSelectionId(childId);
+      if (!selection || !this.host.hasSelection(selection)) return [];
+      if (selectionsEqual(selection, parent)) return [];
+      const target = this.host.getMutableTransform(selection);
+      if (!target) return [];
+      // Cycle guard: the target cannot be a descendant of this child.
+      const descendantIds = new Set(
+        this.host
+          .descendantsOf(selection)
+          .map((entry) => this.host.getMutableTransform(entry)?.nodeId)
+          .filter((id): id is string => Boolean(id)),
+      );
+      if (target.nodeId && descendantIds.has(parentNodeId)) return [];
+      if (target.parentId === parentNodeId) return [];
+      return [{ selection: cloneSelection(selection), previousParentId: target.parentId }];
+    });
+    if (children.length === 0) return;
+
+    const hadParentNodeId = parentTarget.nodeId !== undefined;
+    const apply = (mode: EditorCommandPhase): void => {
+      const parentMut = this.host.getMutableTransform(parent);
+      if (parentMut) {
+        if (mode === "redo") parentMut.nodeId = parentNodeId;
+        else if (!hadParentNodeId) delete parentMut.nodeId;
+      }
+      for (const child of children) {
+        const target = this.host.getMutableTransform(child.selection);
+        if (!target) continue;
+        if (mode === "redo") target.parentId = parentNodeId;
+        else if (child.previousParentId === undefined) delete target.parentId;
+        else target.parentId = child.previousParentId;
+      }
+      this.host.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: `Parent ${children.length} to ${this.host.getSelectionLabel(parent)}`,
+      redo: () => apply("redo"),
+      undo: () => apply("undo"),
+    });
+  }
+
+  /** Clears the parent of every selected object. */
+  unparentSelected(): void {
+    const entries = this.getSelectedSelections().flatMap((selection) => {
+      const target = this.host.getMutableTransform(selection);
+      return target?.parentId !== undefined
+        ? [{ selection: cloneSelection(selection), previousParentId: target.parentId }]
+        : [];
+    });
+    if (entries.length === 0) {
+      this.host.onStatus("Selection has no parent.", "warning");
+      return;
+    }
+
+    const apply = (mode: EditorCommandPhase): void => {
+      for (const entry of entries) {
+        const target = this.host.getMutableTransform(entry.selection);
+        if (!target) continue;
+        if (mode === "redo") delete target.parentId;
+        else target.parentId = entry.previousParentId;
+      }
+      this.host.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: `Unparent ${entries.length} objects`,
+      redo: () => apply("redo"),
+      undo: () => apply("undo"),
+    });
+  }
+
+  deleteSelected(): void {
+    const layout = this.host.getMutableLayout();
+    if (!layout) return;
+    const selections = this.getSelectedSelections();
+    if (selections.length === 0) return;
+
+    const instanceDeletes: Array<{ selection: InstanceSelection; snapshot: LayoutPlacement }> = [];
+    const characterDeletes: Array<{ selection: CharacterSelection; snapshot: LayoutCharacter }> = [];
+    const lightDeletes: Array<{ selection: LightSelection; snapshot: LayoutLightActor }> = [];
+    for (const selection of selections) {
+      if (selection.kind === "instance") {
+        const instance = layout.instances.find((entry) => entry.assetId === selection.assetId);
+        const placement = instance?.placements[selection.placementIndex];
+        if (placement) {
+          instanceDeletes.push({
+            selection: cloneSelection(selection) as InstanceSelection,
+            snapshot: clonePlacement(placement),
+          });
+        }
+        continue;
+      }
+
+      if (selection.kind === "character") {
+        const character = layout.characters[selection.index];
+        if (!character) continue;
+        characterDeletes.push({
+          selection: cloneSelection(selection) as CharacterSelection,
+          snapshot: cloneCharacter(character),
+        });
+        continue;
+      }
+
+      const light = layout.lights?.[selection.index];
+      if (light) {
+        lightDeletes.push({
+          selection: cloneSelection(selection) as LightSelection,
+          snapshot: cloneLightActor(light),
+        });
+      }
+    }
+    if (instanceDeletes.length + characterDeletes.length + lightDeletes.length === 0) return;
+
+    const previousSelections = selections.map(cloneSelection);
+    const previousActive = this.selection ? cloneSelection(this.selection) : null;
+    this.executeCommand({
+      label:
+        selections.length === 1
+          ? `Delete ${this.host.getSelectionLabel(selections[0]!)}`
+          : `Delete ${selections.length} objects`,
+      redo: () => {
+        for (const entry of [...instanceDeletes].sort(compareInstanceDeletes)) {
+          this.host.removeInstancePlacement(entry.selection.assetId, entry.selection.placementIndex);
+        }
+        for (const entry of [...characterDeletes].sort(compareCharacterDeletes)) {
+          this.host.removeCharacterPlacement(entry.selection.index);
+        }
+        for (const entry of [...lightDeletes].sort(compareLightDeletes)) {
+          this.host.removeLightActor(entry.selection.index);
+        }
+        this.select(null);
+      },
+      undo: () => {
+        for (const entry of [...instanceDeletes].sort(compareInstanceRestores)) {
+          this.host.insertInstancePlacement(
+            entry.selection.assetId,
+            entry.selection.placementIndex,
+            entry.snapshot,
+          );
+        }
+        for (const entry of [...characterDeletes].sort(compareCharacterRestores)) {
+          this.host.insertCharacterPlacement(entry.selection.index, entry.snapshot);
+        }
+        for (const entry of [...lightDeletes].sort(compareLightRestores)) {
+          this.host.insertLightActor(entry.selection.index, entry.snapshot);
+        }
+        this.selectMany(previousSelections, previousActive);
+      },
+    });
+  }
+
+  duplicateSelected(): void {
+    const selections = this.getSelectedSelections();
+    if (selections.length === 0) {
+      this.host.onStatus("No selected object to duplicate.", "warning");
+      return;
+    }
+    if (selections.length === 1) {
+      this.duplicateSelection(selections[0]!);
+      return;
+    }
+
+    this.duplicateSelections(selections);
+  }
+
+  duplicateSelectionForDrag(selection: Selection): Selection | null {
+    const selections = this.getSelectedSelections();
+    if (selections.length > 1 && selections.some((entry) => selectionsEqual(entry, selection))) {
+      return this.duplicateSelections(selections);
+    }
+    return this.duplicateSelection(selection);
+  }
+
+  hideSelected(): void {
+    this.setSelectedHidden(true);
+  }
+
+  setSelectedHidden(hidden: boolean): void {
+    this.setSelectionsFlag(
+      this.getSelectedSelections(),
+      "hidden",
+      hidden,
+      hidden ? "Hide selected" : "Show selected",
+    );
+  }
+
+  setSelectedLocked(locked: boolean): void {
+    this.setSelectionsFlag(
+      this.getSelectedSelections(),
+      "locked",
+      locked,
+      locked ? "Lock selected" : "Unlock selected",
+    );
+  }
+
+  showHiddenObjects(): void {
+    const hiddenSelections = this.host
+      .getAllSelections({ includeHidden: true })
+      .filter((selection) => this.host.getMutableTransform(selection)?.hidden);
+    this.setSelectionsFlag(hiddenSelections, "hidden", false, "Show hidden objects");
+  }
+
+  setSelectionFlag(selection: Selection, flag: EditorFlagCommand, value: boolean): void {
+    const target = this.host.getMutableTransform(selection);
+    if (!target) return;
+    const previous = Boolean(target[flag]);
+    if (previous === value) return;
+
+    const label = flagCommandLabel(flag, value);
+
+    this.executeCommand({
+      label,
+      redo: () => this.applyFlag(selection, flag, value),
+      undo: () => this.applyFlag(selection, flag, previous),
+    });
+  }
+
+  setSelectionScaleLocked(value: boolean): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    this.setSelectionFlag(this.selection, "scaleLocked", value);
+  }
+
+  setSelectionCastShadow(value: boolean): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    if (this.selection.kind !== "character") {
+      this.host.onStatus("Cast Shadow is controlled centrally for static objects.", "info");
+      return;
+    }
+    this.setSelectionDefaultTrueFlag(this.selection, "castShadow", value);
+  }
+
+  setSelectionCollision(value: boolean): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    if (this.selection.kind === "light") return;
+    this.setSelectionDefaultTrueFlag(this.selection, "collision", value);
+  }
+
+  setSelectionMetadata(key: string, value: MetadataValue | undefined, label?: string): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    if (this.selection.kind === "light") return;
+    const target = this.host.getMutableTransform(this.selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    const previous = cloneMetadataValue(target.metadata?.[key]);
+    if (metadataValuesEqual(previous, value)) return;
+
+    const commandSelection = cloneSelection(this.selection);
+    this.executeCommand({
+      label: label ?? `Set ${key}`,
+      redo: () => this.applyMetadataValue(commandSelection, key, value),
+      undo: () => this.applyMetadataValue(commandSelection, key, previous),
+    });
+  }
+
+  private duplicateSelection(selection: Selection): Selection | null {
+    const layout = this.host.getMutableLayout();
+    if (!layout) return null;
+    if (selection.kind === "instance") {
+      const instance = layout.instances.find((entry) => entry.assetId === selection.assetId);
+      const transform = instance?.placements[selection.placementIndex];
+      if (!transform) return null;
+      const snapshot = clonePlacement(transform);
+      delete snapshot.groupId;
+      delete snapshot.nodeId;
+      const duplicateIndex = selection.placementIndex + 1;
+      const duplicateSelection: Selection = {
+        kind: "instance",
+        assetId: selection.assetId,
+        placementIndex: duplicateIndex,
+      };
+      this.executeCommand({
+        label: `Duplicate ${selection.assetId}`,
+        redo: () => {
+          this.host.insertInstancePlacement(selection.assetId, duplicateIndex, snapshot);
+          this.select(duplicateSelection);
+        },
+        undo: () => {
+          this.host.removeInstancePlacement(selection.assetId, duplicateIndex);
+          this.select(selection);
+        },
+      });
+      return duplicateSelection;
+    }
+
+    if (selection.kind === "light") {
+      const light = layout.lights?.[selection.index];
+      if (!light) return null;
+      const snapshot = cloneLightActor(light);
+      snapshot.id = this.host.createLightId(light.type);
+      snapshot.name = uniqueActorName(light.name ?? light.id, layout.lights ?? []);
+      delete snapshot.groupId;
+      delete snapshot.nodeId;
+      const duplicateIndex = selection.index + 1;
+      const duplicateSelection: Selection = { kind: "light", index: duplicateIndex };
+      this.executeCommand({
+        label: `Duplicate ${light.name ?? light.id}`,
+        redo: () => {
+          this.host.insertLightActor(duplicateIndex, snapshot);
+          this.select(duplicateSelection);
+        },
+        undo: () => {
+          this.host.removeLightActor(duplicateIndex);
+          this.select(selection);
+        },
+      });
+      return duplicateSelection;
+    }
+
+    const character = layout.characters[selection.index];
+    if (!character) return null;
+    const snapshot = cloneCharacter(character);
+    delete snapshot.groupId;
+    delete snapshot.nodeId;
+    const duplicateIndex = selection.index + 1;
+    const duplicateSelection: Selection = { kind: "character", index: duplicateIndex };
+    this.executeCommand({
+      label: `Duplicate ${character.name ?? character.assetId}`,
+      redo: () => {
+        this.host.insertCharacterPlacement(duplicateIndex, snapshot);
+        this.select(duplicateSelection);
+      },
+      undo: () => {
+        this.host.removeCharacterPlacement(duplicateIndex);
+        this.select(selection);
+      },
+    });
+    return duplicateSelection;
+  }
+
+  private duplicateSelections(selections: Selection[]): Selection | null {
+    const layout = this.host.getMutableLayout();
+    if (!layout) return null;
+
+    const previousSelections = selections.map(cloneSelection);
+    const previousActive = this.selection ? cloneSelection(this.selection) : null;
+    const inserts: Array<{
+      source: Selection;
+      selection: Selection;
+      snapshot: LayoutPlacement | LayoutCharacter | LayoutLightActor;
+    }> = [];
+
+    const instancesByAsset = new Map<string, Selection[]>();
+    for (const selection of selections) {
+      if (selection.kind !== "instance") continue;
+      const entries = instancesByAsset.get(selection.assetId) ?? [];
+      entries.push(cloneSelection(selection));
+      instancesByAsset.set(selection.assetId, entries);
+    }
+
+    for (const [assetId, entries] of instancesByAsset) {
+      entries.sort((left, right) => {
+        if (left.kind !== "instance" || right.kind !== "instance") return 0;
+        return left.placementIndex - right.placementIndex;
+      });
+      entries.forEach((selection, offset) => {
+        if (selection.kind !== "instance") return;
+        const instance = layout.instances.find((entry) => entry.assetId === selection.assetId);
+        const transform = instance?.placements[selection.placementIndex];
+        if (!transform) return;
+        const duplicateSelection: Selection = {
+          kind: "instance",
+          assetId,
+          placementIndex: selection.placementIndex + offset + 1,
+        };
+        inserts.push({
+          source: cloneSelection(selection),
+          selection: duplicateSelection,
+          snapshot: cloneUngroupedPlacement(transform),
+        });
+      });
+    }
+
+    const characterSelections = selections
+      .filter((selection): selection is CharacterSelection => selection.kind === "character")
+      .map((selection) => cloneSelection(selection) as CharacterSelection)
+      .sort((left, right) => left.index - right.index);
+    characterSelections.forEach((selection, offset) => {
+      const character = layout.characters[selection.index];
+      if (!character) return;
+      inserts.push({
+        source: cloneSelection(selection),
+        selection: { kind: "character", index: selection.index + offset + 1 },
+        snapshot: cloneUngroupedCharacter(character),
+      });
+    });
+
+    const lightSelections = selections
+      .filter((selection): selection is LightSelection => selection.kind === "light")
+      .map((selection) => cloneSelection(selection) as LightSelection)
+      .sort((left, right) => left.index - right.index);
+    lightSelections.forEach((selection, offset) => {
+      const light = layout.lights?.[selection.index];
+      if (!light) return;
+      const snapshot = cloneUngroupedLightActor(light);
+      snapshot.id = this.host.createLightId(light.type);
+      snapshot.name = uniqueActorName(light.name ?? light.id, layout.lights ?? []);
+      inserts.push({
+        source: cloneSelection(selection),
+        selection: { kind: "light", index: selection.index + offset + 1 },
+        snapshot,
+      });
+    });
+
+    if (inserts.length === 0) return null;
+
+    const duplicateSelections = inserts.map((entry) => cloneSelection(entry.selection));
+    const activeDuplicate =
+      (previousActive &&
+        inserts.find((entry) => selectionsEqual(entry.source, previousActive))?.selection) ??
+      duplicateSelections.at(-1) ??
+      null;
+
+    this.executeCommand({
+      label: `Duplicate ${inserts.length} objects`,
+      redo: () => {
+        for (const entry of inserts) {
+          if (entry.selection.kind === "instance") {
+            this.host.insertInstancePlacement(
+              entry.selection.assetId,
+              entry.selection.placementIndex,
+              entry.snapshot as LayoutPlacement,
+            );
+          } else if (entry.selection.kind === "character") {
+            this.host.insertCharacterPlacement(
+              entry.selection.index,
+              entry.snapshot as LayoutCharacter,
+            );
+          } else {
+            this.host.insertLightActor(entry.selection.index, entry.snapshot as LayoutLightActor);
+          }
+        }
+        this.selectMany(
+          duplicateSelections,
+          activeDuplicate ? cloneSelection(activeDuplicate) : null,
+        );
+      },
+      undo: () => {
+        for (const entry of [...inserts].reverse()) {
+          if (entry.selection.kind === "instance") {
+            this.host.removeInstancePlacement(entry.selection.assetId, entry.selection.placementIndex);
+          } else if (entry.selection.kind === "character") {
+            this.host.removeCharacterPlacement(entry.selection.index);
+          } else {
+            this.host.removeLightActor(entry.selection.index);
+          }
+        }
+        this.selectMany(previousSelections, previousActive);
+      },
+    });
+    return activeDuplicate ? cloneSelection(activeDuplicate) : null;
+  }
+
+  private setSelectionsFlag(
+    selections: Selection[],
+    flag: EditorFlagCommand,
+    value: boolean,
+    label: string,
+  ): void {
+    const entries = selections.flatMap((selection) => {
+      const target = this.host.getMutableTransform(selection);
+      return target
+        ? [{ selection: cloneSelection(selection), previous: Boolean(target[flag]) }]
+        : [];
+    });
+    if (entries.length === 0) {
+      this.host.onStatus("No matching objects.", "warning");
+      return;
+    }
+    if (entries.every((entry) => entry.previous === value)) return;
+
+    const applyEntries = (mode: EditorCommandPhase): void => {
+      for (const entry of entries) {
+        this.applyFlag(
+          entry.selection,
+          flag,
+          mode === "redo" ? value : entry.previous,
+          { notify: false },
+        );
+      }
+      this.host.updateSelectionBox();
+      this.host.updateGizmo();
+      this.host.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label,
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
+    });
+  }
+
+  private applyFlag(
+    selection: Selection,
+    flag: EditorFlagCommand,
+    value: boolean,
+    options: { notify?: boolean } = {},
+  ): void {
+    const target = this.host.getMutableTransform(selection);
+    if (!target) return;
+    if (value) target[flag] = true;
+    else delete target[flag];
+
+    if (flag === "hidden") this.host.applyVisibility(selection);
+    this.host.updateSelectionBox();
+    this.host.updateGizmo();
+    if (options.notify !== false) this.host.emitSelectionChanged();
+  }
+
+  private setSelectionDefaultTrueFlag(
+    selection: Selection,
+    field: EditorDefaultTrueFlagCommand,
+    value: boolean,
+  ): void {
+    if (selection.kind === "light") return;
+    const target = this.host.getMutableTransform(selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    const previous = target[field] ?? true;
+    if (previous === value) return;
+
+    const label = defaultTrueFlagCommandLabel(field, value);
+    const commandSelection = cloneSelection(selection);
+
+    this.executeCommand({
+      label,
+      redo: () => this.applyDefaultTrueFlag(commandSelection, field, value),
+      undo: () => this.applyDefaultTrueFlag(commandSelection, field, previous),
+    });
+  }
+
+  private applyDefaultTrueFlag(
+    selection: Selection,
+    field: EditorDefaultTrueFlagCommand,
+    value: boolean,
+  ): void {
+    if (selection.kind === "light") return;
+    const target = this.host.getMutableTransform(selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    if (value) delete target[field];
+    else target[field] = false;
+    if (field === "castShadow") this.host.applyCastShadow(selection);
+    this.host.emitSelectionChanged();
+  }
+
+  private applyMetadataValue(
+    selection: Selection,
+    key: string,
+    value: MetadataValue | undefined,
+  ): void {
+    if (selection.kind === "light") return;
+    const target = this.host.getMutableTransform(selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    if (value === undefined) {
+      if (target.metadata) {
+        delete target.metadata[key];
+        if (Object.keys(target.metadata).length === 0) delete target.metadata;
+      }
+    } else {
+      target.metadata ??= {};
+      target.metadata[key] = cloneMetadataValue(value) as MetadataValue;
+    }
+    this.host.emitSelectionChanged();
+  }
+
+  private createGroupId(): string {
+    const existing = new Set<string>();
+    for (const selection of this.host.getAllSelections({ includeHidden: true })) {
+      const groupId = this.host.getMutableTransform(selection)?.groupId;
+      if (groupId) existing.add(groupId);
+    }
+
+    return uniqueEditorId("group", existing, 10_000);
+  }
+
+  private createNodeId(): string {
+    const existing = new Set<string>();
+    for (const selection of this.host.getAllSelections({ includeHidden: true })) {
+      const nodeId = this.host.getMutableTransform(selection)?.nodeId;
+      if (nodeId) existing.add(nodeId);
+    }
+    return uniqueEditorId("node", existing);
+  }
+}

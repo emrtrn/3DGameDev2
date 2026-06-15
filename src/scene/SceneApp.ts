@@ -97,18 +97,11 @@ import {
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 import type { TransformComponent } from "@engine/scene/components";
-import {
-  metadataValuesEqual,
-  type MetadataSchema,
-} from "@engine/scene/metadataSchema";
+import type { MetadataSchema } from "@engine/scene/metadataSchema";
 import {
   cloneCharacter,
   cloneLightActor,
-  cloneMetadataValue,
   clonePlacement,
-  cloneUngroupedCharacter,
-  cloneUngroupedLightActor,
-  cloneUngroupedPlacement,
   lightActorsEqual,
   transformsEqual,
 } from "@editor/core/layoutSnapshots";
@@ -123,12 +116,6 @@ import {
   snapStatus,
   snapValue,
 } from "@editor/core/numeric";
-import {
-  defaultTrueFlagCommandLabel,
-  flagCommandLabel,
-  type EditorDefaultTrueFlagCommand,
-  type EditorFlagCommand,
-} from "@editor/core/commandLabels";
 import { buildEditableSelection, buildSceneObjects } from "@editor/core/sceneObjects";
 import type { EditorTool, TransformSpace } from "@editor/core/tools";
 import {
@@ -142,32 +129,22 @@ import {
 } from "@editor/core/editableScene";
 import type {
   EditorCommand,
-  EditorCommandPhase,
   EditorHistoryState,
 } from "@editor/core/history";
-import { EditorCommandStore } from "@editor/core/history";
 import {
   descendantSelections,
   groupedSelections,
 } from "@editor/core/hierarchy";
 import { uniqueEditorId } from "@editor/core/ids";
 import {
-  compareCharacterDeletes,
-  compareCharacterRestores,
-  compareInstanceDeletes,
-  compareInstanceRestores,
-  compareLightDeletes,
-  compareLightRestores,
   cloneSelection,
   parseSelectionId,
   selectionId,
   selectionsEqual,
-  type CharacterSelection,
   type InstanceSelection,
   type LightSelection,
   type Selection,
 } from "@editor/core/selection";
-import { SelectionStore } from "@editor/core/selectionStore";
 import { isPlaneAxis } from "@editor/gizmos/axes";
 import { type GizmoHandle } from "@editor/gizmos/handles";
 import { buildGizmoHandles, clearGizmoGroup } from "@editor/gizmos/builder";
@@ -193,6 +170,7 @@ import {
 import { bindEditorInputEvents } from "@editor/input/bindings";
 import { EditorCameraController } from "@editor/input/editorCameraController";
 import { ScenePicker } from "@editor/render-three/scenePicker";
+import { EditorSceneController } from "@editor/scene/EditorSceneController";
 import { computeWallSnap } from "@editor/render-three/wallSnap";
 import {
   matrixToTransform,
@@ -327,14 +305,12 @@ export class SceneApp {
   private lightObjects: LightObjectRecord[] = [];
   private localBounds = new Map<string, Box3>();
   private assetPlacements = new Map<string, EditableAsset["placement"]>();
-  /** Owns the active selection + multi-select set (editor state, not runtime). */
-  private readonly selectionStore = new SelectionStore();
   /** Active selection, delegating to the store so ownership lives there. */
   private get selection(): Selection | null {
-    return this.selectionStore.activeSelection;
+    return this.editorSceneController.selection;
   }
   private set selection(value: Selection | null) {
-    this.selectionStore.activeSelection = value;
+    this.editorSceneController.selection = value;
   }
   private readonly selectionBoxes: Box3Helper[] = [];
   private readonly gizmoGroup = new Group();
@@ -355,7 +331,7 @@ export class SceneApp {
   };
   private pendingAssetId: string | null = null;
   private pointerDrag: GizmoPointerDrag | null = null;
-  private readonly commandStore = new EditorCommandStore();
+  private readonly editorSceneController: EditorSceneController;
   private unbindEditorInput: (() => void) | null = null;
   private layoutSaver: LayoutSaver | null = null;
 
@@ -376,6 +352,33 @@ export class SceneApp {
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
     this.scene.background = new Color(0xd7d7c7);
     this.camera = createSceneCamera();
+    this.editorSceneController = new EditorSceneController({
+      applyCastShadow: (selection) => this.applyCastShadow(selection),
+      applyGroupId: (selection, groupId, options) =>
+        this.applyGroupId(selection, groupId, options),
+      applyVisibility: (selection) => this.applyVisibility(selection),
+      descendantsOf: (selection) => this.descendantsOf(selection),
+      emitHistoryChanged: () => this.emitHistoryChanged(),
+      emitSelectionChanged: () => this.emitSelectionChanged(),
+      getAllSelections: (options) => this.getAllSelections(options),
+      getGroupedSelections: (selection) => this.getGroupedSelections(selection),
+      getMutableLayout: () => this.layout,
+      getMutableTransform: (selection) => this.getMutableTransform(selection),
+      getSelectionLabel: (selection) => this.getSelectionLabel(selection),
+      hasSelection: (selection) => this.hasSelection(selection),
+      createLightId: (type) => this.createLightId(type),
+      insertCharacterPlacement: (index, placement) => this.insertCharacterPlacement(index, placement),
+      insertInstancePlacement: (assetId, placementIndex, placement) =>
+        this.insertInstancePlacement(assetId, placementIndex, placement),
+      insertLightActor: (index, actor) => this.insertLightActor(index, actor),
+      onStatus: (message, tone) => this.onStatus?.(message, tone),
+      removeCharacterPlacement: (index) => this.removeCharacterPlacement(index),
+      removeInstancePlacement: (assetId, placementIndex) =>
+        this.removeInstancePlacement(assetId, placementIndex),
+      removeLightActor: (index) => this.removeLightActor(index),
+      updateGizmo: () => this.updateGizmo(),
+      updateSelectionBox: () => this.updateSelectionBox(),
+    });
     this.cameraController = new EditorCameraController({
       camera: this.camera,
       canvas: this.canvas,
@@ -573,39 +576,33 @@ export class SceneApp {
   setSceneObjectHidden(id: string, hidden: boolean): void {
     const selection = parseSelectionId(id);
     if (!selection || !this.hasSelection(selection)) return;
-    if (this.selectionStore.selectedCount > 1 && this.isSelectionSelected(selection)) {
+    if (this.editorSceneController.selectedCount > 1 && this.isSelectionSelected(selection)) {
       this.setSelectedHidden(hidden);
       return;
     }
-    this.setSelectionFlag(selection, "hidden", hidden);
+    this.editorSceneController.setSelectionFlag(selection, "hidden", hidden);
   }
 
   setSceneObjectLocked(id: string, locked: boolean): void {
     const selection = parseSelectionId(id);
     if (!selection || !this.hasSelection(selection)) return;
-    if (this.selectionStore.selectedCount > 1 && this.isSelectionSelected(selection)) {
+    if (this.editorSceneController.selectedCount > 1 && this.isSelectionSelected(selection)) {
       this.setSelectedLocked(locked);
       return;
     }
-    this.setSelectionFlag(selection, "locked", locked);
+    this.editorSceneController.setSelectionFlag(selection, "locked", locked);
   }
 
   getHistoryState(): EditorHistoryState {
-    return this.commandStore.state();
+    return this.editorSceneController.getHistoryState();
   }
 
   undo(): void {
-    const result = this.commandStore.undo();
-    if (!result) return;
-    this.emitHistoryChanged();
-    this.onStatus?.(result.statusMessage, result.statusTone);
+    this.editorSceneController.undo();
   }
 
   redo(): void {
-    const result = this.commandStore.redo();
-    if (!result) return;
-    this.emitHistoryChanged();
-    this.onStatus?.(result.statusMessage, result.statusTone);
+    this.editorSceneController.redo();
   }
 
   setEditorTool(tool: EditorTool): void {
@@ -944,260 +941,37 @@ export class SceneApp {
   }
 
   deleteSelected(): void {
-    if (!this.layout) return;
-    const selections = this.getSelectedSelections();
-    if (selections.length === 0) return;
-
-    const instanceDeletes: Array<{ selection: InstanceSelection; snapshot: LayoutPlacement }> = [];
-    const characterDeletes: Array<{ selection: CharacterSelection; snapshot: LayoutCharacter }> = [];
-    const lightDeletes: Array<{ selection: LightSelection; snapshot: LayoutLightActor }> = [];
-    for (const selection of selections) {
-      if (selection.kind === "instance") {
-        const instance = this.layout?.instances.find((entry) => entry.assetId === selection.assetId);
-        const placement = instance?.placements[selection.placementIndex];
-        if (placement) {
-          instanceDeletes.push({
-            selection: cloneSelection(selection) as InstanceSelection,
-            snapshot: clonePlacement(placement),
-          });
-        }
-        continue;
-      }
-
-      if (selection.kind === "character") {
-        const character = this.layout?.characters[selection.index];
-        if (!character) continue;
-        characterDeletes.push({
-          selection: cloneSelection(selection) as CharacterSelection,
-          snapshot: cloneCharacter(character),
-        });
-        continue;
-      }
-
-      const light = this.layout?.lights?.[selection.index];
-      if (light) {
-        lightDeletes.push({
-          selection: cloneSelection(selection) as LightSelection,
-          snapshot: cloneLightActor(light),
-        });
-      }
-    }
-    if (instanceDeletes.length + characterDeletes.length + lightDeletes.length === 0) return;
-
-    const previousSelections = selections.map(cloneSelection);
-    const previousActive = this.selection ? cloneSelection(this.selection) : null;
-    this.executeCommand({
-      label:
-        selections.length === 1
-          ? `Delete ${this.getSelectionLabel(selections[0]!)}`
-          : `Delete ${selections.length} objects`,
-      redo: () => {
-        for (const entry of [...instanceDeletes].sort(compareInstanceDeletes)) {
-          this.removeInstancePlacement(entry.selection.assetId, entry.selection.placementIndex);
-        }
-        for (const entry of [...characterDeletes].sort(compareCharacterDeletes)) {
-          this.removeCharacterPlacement(entry.selection.index);
-        }
-        for (const entry of [...lightDeletes].sort(compareLightDeletes)) {
-          this.removeLightActor(entry.selection.index);
-        }
-        this.select(null);
-      },
-      undo: () => {
-        for (const entry of [...instanceDeletes].sort(compareInstanceRestores)) {
-          this.insertInstancePlacement(
-            entry.selection.assetId,
-            entry.selection.placementIndex,
-            entry.snapshot,
-          );
-        }
-        for (const entry of [...characterDeletes].sort(compareCharacterRestores)) {
-          this.insertCharacterPlacement(entry.selection.index, entry.snapshot);
-        }
-        for (const entry of [...lightDeletes].sort(compareLightRestores)) {
-          this.insertLightActor(entry.selection.index, entry.snapshot);
-        }
-        this.selectMany(previousSelections, previousActive);
-      },
-    });
+    this.editorSceneController.deleteSelected();
   }
 
   duplicateSelected(): void {
-    const selections = this.getSelectedSelections();
-    if (selections.length === 0) {
-      this.onStatus?.("No selected object to duplicate.", "warning");
-      return;
-    }
-    if (selections.length === 1) {
-      this.duplicateSelection(selections[0]!);
-      return;
-    }
-
-    this.duplicateSelections(selections);
+    this.editorSceneController.duplicateSelected();
   }
 
   hideSelected(): void {
-    this.setSelectedHidden(true);
+    this.editorSceneController.hideSelected();
   }
 
   setSelectedHidden(hidden: boolean): void {
-    this.setSelectionsFlag(
-      this.getSelectedSelections(),
-      "hidden",
-      hidden,
-      hidden ? "Hide selected" : "Show selected",
-    );
+    this.editorSceneController.setSelectedHidden(hidden);
   }
 
   setSelectedLocked(locked: boolean): void {
-    this.setSelectionsFlag(
-      this.getSelectedSelections(),
-      "locked",
-      locked,
-      locked ? "Lock selected" : "Unlock selected",
-    );
+    this.editorSceneController.setSelectedLocked(locked);
   }
 
   groupSelected(): void {
-    const selections = this.getSelectedSelections();
-    if (selections.length < 2) {
-      this.onStatus?.("Select at least two objects to group.", "warning");
-      return;
-    }
-
-    const groupId = this.createGroupId();
-    const entries = selections.flatMap((selection) => {
-      const target = this.getMutableTransform(selection);
-      return target
-        ? [
-            {
-              selection: cloneSelection(selection),
-              previousGroupId: target.groupId,
-            },
-          ]
-        : [];
-    });
-    if (entries.length < 2) {
-      this.onStatus?.("Select at least two objects to group.", "warning");
-      return;
-    }
-
-    const active = this.selection
-      ? cloneSelection(this.selection)
-      : cloneSelection(entries[0]!.selection);
-    const applyEntries = (mode: EditorCommandPhase): void => {
-      for (const entry of entries) {
-        this.applyGroupId(
-          entry.selection,
-          mode === "redo" ? groupId : entry.previousGroupId,
-          { notify: false },
-        );
-      }
-      this.selectMany(
-        entries.map((entry) => cloneSelection(entry.selection)),
-        active,
-      );
-      this.emitSelectionChanged();
-    };
-
-    this.executeCommand({
-      label: `Group ${entries.length} objects`,
-      redo: () => applyEntries("redo"),
-      undo: () => applyEntries("undo"),
-    });
+    this.editorSceneController.groupSelected();
   }
 
   /** Clears the group id from every member of any group in the current selection. */
   ungroupSelected(): void {
-    const groupIds = new Set<string>();
-    for (const selection of this.getSelectedSelections()) {
-      const groupId = this.getMutableTransform(selection)?.groupId;
-      if (groupId) groupIds.add(groupId);
-    }
-    if (groupIds.size === 0) {
-      this.onStatus?.("Selection is not grouped.", "warning");
-      return;
-    }
-
-    const entries = this.getAllSelections({ includeHidden: true }).flatMap((selection) => {
-      const target = this.getMutableTransform(selection);
-      return target?.groupId && groupIds.has(target.groupId)
-        ? [{ selection: cloneSelection(selection), previousGroupId: target.groupId }]
-        : [];
-    });
-    if (entries.length === 0) return;
-    const active = this.selection ? cloneSelection(this.selection) : null;
-
-    const applyEntries = (mode: EditorCommandPhase): void => {
-      for (const entry of entries) {
-        this.applyGroupId(
-          entry.selection,
-          mode === "redo" ? undefined : entry.previousGroupId,
-          { notify: false },
-        );
-      }
-      this.selectMany(entries.map((entry) => cloneSelection(entry.selection)), active);
-      this.emitSelectionChanged();
-    };
-
-    this.executeCommand({
-      label: `Ungroup ${entries.length} objects`,
-      redo: () => applyEntries("redo"),
-      undo: () => applyEntries("undo"),
-    });
+    this.editorSceneController.ungroupSelected();
   }
 
   /** Parents the other selected objects to the active selection (the parent). */
   parentSelectionToActive(): void {
-    if (!this.selection) return;
-    const parent = cloneSelection(this.selection);
-    const parentTarget = this.getMutableTransform(parent);
-    if (!parentTarget) return;
-
-    // Cycle guard: an ancestor of the parent cannot become its child.
-    const parentDescendantIds = new Set(
-      this.descendantsOf(parent)
-        .map((entry) => this.getMutableTransform(entry)?.nodeId)
-        .filter((id): id is string => Boolean(id)),
-    );
-
-    const parentNodeId = parentTarget.nodeId ?? this.createNodeId();
-    const children = this.getSelectedSelections().flatMap((selection) => {
-      if (selectionsEqual(selection, parent)) return [];
-      const target = this.getMutableTransform(selection);
-      if (!target) return [];
-      // Skip if this object is the parent's ancestor (would form a cycle).
-      if (target.nodeId && parentDescendantIds.has(target.nodeId)) return [];
-      if (target.parentId === parentNodeId) return [];
-      return [{ selection: cloneSelection(selection), previousParentId: target.parentId }];
-    });
-    if (children.length === 0) {
-      this.onStatus?.("Select children plus a parent (active) to parent.", "warning");
-      return;
-    }
-
-    const hadParentNodeId = parentTarget.nodeId !== undefined;
-    const apply = (mode: EditorCommandPhase): void => {
-      const parentMut = this.getMutableTransform(parent);
-      if (parentMut) {
-        if (mode === "redo") parentMut.nodeId = parentNodeId;
-        else if (!hadParentNodeId) delete parentMut.nodeId;
-      }
-      for (const child of children) {
-        const target = this.getMutableTransform(child.selection);
-        if (!target) continue;
-        if (mode === "redo") target.parentId = parentNodeId;
-        else if (child.previousParentId === undefined) delete target.parentId;
-        else target.parentId = child.previousParentId;
-      }
-      this.emitSelectionChanged();
-    };
-
-    this.executeCommand({
-      label: `Parent ${children.length} to ${this.getSelectionLabel(parent)}`,
-      redo: () => apply("redo"),
-      undo: () => apply("undo"),
-    });
+    this.editorSceneController.parentSelectionToActive();
   }
 
   /**
@@ -1206,82 +980,12 @@ export class SceneApp {
    * Cycle-safe (a target that is a descendant of a dragged object is skipped).
    */
   parentObjectsTo(childIds: string[], parentId: string): void {
-    const parent = parseSelectionId(parentId);
-    if (!parent || !this.hasSelection(parent)) return;
-    const parentTarget = this.getMutableTransform(parent);
-    if (!parentTarget) return;
-
-    const parentNodeId = parentTarget.nodeId ?? this.createNodeId();
-    const children = childIds.flatMap((childId) => {
-      const selection = parseSelectionId(childId);
-      if (!selection || !this.hasSelection(selection)) return [];
-      if (selectionsEqual(selection, parent)) return [];
-      const target = this.getMutableTransform(selection);
-      if (!target) return [];
-      // Cycle guard: the target cannot be a descendant of this child.
-      const descendantIds = new Set(
-        this.descendantsOf(selection)
-          .map((entry) => this.getMutableTransform(entry)?.nodeId)
-          .filter((id): id is string => Boolean(id)),
-      );
-      if (target.nodeId && descendantIds.has(parentNodeId)) return [];
-      if (target.parentId === parentNodeId) return [];
-      return [{ selection: cloneSelection(selection), previousParentId: target.parentId }];
-    });
-    if (children.length === 0) return;
-
-    const hadParentNodeId = parentTarget.nodeId !== undefined;
-    const apply = (mode: EditorCommandPhase): void => {
-      const parentMut = this.getMutableTransform(parent);
-      if (parentMut) {
-        if (mode === "redo") parentMut.nodeId = parentNodeId;
-        else if (!hadParentNodeId) delete parentMut.nodeId;
-      }
-      for (const child of children) {
-        const target = this.getMutableTransform(child.selection);
-        if (!target) continue;
-        if (mode === "redo") target.parentId = parentNodeId;
-        else if (child.previousParentId === undefined) delete target.parentId;
-        else target.parentId = child.previousParentId;
-      }
-      this.emitSelectionChanged();
-    };
-
-    this.executeCommand({
-      label: `Parent ${children.length} to ${this.getSelectionLabel(parent)}`,
-      redo: () => apply("redo"),
-      undo: () => apply("undo"),
-    });
+    this.editorSceneController.parentObjectsTo(childIds, parentId);
   }
 
   /** Clears the parent of every selected object. */
   unparentSelected(): void {
-    const entries = this.getSelectedSelections().flatMap((selection) => {
-      const target = this.getMutableTransform(selection);
-      return target?.parentId !== undefined
-        ? [{ selection: cloneSelection(selection), previousParentId: target.parentId }]
-        : [];
-    });
-    if (entries.length === 0) {
-      this.onStatus?.("Selection has no parent.", "warning");
-      return;
-    }
-
-    const apply = (mode: EditorCommandPhase): void => {
-      for (const entry of entries) {
-        const target = this.getMutableTransform(entry.selection);
-        if (!target) continue;
-        if (mode === "redo") delete target.parentId;
-        else target.parentId = entry.previousParentId;
-      }
-      this.emitSelectionChanged();
-    };
-
-    this.executeCommand({
-      label: `Unparent ${entries.length} objects`,
-      redo: () => apply("redo"),
-      undo: () => apply("undo"),
-    });
+    this.editorSceneController.unparentSelected();
   }
 
   /**
@@ -1376,10 +1080,7 @@ export class SceneApp {
   }
 
   showHiddenObjects(): void {
-    const hiddenSelections = this
-      .getAllSelections({ includeHidden: true })
-      .filter((selection) => this.getMutableTransform(selection)?.hidden);
-    this.setSelectionsFlag(hiddenSelections, "hidden", false, "Show hidden objects");
+    this.editorSceneController.showHiddenObjects();
   }
 
   addLightActor(type: LayoutLightActor["type"]): void {
@@ -1807,207 +1508,8 @@ export class SceneApp {
     });
   }
 
-  private duplicateSelection(selection: Selection): Selection | null {
-    if (!this.layout || !this.hasSelection(selection)) return null;
-
-    if (selection.kind === "instance") {
-      const transform = this.getMutableTransform(selection);
-      if (!transform) return null;
-      const snapshot = clonePlacement(transform);
-      delete snapshot.groupId;
-      delete snapshot.nodeId;
-      const duplicateIndex = selection.placementIndex + 1;
-      const duplicateSelection: Selection = {
-        kind: "instance",
-        assetId: selection.assetId,
-        placementIndex: duplicateIndex,
-      };
-      this.executeCommand({
-        label: `Duplicate ${selection.assetId}`,
-        redo: () => {
-          this.insertInstancePlacement(selection.assetId, duplicateIndex, snapshot);
-          this.select(duplicateSelection);
-        },
-        undo: () => {
-          this.removeInstancePlacement(selection.assetId, duplicateIndex);
-          this.select(selection);
-        },
-      });
-      return duplicateSelection;
-    }
-
-    if (selection.kind === "light") {
-      const light = this.layout.lights?.[selection.index];
-      if (!light) return null;
-      const snapshot = cloneLightActor(light);
-      snapshot.id = this.createLightId(light.type);
-      snapshot.name = uniqueActorName(light.name ?? light.id, this.layout.lights ?? []);
-      delete snapshot.groupId;
-      delete snapshot.nodeId;
-      const duplicateIndex = selection.index + 1;
-      const duplicateSelection: Selection = { kind: "light", index: duplicateIndex };
-      this.executeCommand({
-        label: `Duplicate ${light.name ?? light.id}`,
-        redo: () => {
-          this.insertLightActor(duplicateIndex, snapshot);
-          this.select(duplicateSelection);
-        },
-        undo: () => {
-          this.removeLightActor(duplicateIndex);
-          this.select(selection);
-        },
-      });
-      return duplicateSelection;
-    }
-
-    const character = this.layout.characters[selection.index];
-    if (!character) return null;
-    const snapshot = cloneCharacter(character);
-    delete snapshot.groupId;
-    delete snapshot.nodeId;
-    const duplicateIndex = selection.index + 1;
-    const duplicateSelection: Selection = { kind: "character", index: duplicateIndex };
-    this.executeCommand({
-      label: `Duplicate ${character.name ?? character.assetId}`,
-      redo: () => {
-        this.insertCharacterPlacement(duplicateIndex, snapshot);
-        this.select(duplicateSelection);
-      },
-      undo: () => {
-        this.removeCharacterPlacement(duplicateIndex);
-        this.select(selection);
-      },
-    });
-    return duplicateSelection;
-  }
-
   private duplicateSelectionForDrag(selection: Selection): Selection | null {
-    const selections = this.getSelectedSelections();
-    if (selections.length > 1 && selections.some((entry) => selectionsEqual(entry, selection))) {
-      return this.duplicateSelections(selections);
-    }
-    return this.duplicateSelection(selection);
-  }
-
-  private duplicateSelections(selections: Selection[]): Selection | null {
-    if (!this.layout) return null;
-
-    const previousSelections = selections.map(cloneSelection);
-    const previousActive = this.selection ? cloneSelection(this.selection) : null;
-    const inserts: Array<{
-      source: Selection;
-      selection: Selection;
-      snapshot: LayoutPlacement | LayoutCharacter | LayoutLightActor;
-    }> = [];
-
-    const instancesByAsset = new Map<string, Selection[]>();
-    for (const selection of selections) {
-      if (selection.kind !== "instance") continue;
-      const entries = instancesByAsset.get(selection.assetId) ?? [];
-      entries.push(cloneSelection(selection));
-      instancesByAsset.set(selection.assetId, entries);
-    }
-
-    for (const [assetId, entries] of instancesByAsset) {
-      entries.sort((left, right) => {
-        if (left.kind !== "instance" || right.kind !== "instance") return 0;
-        return left.placementIndex - right.placementIndex;
-      });
-      entries.forEach((selection, offset) => {
-        if (selection.kind !== "instance") return;
-        const transform = this.getMutableTransform(selection);
-        if (!transform) return;
-        const duplicateSelection: Selection = {
-          kind: "instance",
-          assetId,
-          placementIndex: selection.placementIndex + offset + 1,
-        };
-        inserts.push({
-          source: cloneSelection(selection),
-          selection: duplicateSelection,
-          snapshot: cloneUngroupedPlacement(transform),
-        });
-      });
-    }
-
-    const characterSelections = selections
-      .filter((selection): selection is CharacterSelection => selection.kind === "character")
-      .map((selection) => cloneSelection(selection) as CharacterSelection)
-      .sort((left, right) => left.index - right.index);
-    characterSelections.forEach((selection, offset) => {
-      const character = this.layout?.characters[selection.index];
-      if (!character) return;
-      inserts.push({
-        source: cloneSelection(selection),
-        selection: { kind: "character", index: selection.index + offset + 1 },
-        snapshot: cloneUngroupedCharacter(character),
-      });
-    });
-
-    const lightSelections = selections
-      .filter((selection): selection is LightSelection => selection.kind === "light")
-      .map((selection) => cloneSelection(selection) as LightSelection)
-      .sort((left, right) => left.index - right.index);
-    lightSelections.forEach((selection, offset) => {
-      const light = this.layout?.lights?.[selection.index];
-      if (!light) return;
-      const snapshot = cloneUngroupedLightActor(light);
-      snapshot.id = this.createLightId(light.type);
-      snapshot.name = uniqueActorName(light.name ?? light.id, this.layout?.lights ?? []);
-      inserts.push({
-        source: cloneSelection(selection),
-        selection: { kind: "light", index: selection.index + offset + 1 },
-        snapshot,
-      });
-    });
-
-    if (inserts.length === 0) return null;
-
-    const duplicateSelections = inserts.map((entry) => cloneSelection(entry.selection));
-    const activeDuplicate =
-      (previousActive &&
-        inserts.find((entry) => selectionsEqual(entry.source, previousActive))?.selection) ??
-      duplicateSelections.at(-1) ??
-      null;
-
-    this.executeCommand({
-      label: `Duplicate ${inserts.length} objects`,
-      redo: () => {
-        for (const entry of inserts) {
-          if (entry.selection.kind === "instance") {
-            this.insertInstancePlacement(
-              entry.selection.assetId,
-              entry.selection.placementIndex,
-              entry.snapshot as LayoutPlacement,
-            );
-          } else if (entry.selection.kind === "character") {
-            this.insertCharacterPlacement(
-              entry.selection.index,
-              entry.snapshot as LayoutCharacter,
-            );
-          } else {
-            this.insertLightActor(entry.selection.index, entry.snapshot as LayoutLightActor);
-          }
-        }
-        this.selectMany(
-          duplicateSelections,
-          activeDuplicate ? cloneSelection(activeDuplicate) : null,
-        );
-      },
-      undo: () => {
-        for (const entry of [...inserts].reverse()) {
-          if (entry.selection.kind === "instance") {
-            this.removeInstancePlacement(entry.selection.assetId, entry.selection.placementIndex);
-          } else if (entry.selection.kind === "character") {
-            this.removeCharacterPlacement(entry.selection.index);
-          } else {
-            this.removeLightActor(entry.selection.index);
-          }
-        }
-        this.selectMany(previousSelections, previousActive);
-      },
-    });
-    return activeDuplicate ? cloneSelection(activeDuplicate) : null;
+    return this.editorSceneController.duplicateSelectionForDrag(selection);
   }
 
   private renameSelection(selection: Selection, name: string): void {
@@ -2050,25 +1552,17 @@ export class SceneApp {
 
   /** Toggles proportional-scale lock on the current selection (Details panel). */
   setSelectionScaleLocked(value: boolean): void {
-    if (!this.selection || !this.hasSelection(this.selection)) return;
-    this.setSelectionFlag(this.selection, "scaleLocked", value);
+    this.editorSceneController.setSelectionScaleLocked(value);
   }
 
   /** Details "Cast Shadow" toggle for the active selection (default on). */
   setSelectionCastShadow(value: boolean): void {
-    if (!this.selection || !this.hasSelection(this.selection)) return;
-    if (this.selection.kind !== "character") {
-      this.onStatus?.("Cast Shadow is controlled centrally for static objects.", "info");
-      return;
-    }
-    this.setSelectionDefaultTrueFlag(this.selection, "castShadow", value);
+    this.editorSceneController.setSelectionCastShadow(value);
   }
 
   /** Details "Collision" toggle for the active selection (default on). */
   setSelectionCollision(value: boolean): void {
-    if (!this.selection || !this.hasSelection(this.selection)) return;
-    if (this.selection.kind === "light") return;
-    this.setSelectionDefaultTrueFlag(this.selection, "collision", value);
+    this.editorSceneController.setSelectionCollision(value);
   }
 
   /** Active project's gameplay metadata schema, or null when none is declared. */
@@ -2082,85 +1576,7 @@ export class SceneApp {
    * removes the key so saved layouts only carry meaningful deviations.
    */
   setSelectionMetadata(key: string, value: MetadataValue | undefined, label?: string): void {
-    if (!this.selection || !this.hasSelection(this.selection)) return;
-    if (this.selection.kind === "light") return;
-    const target = this.getMutableTransform(this.selection) as
-      | LayoutPlacement
-      | LayoutCharacter
-      | null;
-    if (!target) return;
-    const previous = cloneMetadataValue(target.metadata?.[key]);
-    if (metadataValuesEqual(previous, value)) return;
-
-    const commandSelection = cloneSelection(this.selection);
-    this.executeCommand({
-      label: label ?? `Set ${key}`,
-      redo: () => this.applyMetadataValue(commandSelection, key, value),
-      undo: () => this.applyMetadataValue(commandSelection, key, previous),
-    });
-  }
-
-  private applyMetadataValue(
-    selection: Selection,
-    key: string,
-    value: MetadataValue | undefined,
-  ): void {
-    if (selection.kind === "light") return;
-    const target = this.getMutableTransform(selection) as
-      | LayoutPlacement
-      | LayoutCharacter
-      | null;
-    if (!target) return;
-    if (value === undefined) {
-      if (target.metadata) {
-        delete target.metadata[key];
-        if (Object.keys(target.metadata).length === 0) delete target.metadata;
-      }
-    } else {
-      target.metadata ??= {};
-      target.metadata[key] = cloneMetadataValue(value) as MetadataValue;
-    }
-    this.emitSelectionChanged();
-  }
-
-  /**
-   * Sets a default-true boolean placement field (castShadow/collision) with
-   * undo/redo. The absent key means true, so the default value is omitted on
-   * save and only the deviation (false) is stored.
-   */
-  private setSelectionDefaultTrueFlag(
-    selection: Selection,
-    field: EditorDefaultTrueFlagCommand,
-    value: boolean,
-  ): void {
-    if (selection.kind === "light") return;
-    const target = this.getMutableTransform(selection) as LayoutPlacement | LayoutCharacter | null;
-    if (!target) return;
-    const previous = target[field] ?? true;
-    if (previous === value) return;
-
-    const label = defaultTrueFlagCommandLabel(field, value);
-    const commandSelection = cloneSelection(selection);
-
-    this.executeCommand({
-      label,
-      redo: () => this.applyDefaultTrueFlag(commandSelection, field, value),
-      undo: () => this.applyDefaultTrueFlag(commandSelection, field, previous),
-    });
-  }
-
-  private applyDefaultTrueFlag(
-    selection: Selection,
-    field: EditorDefaultTrueFlagCommand,
-    value: boolean,
-  ): void {
-    if (selection.kind === "light") return;
-    const target = this.getMutableTransform(selection) as LayoutPlacement | LayoutCharacter | null;
-    if (!target) return;
-    if (value) delete target[field];
-    else target[field] = false;
-    if (field === "castShadow") this.applyCastShadow(selection);
-    this.emitSelectionChanged();
+    this.editorSceneController.setSelectionMetadata(key, value, label);
   }
 
   /**
@@ -2280,81 +1696,6 @@ export class SceneApp {
     }
   }
 
-  private setSelectionFlag(
-    selection: Selection,
-    flag: EditorFlagCommand,
-    value: boolean,
-  ): void {
-    const target = this.getMutableTransform(selection);
-    if (!target) return;
-    const previous = Boolean(target[flag]);
-    if (previous === value) return;
-
-    const label = flagCommandLabel(flag, value);
-
-    this.executeCommand({
-      label,
-      redo: () => this.applyFlag(selection, flag, value),
-      undo: () => this.applyFlag(selection, flag, previous),
-    });
-  }
-
-  private setSelectionsFlag(
-    selections: Selection[],
-    flag: EditorFlagCommand,
-    value: boolean,
-    label: string,
-  ): void {
-    const entries = selections.flatMap((selection) => {
-      const target = this.getMutableTransform(selection);
-      return target
-        ? [{ selection: cloneSelection(selection), previous: Boolean(target[flag]) }]
-        : [];
-    });
-    if (entries.length === 0) {
-      this.onStatus?.("No matching objects.", "warning");
-      return;
-    }
-    if (entries.every((entry) => entry.previous === value)) return;
-
-    const applyEntries = (mode: EditorCommandPhase): void => {
-      for (const entry of entries) {
-        this.applyFlag(
-          entry.selection,
-          flag,
-          mode === "redo" ? value : entry.previous,
-          { notify: false },
-        );
-      }
-      this.updateSelectionBox();
-      this.updateGizmo();
-      this.emitSelectionChanged();
-    };
-
-    this.executeCommand({
-      label,
-      redo: () => applyEntries("redo"),
-      undo: () => applyEntries("undo"),
-    });
-  }
-
-  private applyFlag(
-    selection: Selection,
-    flag: EditorFlagCommand,
-    value: boolean,
-    options: { notify?: boolean } = {},
-  ): void {
-    const target = this.getMutableTransform(selection);
-    if (!target) return;
-    if (value) target[flag] = true;
-    else delete target[flag];
-
-    if (flag === "hidden") this.applyVisibility(selection);
-    this.updateSelectionBox();
-    this.updateGizmo();
-    if (options.notify !== false) this.emitSelectionChanged();
-  }
-
   private applyGroupId(
     selection: Selection,
     groupId: string | undefined,
@@ -2366,16 +1707,6 @@ export class SceneApp {
     else delete target.groupId;
 
     if (options.notify !== false) this.emitSelectionChanged();
-  }
-
-  private createGroupId(): string {
-    const existing = new Set<string>();
-    for (const selection of this.getAllSelections({ includeHidden: true })) {
-      const groupId = this.getMutableTransform(selection)?.groupId;
-      if (groupId) existing.add(groupId);
-    }
-
-    return uniqueEditorId("group", existing, 10_000);
   }
 
   private applyVisibility(selection: Selection): void {
@@ -2697,33 +2028,15 @@ export class SceneApp {
   }
 
   private select(selection: Selection | null): void {
-    this.selection = this.selectionStore.selectGroup(
-      selection,
-      selection ? this.getGroupedSelections(selection) : [],
-    );
-    this.updateSelectionBox();
-    this.updateGizmo();
-    this.emitSelectionChanged();
+    this.editorSceneController.select(selection);
   }
 
   private selectMany(selections: Selection[], active: Selection | null): void {
-    this.selection = this.selectionStore.selectMany(
-      selections.filter((selection) => this.hasSelection(selection)),
-      active,
-    );
-    this.updateSelectionBox();
-    this.updateGizmo();
-    this.emitSelectionChanged();
+    this.editorSceneController.selectMany(selections, active);
   }
 
   private toggleSelection(selection: Selection): void {
-    this.selection = this.selectionStore.toggleGroup(
-      selection,
-      this.getGroupedSelections(selection),
-    );
-    this.updateSelectionBox();
-    this.updateGizmo();
-    this.emitSelectionChanged();
+    this.editorSceneController.toggleSelection(selection);
   }
 
   private captureLinkedMoveStarts(active: Selection): LinkedMoveStart[] | undefined {
@@ -2822,21 +2135,12 @@ export class SceneApp {
     );
   }
 
-  private createNodeId(): string {
-    const existing = new Set<string>();
-    for (const selection of this.getAllSelections({ includeHidden: true })) {
-      const nodeId = this.getMutableTransform(selection)?.nodeId;
-      if (nodeId) existing.add(nodeId);
-    }
-    return uniqueEditorId("node", existing);
-  }
-
   private isSelectionSelected(selection: Selection): boolean {
-    return this.selectionStore.has(selection);
+    return this.editorSceneController.isSelectionSelected(selection);
   }
 
   private getSelectedSelections(): Selection[] {
-    return this.selectionStore.list((selection) => this.hasSelection(selection));
+    return this.editorSceneController.getSelectedSelections();
   }
 
   private getAllSelections(options: { includeHidden: boolean }): Selection[] {
@@ -2939,7 +2243,7 @@ export class SceneApp {
   }
 
   private isLightSelected(index: number): boolean {
-    return this.selectionStore.has({ kind: "light", index });
+    return this.isSelectionSelected({ kind: "light", index });
   }
 
   private removeSelectionBox(): void {
@@ -3104,9 +2408,7 @@ export class SceneApp {
   }
 
   private executeCommand(command: EditorCommand): void {
-    const result = this.commandStore.execute(command);
-    this.emitHistoryChanged();
-    this.onStatus?.(result.statusMessage, result.statusTone);
+    this.editorSceneController.executeCommand(command);
   }
 
   private emitSelectionChanged(): void {

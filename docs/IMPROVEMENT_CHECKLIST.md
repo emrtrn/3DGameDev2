@@ -21,7 +21,7 @@ future session (Claude/Codex) can resume without re-deriving context.
 |---|------|----------|--------|--------|
 | 1 | Editor CSS leaks into production bundle | High (contract violation) | Low | `[x]` |
 | 2 | Rapier physics always loaded at runtime | Medium (2.18 MB) | Low–Med | `[x]` |
-| 3 | Extract editor-only logic out of `SceneApp` | Medium (maintainability) | High | `[ ]` |
+| 3 | Extract editor-only logic out of `SceneApp` | Medium (maintainability) | High | `[x]` |
 | 4 | Smoke tests for load/save + game/editor split | Medium (safety net) | Medium | `[x]` |
 
 Always-true gate before marking any item `[x]`:
@@ -183,7 +183,7 @@ npm run test:engine      # both backends still pass
 
 ---
 
-## Item 3 — Extract editor-only logic out of `SceneApp`  `[ ]`
+## Item 3 — Extract editor-only logic out of `SceneApp`  `[x]`
 
 **Severity:** Medium — maintainability. This is CLAUDE.md "Near-Term Order #1".
 
@@ -326,10 +326,62 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
 
-- *2026-06-15* — **SESSION BOUNDARY / HANDOFF (read this first to resume).**
-  **Status:** checklist Items 1–4 are all `[x]`. The only thing left is the
-  **Item 3 `<2500` stretch** — `SceneApp.ts` is currently **3179 lines** (target
-  `<2500`).
+- *2026-06-15* — **Item 3 stretch Piece 5 done — flags/default-true/metadata moved; `<2500` reached.**
+  Moved hidden/locked bulk flag commands, default-true detail fields
+  (`scaleLocked`, `castShadow`, `collision`), and metadata set/remove command
+  orchestration into `EditorSceneController`. `SceneApp` keeps same-named UI
+  wrappers plus live side-effect callbacks (`applyVisibility`, `applyCastShadow`).
+  Added 1 headless engine test covering hidden flag undo, metadata set/remove
+  undo, and castShadow undo with host callbacks (47 → 48 checks).
+  **Stretch target met:** `SceneApp.ts` 2664 → **2481** lines (`<2500`).
+  Checklist Item 3 is now `[x]`; Items 1–4 plus the stretch are all complete.
+
+- *2026-06-15* — **Item 3 stretch Piece 4 done — delete/duplicate orchestration moved.**
+  Moved `deleteSelected`, `duplicateSelected`, `duplicateSelectionForDrag`, and
+  duplicate helper orchestration into `EditorSceneController`. `SceneApp` now
+  hosts only live scene/layout mutation callbacks (`insert/remove`
+  placement/character/light, `createLightId`, mutable layout access) and keeps
+  same-named wrappers for UI/drag callers. Added 1 headless engine test for
+  duplicate/undo and delete/undo over a fake layout, including the current
+  `cloneUngrouped*` contract (groupId removed, nodeId preserved). Tests 46 → 47.
+  `SceneApp.ts` 2948 → 2664 lines.
+
+- *2026-06-15* — **Item 3 stretch Piece 3 done — group/parent command orchestration moved.**
+  Moved `groupSelected`, `ungroupSelected`, `parentSelectionToActive`,
+  `parentObjectsTo`, `unparentSelected`, plus group/node id generation into
+  `EditorSceneController`. `SceneApp` now supplies host callbacks for layout
+  mutation/queries (`getMutableTransform`, `getAllSelections`, `descendantsOf`,
+  `applyGroupId`, labels) and keeps only same-named public wrappers. Added 1
+  headless engine test for undoable group/ungroup and parent/unparent host
+  mutations, including the nodeId-based cycle guard (45 → 46 checks).
+  `SceneApp.ts` 3159 → 2948 lines.
+
+- *2026-06-15* — **Item 3 stretch Piece 2 done — selection state moved into EditorSceneController.**
+  `EditorSceneController` now owns `SelectionStore` in addition to
+  `EditorCommandStore`, with same-named `select`/`selectMany`/`toggleSelection`/
+  `isSelectionSelected`/`getSelectedSelections` wrappers delegated from
+  `SceneApp`. Host callbacks mirror the existing controller pattern and keep
+  live scene side effects (`updateSelectionBox`, `updateGizmo`,
+  `emitSelectionChanged`) in `SceneApp`. Added 1 headless engine test for
+  controller-owned grouped selection, invalid-selection filtering, command
+  history, and status callbacks (44 → 45 checks). `SceneApp.ts` 3175 → 3159
+  lines.
+
+- *2026-06-15* — **Item 3 stretch Piece 1 done — EditorSceneController shell owns history/commands.**
+  Merged `refactor/sceneapp-split` and `test/item4-smoke-tests` into `main`
+  with non-squash merge commits, pushed `main`, then branched
+  `refactor/editor-scene-controller` from the updated `main`. Added
+  `editor/scene/EditorSceneController.ts` using the same callback-host pattern
+  as `EditorCameraController`/`ScenePicker`: it now owns `EditorCommandStore`
+  and exposes `getHistoryState`/`undo`/`redo`/`executeCommand`; `SceneApp`
+  delegates through same-named wrapper methods. Behavior unchanged; this is the
+  scaffolding for moving delete/duplicate/group/parent/drag command
+  orchestration next. `SceneApp.ts` 3179 → 3175 lines.
+
+- *2026-06-15* — **SESSION BOUNDARY / HANDOFF (superseded by the stretch-complete entries above).**
+  **Original status at handoff:** checklist Items 1–4 were all `[x]`; the only
+  thing left was the **Item 3 `<2500` stretch** — `SceneApp.ts` was **3179
+  lines** (target `<2500`). This is now complete at **2481 lines**.
   **Live branch/PR state (as of this handoff):**
   - `refactor/sceneapp-split` → **PR #1** (Item 3, 9 commits, `SceneApp` 3999→3179
     −20%). **OPEN, not yet merged.**

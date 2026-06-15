@@ -41,7 +41,8 @@ import { AudioSubsystem } from "../engine/audio/audioSubsystem";
 import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/audio";
 import { KeyboardInputSource } from "../src/input/keyboardInputSource";
 import type { Entity } from "../engine/scene/entity";
-import { selectionId } from "../editor/core/selection";
+import { selectionId, type Selection } from "../editor/core/selection";
+import { EditorSceneController } from "../editor/scene/EditorSceneController";
 import {
   axisYMoveDragPosition,
   freeMoveDragPosition,
@@ -954,7 +955,344 @@ check("saved layout carries the collision audio demo cue", () => {
 });
 
 // ===========================================================================
-// Section 7 - Gizmo transform-drag math (pure, extracted from SceneApp)
+// Section 7 - EditorSceneController state (headless, extracted from SceneApp)
+// ===========================================================================
+
+type HeadlessTransform = {
+  groupId?: string;
+  nodeId?: string;
+  parentId?: string;
+};
+
+check("EditorSceneController owns selection and command history state", () => {
+  const primary = { kind: "instance" as const, assetId: "desk", placementIndex: 0 };
+  const grouped = { kind: "character" as const, index: 1 };
+  const invalid = { kind: "light" as const, index: 99 };
+  const transforms = new Map<string, HeadlessTransform>([
+    [selectionId(primary), {}],
+    [selectionId(grouped), {}],
+  ]);
+  const events = {
+    history: 0,
+    selection: 0,
+    gizmo: 0,
+    boxes: 0,
+    statuses: [] as string[],
+  };
+  const controller = new EditorSceneController({
+    applyGroupId: (selection, groupId) => {
+      const transform = transforms.get(selectionId(selection));
+      if (!transform) return;
+      if (groupId) transform.groupId = groupId;
+      else delete transform.groupId;
+    },
+    descendantsOf: () => [],
+    emitHistoryChanged: () => {
+      events.history += 1;
+    },
+    emitSelectionChanged: () => {
+      events.selection += 1;
+    },
+    getAllSelections: () => [primary, grouped],
+    getGroupedSelections: (selection) =>
+      selectionId(selection) === selectionId(primary) ? [primary, grouped] : [selection],
+    getMutableTransform: (selection) => transforms.get(selectionId(selection)) ?? null,
+    getSelectionLabel: (selection) => selectionId(selection),
+    hasSelection: (selection) => selectionId(selection) !== selectionId(invalid),
+    onStatus: (message) => {
+      events.statuses.push(message);
+    },
+    updateGizmo: () => {
+      events.gizmo += 1;
+    },
+    updateSelectionBox: () => {
+      events.boxes += 1;
+    },
+  });
+
+  controller.select(primary);
+  assert.deepEqual(controller.selection, primary);
+  assert.equal(controller.selectedCount, 2);
+  assert.equal(controller.isSelectionSelected(grouped), true);
+  assert.deepEqual(controller.getSelectedSelections().map(selectionId).sort(), [
+    selectionId(grouped),
+    selectionId(primary),
+  ]);
+  assert.equal(events.selection, 1);
+  assert.equal(events.gizmo, 1);
+  assert.equal(events.boxes, 1);
+
+  controller.selectMany([primary, invalid], primary);
+  assert.deepEqual(controller.getSelectedSelections(), [primary]);
+
+  let value = 0;
+  controller.executeCommand({
+    label: "Set value",
+    redo: () => {
+      value = 1;
+    },
+    undo: () => {
+      value = 0;
+    },
+  });
+  assert.equal(value, 1);
+  assert.equal(controller.getHistoryState().canUndo, true);
+  controller.undo();
+  assert.equal(value, 0);
+  assert.equal(controller.getHistoryState().canRedo, true);
+  controller.redo();
+  assert.equal(value, 1);
+  assert.deepEqual(events.statuses, ["Set value", "Undo: Set value", "Redo: Set value"]);
+  assert.equal(events.history, 3);
+});
+
+check("EditorSceneController groups and parents through undoable host mutations", () => {
+  const parent = { kind: "instance" as const, assetId: "desk", placementIndex: 0 };
+  const child = { kind: "character" as const, index: 1 };
+  const other = { kind: "light" as const, index: 2 };
+  const allSelections: Selection[] = [parent, child, other];
+  const transforms = new Map<string, HeadlessTransform>([
+    [selectionId(parent), {}],
+    [selectionId(child), {}],
+    [selectionId(other), {}],
+  ]);
+  const statuses: string[] = [];
+  const controller = new EditorSceneController({
+    applyGroupId: (selection, groupId) => {
+      const transform = transforms.get(selectionId(selection));
+      if (!transform) return;
+      if (groupId) transform.groupId = groupId;
+      else delete transform.groupId;
+    },
+    descendantsOf: (selection) => (selectionId(selection) === selectionId(parent) ? [child] : []),
+    emitHistoryChanged: () => {},
+    emitSelectionChanged: () => {},
+    getAllSelections: () => allSelections,
+    getGroupedSelections: (selection) => [selection],
+    getMutableTransform: (selection) => transforms.get(selectionId(selection)) ?? null,
+    getSelectionLabel: (selection) => selectionId(selection),
+    hasSelection: (selection) => transforms.has(selectionId(selection)),
+    onStatus: (message) => {
+      statuses.push(message);
+    },
+    updateGizmo: () => {},
+    updateSelectionBox: () => {},
+  });
+
+  controller.selectMany([parent, child], parent);
+  controller.groupSelected();
+  const groupId = transforms.get(selectionId(parent))?.groupId;
+  assert.ok(groupId, "group command assigns a group id");
+  assert.equal(transforms.get(selectionId(child))?.groupId, groupId);
+  controller.undo();
+  assert.equal(transforms.get(selectionId(parent))?.groupId, undefined);
+  assert.equal(transforms.get(selectionId(child))?.groupId, undefined);
+  controller.redo();
+  assert.equal(transforms.get(selectionId(child))?.groupId, groupId);
+
+  controller.ungroupSelected();
+  assert.equal(transforms.get(selectionId(parent))?.groupId, undefined);
+  assert.equal(transforms.get(selectionId(child))?.groupId, undefined);
+  controller.undo();
+  assert.equal(transforms.get(selectionId(parent))?.groupId, groupId);
+  assert.equal(transforms.get(selectionId(child))?.groupId, groupId);
+
+  controller.selectMany([parent, child], parent);
+  controller.parentSelectionToActive();
+  const parentNodeId = transforms.get(selectionId(parent))?.nodeId;
+  assert.ok(parentNodeId, "parent command assigns a node id");
+  assert.equal(transforms.get(selectionId(child))?.parentId, parentNodeId);
+  controller.undo();
+  assert.equal(transforms.get(selectionId(child))?.parentId, undefined);
+  controller.redo();
+  assert.equal(transforms.get(selectionId(child))?.parentId, parentNodeId);
+
+  controller.unparentSelected();
+  assert.equal(transforms.get(selectionId(child))?.parentId, undefined);
+  controller.undo();
+  assert.equal(transforms.get(selectionId(child))?.parentId, parentNodeId);
+
+  transforms.get(selectionId(child))!.nodeId = "child-node";
+  controller.parentObjectsTo([selectionId(parent)], selectionId(child));
+  assert.notEqual(
+    transforms.get(selectionId(parent))?.parentId,
+    "child-node",
+    "cycle guard skips parenting a parent under its child",
+  );
+  assert.ok(statuses.includes("Group 2 objects"));
+  assert.ok(statuses.includes("Parent 1 to instance:desk:0"));
+});
+
+check("EditorSceneController duplicates and deletes layout objects through host mutations", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "controller-layout",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "chair",
+        placements: [{ position: [0, 0, 0], groupId: "g1", nodeId: "n1" }],
+      },
+    ],
+    characters: [{ assetId: "npc", position: [1, 0, 0], groupId: "g1" }],
+    lights: [{ id: "lamp", type: "point", position: [0, 2, 0], groupId: "g1" }],
+  };
+  const allSelections = (): Selection[] => [
+    ...layout.instances.flatMap((instance) =>
+      instance.placements.map((_placement, placementIndex) => ({
+        kind: "instance" as const,
+        assetId: instance.assetId,
+        placementIndex,
+      })),
+    ),
+    ...layout.characters.map((_character, index) => ({ kind: "character" as const, index })),
+    ...(layout.lights ?? []).map((_light, index) => ({ kind: "light" as const, index })),
+  ];
+  const mutableTransform = (selection: Selection): HeadlessTransform | null => {
+    if (selection.kind === "instance") {
+      return (
+        layout.instances.find((instance) => instance.assetId === selection.assetId)?.placements[
+          selection.placementIndex
+        ] ?? null
+      );
+    }
+    if (selection.kind === "character") return layout.characters[selection.index] ?? null;
+    return layout.lights?.[selection.index] ?? null;
+  };
+  const controller = new EditorSceneController({
+    applyGroupId: (selection, groupId) => {
+      const transform = mutableTransform(selection);
+      if (!transform) return;
+      if (groupId) transform.groupId = groupId;
+      else delete transform.groupId;
+    },
+    descendantsOf: () => [],
+    emitHistoryChanged: () => {},
+    emitSelectionChanged: () => {},
+    getAllSelections: allSelections,
+    getGroupedSelections: (selection) => [selection],
+    getMutableLayout: () => layout,
+    getMutableTransform: mutableTransform,
+    getSelectionLabel: (selection) => selectionId(selection),
+    hasSelection: (selection) => mutableTransform(selection) !== null,
+    createLightId: (type) => `${type}-copy`,
+    insertCharacterPlacement: (index, placement) => {
+      layout.characters.splice(index, 0, { ...placement });
+    },
+    insertInstancePlacement: (assetId, placementIndex, placement) => {
+      const instance = layout.instances.find((entry) => entry.assetId === assetId);
+      assert.ok(instance, `missing instance bucket ${assetId}`);
+      instance.placements.splice(placementIndex, 0, { ...placement });
+    },
+    insertLightActor: (index, actor) => {
+      layout.lights ??= [];
+      layout.lights.splice(index, 0, { ...actor });
+    },
+    onStatus: () => {},
+    removeCharacterPlacement: (index) => layout.characters.splice(index, 1)[0] ?? null,
+    removeInstancePlacement: (assetId, placementIndex) => {
+      const instance = layout.instances.find((entry) => entry.assetId === assetId);
+      return instance?.placements.splice(placementIndex, 1)[0] ?? null;
+    },
+    removeLightActor: (index) => layout.lights?.splice(index, 1)[0] ?? null,
+    updateGizmo: () => {},
+    updateSelectionBox: () => {},
+  });
+
+  controller.selectMany(allSelections(), allSelections()[0] ?? null);
+  controller.duplicateSelected();
+  assert.equal(layout.instances[0]?.placements.length, 2);
+  assert.equal(layout.characters.length, 2);
+  assert.equal(layout.lights?.length, 2);
+  assert.equal(layout.instances[0]?.placements[1]?.groupId, undefined);
+  assert.equal(layout.instances[0]?.placements[1]?.nodeId, "n1");
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements.length, 1);
+  assert.equal(layout.characters.length, 1);
+  assert.equal(layout.lights?.length, 1);
+
+  controller.selectMany(allSelections(), allSelections()[0] ?? null);
+  controller.deleteSelected();
+  assert.equal(layout.instances[0]?.placements.length, 0);
+  assert.equal(layout.characters.length, 0);
+  assert.equal(layout.lights?.length, 0);
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements.length, 1);
+  assert.equal(layout.characters.length, 1);
+  assert.equal(layout.lights?.length, 1);
+});
+
+check("EditorSceneController applies flags, default-true fields, and metadata with undo", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "controller-flags",
+    loadGroups: [],
+    instances: [{ assetId: "crate", placements: [{ position: [0, 0, 0] }] }],
+    characters: [{ assetId: "npc", position: [1, 0, 0] }],
+  };
+  const instanceSelection: Selection = { kind: "instance", assetId: "crate", placementIndex: 0 };
+  const characterSelection: Selection = { kind: "character", index: 0 };
+  const mutableTransform = (selection: Selection): HeadlessTransform | null => {
+    if (selection.kind === "instance") {
+      return layout.instances[0]?.placements[selection.placementIndex] ?? null;
+    }
+    if (selection.kind === "character") return layout.characters[selection.index] ?? null;
+    return null;
+  };
+  const events = { visibility: 0, castShadow: 0 };
+  const controller = new EditorSceneController({
+    applyCastShadow: () => {
+      events.castShadow += 1;
+    },
+    applyGroupId: () => {},
+    applyVisibility: () => {
+      events.visibility += 1;
+    },
+    descendantsOf: () => [],
+    emitHistoryChanged: () => {},
+    emitSelectionChanged: () => {},
+    getAllSelections: () => [instanceSelection, characterSelection],
+    getGroupedSelections: (selection) => [selection],
+    getMutableLayout: () => layout,
+    getMutableTransform: mutableTransform,
+    getSelectionLabel: (selection) => selectionId(selection),
+    hasSelection: (selection) => mutableTransform(selection) !== null,
+    createLightId: (type) => `${type}-copy`,
+    insertCharacterPlacement: () => {},
+    insertInstancePlacement: () => {},
+    insertLightActor: () => {},
+    onStatus: () => {},
+    removeCharacterPlacement: () => null,
+    removeInstancePlacement: () => null,
+    removeLightActor: () => null,
+    updateGizmo: () => {},
+    updateSelectionBox: () => {},
+  });
+
+  controller.select(instanceSelection);
+  controller.setSelectionFlag(instanceSelection, "hidden", true);
+  assert.equal(layout.instances[0]?.placements[0]?.hidden, true);
+  assert.equal(events.visibility, 1);
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements[0]?.hidden, undefined);
+  assert.equal(events.visibility, 2);
+
+  controller.setSelectionMetadata("hp", 5);
+  assert.deepEqual(layout.instances[0]?.placements[0]?.metadata, { hp: 5 });
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements[0]?.metadata, undefined);
+
+  controller.select(characterSelection);
+  controller.setSelectionCastShadow(false);
+  assert.equal(layout.characters[0]?.castShadow, false);
+  assert.equal(events.castShadow, 1);
+  controller.undo();
+  assert.equal(layout.characters[0]?.castShadow, undefined);
+  assert.equal(events.castShadow, 2);
+});
+
+// ===========================================================================
+// Section 8 - Gizmo transform-drag math (pure, extracted from SceneApp)
 // ===========================================================================
 // These functions have no DOM/WebGL dependency, so they pin the viewport drag
 // arithmetic the editor relies on — coverage the engine tests could not reach
@@ -1060,7 +1398,7 @@ check("scale drag handles uniform, single-axis, planar, and the 0.05 floor", () 
 });
 
 // ===========================================================================
-// Section 8 - Wall-snap geometry (pure, extracted from SceneApp)
+// Section 9 - Wall-snap geometry (pure, extracted from SceneApp)
 // ===========================================================================
 
 check("wall snap slides flush against the nearest wall and faces the interior", () => {
@@ -1087,7 +1425,7 @@ check("pivot-corrected position keeps the pivot world point fixed", () => {
 });
 
 // ===========================================================================
-// Section 9 - Save-payload validator (extracted from vite.config.ts)
+// Section 10 - Save-payload validator (extracted from vite.config.ts)
 // ===========================================================================
 // The /__save-layout validator is an allowlist: anything not copied explicitly
 // is dropped on save (documented footgun). These tests run the real validator
