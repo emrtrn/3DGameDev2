@@ -22,7 +22,7 @@ future session (Claude/Codex) can resume without re-deriving context.
 | 1 | Editor CSS leaks into production bundle | High (contract violation) | Low | `[x]` |
 | 2 | Rapier physics always loaded at runtime | Medium (2.18 MB) | Low–Med | `[x]` |
 | 3 | Extract editor-only logic out of `SceneApp` | Medium (maintainability) | High | `[ ]` |
-| 4 | Smoke tests for load/save + game/editor split | Medium (safety net) | Medium | `[ ]` |
+| 4 | Smoke tests for load/save + game/editor split | Medium (safety net) | Medium | `[x]` |
 
 Always-true gate before marking any item `[x]`:
 
@@ -260,7 +260,18 @@ npx tsc --noEmit && npm run test:engine && npm run build
 
 ---
 
-## Item 4 — Smoke tests for load/save + game/editor split  `[ ]`
+## Item 4 — Smoke tests for load/save + game/editor split  `[x]`
+
+> Done 2026-06-15 (branch `test/item4-smoke-tests`). (1) Extracted the
+> `/__save-layout` validator to `tools/saveValidator.ts` and added 3 engine
+> tests: load/save round-trip idempotency on `render-test-room.json` + two
+> allowlist-footgun guards (unknown placement/light fields dropped, known kept).
+> (2) The dist editor-leak guard (`builder/web/verify-dist.mjs`) already existed
+> and is wired into `npm run build:verify` (`--strict`); strengthened it with
+> `EditorCameraController`/`ScenePicker` (Item 3 modules) and the `editor-shell`
+> CSS token (locks Item 1). `npm run build:verify` green end-to-end: build + 44
+> engine tests + strict dist scan (15 tokens, 0 leaks). All acceptance criteria
+> met.
 
 **Severity:** Medium — safety net. CLAUDE.md "Near-Term Order #2".
 
@@ -314,6 +325,74 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
+
+- *2026-06-15* — **SESSION BOUNDARY / HANDOFF (read this first to resume).**
+  **Status:** checklist Items 1–4 are all `[x]`. The only thing left is the
+  **Item 3 `<2500` stretch** — `SceneApp.ts` is currently **3179 lines** (target
+  `<2500`).
+  **Live branch/PR state (as of this handoff):**
+  - `refactor/sceneapp-split` → **PR #1** (Item 3, 9 commits, `SceneApp` 3999→3179
+    −20%). **OPEN, not yet merged.**
+  - `test/item4-smoke-tests` → Item 4 (2 commits), **stacked on top of PR #1's
+    commits.** Needs its own PR. Not merged.
+  - `gh` CLI is NOT installed in this env → PRs are opened via GitHub web
+    "compare" links, merged by the user. Merge **non-squash** (merge-commit or
+    rebase) so the stacked branch stays clean.
+  **To resume the `<2500` work:**
+  1. Make sure PR #1 then the Item 4 PR are merged to `main` (non-squash), then
+     branch off the updated `main`.
+  2. Continue Item 3 in small, green, pushed pieces. What remains in `SceneApp`
+     (~680 lines over target) is **deeply-coupled interactive command
+     orchestration**: gizmo drag apply/commit (`updateMoveDragPosition`,
+     `commitPointerDrag`, cascade/capture helpers), `deleteSelected`,
+     `duplicateSelection*`, group/parent/unparent, metadata/flag setters,
+     world-settings apply, light-actor CRUD. Their *pure cores were already
+     extracted* (this session + prior migrations: `transformDrag`, `wallSnap`,
+     `sceneObjects`, `editor/core/*`).
+  3. The remaining cut needs an **`EditorSceneController`** (editor-only) that
+     owns the editor state (`selectionStore`, `commandStore`, `gizmoInteraction`,
+     `pointerDrag`, `snapSettings`, `pivotEditMode`, `activeTool`,
+     `transformSpace`) + the command methods, driven by a shared scene API that
+     both `SceneApp` and `RuntimeSceneApp` expose (Item 3b consolidation).
+     Mirror the `EditorCameraController`/`ScenePicker` callback-host pattern;
+     move logic **verbatim**, name host members identically to the SceneApp
+     methods they wrap (tsc verifies wiring), and add headless tests for any
+     newly-pure pieces — the agreed **safe + test** approach (user decision
+     2026-06-15). Interactive drag/commit paths have no headless coverage, so do
+     NOT change their logic, only relocate it.
+  **Gate per piece (must be green before commit+push):**
+  `npx tsc --noEmit && npm run test:engine && npm run build` — or the full
+  `npm run build:verify` (build + engine tests + strict dist scan). **Line
+  count: use `wc -l` via the Bash tool; PowerShell `Measure-Object -Line` /
+  `(Get-Content).Count` are unreliable here.** Auto-commit + push each green
+  piece without asking; never commit a broken intermediate state.
+
+- *2026-06-15* — **Item 4 DONE — dist editor-leak guard strengthened + gate green.**
+  `builder/web/verify-dist.mjs` already scanned `dist` for editor/runtime
+  boundary leaks and was already wired into `npm run build:verify`
+  (`verify:dist -- --strict`); confirmed it passes strict on the current build.
+  Strengthened `FAIL_TOKENS` with `EditorCameraController` + `ScenePicker`
+  (Item 3 editor modules) and `editor-shell` (the editor UI root CSS class →
+  locks Item 1's stylesheet split). `npm run build:verify` green end-to-end:
+  build + 44 engine tests + strict dist scan (15 tokens, 0 leaks). Item 4
+  complete; all four checklist items now `[x]` except the Item 3 `<2500`
+  stretch. Next: resume Item 3 toward `<2500` (the `EditorSceneController`
+  orchestration extraction) — now backed by Item 4's save-path + boundary nets.
+
+- *2026-06-15* — **Item 4 started — save validator extracted + load/save tests.**
+  (New branch `test/item4-smoke-tests` off the Item 3 tip / PR #1. Started Item 4
+  per the agreed sequence: merge PR #1 → Item 4 safety net → resume `<2500`.)
+  Extracted the entire `/__save-layout` payload validator out of `vite.config.ts`
+  into a dependency-free `tools/saveValidator.ts` (`validateSavePayload`,
+  `validateLayout`, `validateLightActor`, `validatePlacement`,
+  `applyTransformFields`, `EditorSettingsPatch`); `vite.config.ts` imports it.
+  Behavior-identical (the saved layout validates to itself). Added **3 engine
+  tests** (41 → 44): load/save round-trip idempotency on the real
+  `render-test-room.json`, plus two allowlist-footgun guards proving unknown
+  placement/light fields are dropped while known ones survive. This directly
+  guards the CLAUDE.md "save-validator allowlist gotcha". Gate green (tsc, 44
+  tests, build). Next Item 4 sub-pieces: (2) dist editor-leak static guard in
+  `builder/web/verify-dist.mjs`; then resume Item 3 `<2500`.
 
 - *2026-06-15* — **Item 3 Piece 7 done — pivot-corrected position extracted + tested.**
   Moved the pure `pivotCorrectedPosition` (origin that keeps a pivot world point
