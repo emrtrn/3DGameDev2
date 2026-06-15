@@ -315,6 +315,23 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
 
+- *2026-06-15* — **Item 3 Piece 2 done — editor camera controller extracted.**
+  New `editor/input/editorCameraController.ts` (`EditorCameraController`) owns
+  all viewport-camera navigation state (fly/orbit/pan/dolly, yaw/pitch, move
+  speed, pressed keys, scratch vectors) and methods (begin/end navigation,
+  alt-drag, updateDrag, look, wheel, per-frame `update`, angle sync). It takes
+  the shared `SceneApp` camera + canvas plus callbacks: `getOrbitTarget`
+  (selection-aware, stays in SceneApp), `onInteractionStart` (clears pending
+  gizmo drag / asset placement), and `onStatus`. SceneApp now holds one
+  `cameraController` field; the rAF loop, `bindEditorInput` wiring,
+  `isCameraNavigating`, `updateGizmoHover`, `handleResize`, `focusSelected`,
+  and `setTechnicalView` delegate to it. Removed the 8 camera-tuning constants
+  and the `CameraDrag` type (moved into the controller). Behavior preserved
+  exactly (incl. the redundant orbit-branch angle sync). `SceneApp.ts`
+  3841 → 3615 lines. Gate green (tsc, 32 tests, build; game `index` chunk
+  byte-identical at 33.27 kB → controller is editor-only). Next: Piece 3
+  (pointer-drag transform math).
+
 - *2026-06-15* — **Item 3 Piece 1 done — gizmo visual builders extracted.**
   Moved `clearGizmo` + all `add*Gizmo`/`add*Handle`/`addRotateRing` +
   `gizmoMaterialFor` + `registerGizmoHandle` out of `SceneApp` into a new
