@@ -103,7 +103,7 @@ tutkalı shell'lerde ince kalır.
 | G3 | Çarpışma yanıtı (duvardan geçmeyi durdur) | G1 | §3 | `[x]` |
 | G4 | 3. şahıs takip kamerası + kameraya-göreli hareket | G1 | §5 | `[x]` |
 | G5 | Harekete bağlı animasyon durumları | G1, G2 | §3 | `[x]` |
-| G6 | Authored oynanabilir örnek sahne | G1–G5 | §4, §5 | `[ ]` |
+| G6 | Authored oynanabilir örnek sahne | G1–G5 | §4, §5 | `[x]` |
 
 **Önerilen sıra:** G1 → G4 → (G1'i kameraya-göreli yap) → G2 → G3 → G5 → G6.
 G1 ile başla: matematiği saf ve headless-test edilebilir, projenin
@@ -220,7 +220,7 @@ Seçici mantığı headless test edilir.
 **Açık soru.** Demo karakterde walk/run/jump klipleri var mı? Yoksa uygun bir
 asset'e geç ya da G5'i idle/walk ile sınırla.
 
-### G6 — Authored oynanabilir örnek sahne  `[ ]`
+### G6 — Authored oynanabilir örnek sahne  `[x]`
 
 **Problem.** Demo sahne (`public/layouts/render-test-room.json`) statik bir
 vitrin, oynanabilir bir level değil.
@@ -264,6 +264,28 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-16* — **G6 bitti — Gameplay/Runtime track'i (G1–G6) tamam.** Authored
+  oynanabilir örnek sahne: yeni `public/layouts/playground.json` (player start,
+  6×6 zemin, yön değiştirten bir duvar + kanepe engel, ve kuzeyde **sensor** goal
+  plant); manifest `defaultScene` buna çevrildi (render-test-room test sahnesi
+  olarak kaldı). **Sensor-collider authoring** eklendi (G3'ün varsaydığı ama
+  eksik olan parça): `LayoutPlacement/Character.sensor?: boolean`
+  (`engine/scene/layout.ts`) → adapter `colliderComponent` isSensor'a çevirir;
+  save-validator allowlist'e işlendi (`tools/saveValidator.ts` applyTransformFields).
+  Sensor collider G3'te zaten blocker dışı (staticBlockerAabbs sensörleri atlar),
+  yani goal engellemez, içine girilir. Yeni **`goal-reached`** behavior'u
+  (`src/game/behaviors.ts`): statik sensöre tek temas edebilen kinematik oyuncu
+  ilk temasta ses cue'su (chime, once) + enjekte `onGoalReached` callback'i bir
+  kez tetikler (collision-chime'ın temas+once kalıbını yeniden kullanır; reachedGoals
+  registry-closure). `RuntimeSceneApp` onGoalReached'i console.info ile bağlar —
+  **HUD yok (kullanıcı kararı: ses + log)**. Headless testler (tools/engine-tests.ts:
+  88 → 92 check): sensor→non-blocking collider, sensor allowlist, goal-reached
+  once+cue+sinyal+blocker-değil, playground validate+idempotent+goal taşıyor.
+  `npm run build:verify` yeşil. **Sınırlama (G3'ten devam):** collider'lar hâlâ
+  birim-küp `[1,1,1]*scale`; engel/goal sınırları görsel mesh'le birebir hizalı
+  değil — mesh-bounds collider + decor `collision:false` ayrı içerik işi. **§5
+  guardrail korundu:** runtime state layout'a yazılmaz (RuntimeSceneApp kaydetmez).
+  Track tamamlandı; sıradaki iş Backlog'dan (B1–B4) seçilir.
 - *2026-06-16* — **G5 bitti (harekete bağlı animasyon durumları).** Yeni saf
   seçici `src/game/locomotionAnimation.ts`: iki katman — `classifyLocomotion(
   {planarSpeed, grounded, velocityY}, thresholds)` semantik durum (idle/walk/run/

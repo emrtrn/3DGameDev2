@@ -27,6 +27,11 @@ export interface BehaviorRegistryOptions {
    * maps to an animation clip (G5). Optional: headless tests omit it.
    */
   reportLocomotion?: (entityId: string, report: LocomotionInput) => void;
+  /**
+   * Fired once when a `goal-reached` trigger first registers a contact (G6).
+   * The runtime shell uses it for feedback (e.g. a log); headless tests spy on it.
+   */
+  onGoalReached?: (entityId: string) => void;
 }
 
 function numberParam(value: unknown, fallback: number): number {
@@ -95,7 +100,9 @@ interface PlayerVertical {
 export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): BehaviorRegistry {
   const getGravityY = options.getGravityY ?? (() => DEFAULT_GRAVITY_Y);
   const reportLocomotion = options.reportLocomotion;
+  const onGoalReached = options.onGoalReached;
   const vertical = new Map<string, PlayerVertical>();
+  const reachedGoals = new Set<string>();
 
   const inputMove: BehaviorUpdate = (context) => {
     const { engine, actions, params, transform } = context;
@@ -152,10 +159,22 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     playCollisionAudioOnce(context);
   };
 
+  // Goal trigger (G6): a sensor-collider entity whose first contact (only the
+  // kinematic player can touch a static sensor) plays its audio cue once and
+  // signals the shell. Reuses the contact + once pattern; no HUD.
+  const goalReached: BehaviorUpdate = (context) => {
+    if (reachedGoals.has(context.entityId)) return;
+    if ((context.physics?.contactsForEntity(context.entityId).length ?? 0) === 0) return;
+    reachedGoals.add(context.entityId);
+    playCollisionAudioOnce(context);
+    onGoalReached?.(context.entityId);
+  };
+
   const behaviors = new Map<string, BehaviorUpdate>([
     ["spin", spin],
     ["input-move", inputMove],
     ["collision-chime", collisionChime],
+    ["goal-reached", goalReached],
   ]);
   return { get: (scriptId) => behaviors.get(scriptId) };
 }

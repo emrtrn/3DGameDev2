@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "name": "playground",
+  "loadGroups": [
+    "core",
+    "furniture-seating",
+    "furniture-plants",
+    "characters"
+  ],
+  "instances": [
+    {
+      "assetId": "floor-full",
+      "placements": [
+        {
+          "position": [0, 0, 0],
+          "scale": [6, 1, 6]
+        }
+      ]
+    },
+    {
+      "assetId": "wall",
+      "placements": [
+        {
+          "position": [0, 0.05, 0.4],
+          "rotation": [0, 90, 0],
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "lounge-sofa",
+      "placements": [
+        {
+          "position": [-1.3, 0.05, -0.8],
+          "rotationYDeg": 90,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "potted-plant",
+      "placements": [
+        {
+          "position": [0, 0, -2.3],
+          "scale": 1,
+          "name": "goal",
+          "sensor": true,
+          "behavior": {
+            "script": "goal-reached"
+          },
+          "audio": {
+            "clipId": "collision-chime",
+            "volume": 0.6,
+            "loop": false,
+            "spatial": false
+          }
+        }
+      ]
+    }
+  ],
+  "characters": [
+    {
+      "assetId": "character-a",
+      "position": [0, 0, 2.2],
+      "animation": "idle",
+      "name": "player",
+      "scaleLocked": true,
+      "rotationYDeg": 180,
+      "scale": 0.3,
+      "behavior": {
+        "script": "input-move",
+        "params": {
+          "speed": 2,
+          "jumpSpeed": 4,
+          "sprintMultiplier": 2
+        }
+      },
+      "audio": {
+        "clipId": "collision-chime",
+        "volume": 0.35,
+        "loop": false,
+        "spatial": false
+      }
+    }
+  ],
+  "worldSettings": {
+    "staticObjectsCastShadow": true,
+    "ambientIntensity": 1
+  },
+  "lights": [
+    {
+      "id": "sun",
+      "type": "directional",
+      "position": [0, 1.54, 0],
+      "name": "Sun",
+      "rotation": [-55, 35, 0],
+      "color": "#ffffff",
+      "intensity": 2,
+      "castShadow": true
+    }
+  ]
+}

@@ -54,6 +54,8 @@ export interface LayoutPlacement {
   castShadow?: boolean;
   /** Runtime hint: object participates in collision. Absent means true (default on). */
   collision?: boolean;
+  /** Runtime hint: collider is a non-blocking sensor (trigger zone). Absent means false. */
+  sensor?: boolean;
   /** Project-defined gameplay metadata (schema-driven; omitted when empty). */
   metadata?: LayoutMetadata;
   /** Runtime behavior script reference (resolved by the behavior registry). */
@@ -96,6 +98,8 @@ export interface LayoutCharacter {
   castShadow?: boolean;
   /** Runtime hint: object participates in collision. Absent means true (default on). */
   collision?: boolean;
+  /** Runtime hint: collider is a non-blocking sensor (trigger zone). Absent means false. */
+  sensor?: boolean;
   /** Project-defined gameplay metadata (schema-driven; omitted when empty). */
   metadata?: LayoutMetadata;
   animation?: string;

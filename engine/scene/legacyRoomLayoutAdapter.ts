@@ -294,7 +294,7 @@ function behaviorComponent(behavior: LayoutBehavior | undefined): BehaviorCompon
 }
 
 function colliderComponent(
-  source: { collision?: boolean },
+  source: { collision?: boolean; sensor?: boolean },
   isStatic: boolean,
 ): ColliderComponent | null {
   if (source.collision === false) return null;
@@ -302,7 +302,7 @@ function colliderComponent(
     shape: "box",
     size: [1, 1, 1],
     isStatic,
-    isSensor: false,
+    isSensor: source.sensor === true,
   };
 }
 

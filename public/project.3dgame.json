@@ -6,7 +6,7 @@
   "entry": "src/main.ts",
   "publicDir": "public",
   "editor": {
-    "defaultScene": "layouts/render-test-room.json",
+    "defaultScene": "layouts/playground.json",
     "assetManifest": "assets/manifest.json",
     "gridSize": 1,
     "gridEnabled": false,
