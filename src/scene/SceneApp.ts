@@ -34,6 +34,7 @@ import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
+import { DEFAULT_GAME_MODE_ID, normalizeGameModeId } from "@/game/gameModes/catalog";
 import type { AssetManifest, EditableAsset } from "@engine/assets/manifest";
 import {
   dirnameProjectPath,
@@ -89,6 +90,13 @@ import {
   formatLightType,
   uniqueActorName,
 } from "@engine/scene/lights";
+import {
+  formatShapeType,
+  parseShapeAssetId,
+  shapeAssetId,
+  type ShapePrimitiveType,
+} from "@engine/scene/shapes";
+import { createShapePrimitiveGltf } from "./shapePrimitives";
 import {
   readPivot,
   readRotation,
@@ -678,6 +686,7 @@ export class SceneApp {
       backgroundColor: this.backgroundColor(),
       ambientColor: this.ambientColor(),
       ambientIntensity: this.ambientIntensity(),
+      gameMode: this.gameMode(),
     };
   }
 
@@ -690,6 +699,7 @@ export class SceneApp {
         | "backgroundColor"
         | "ambientColor"
         | "ambientIntensity"
+        | "gameMode"
       >
     >,
   ): void {
@@ -911,12 +921,46 @@ export class SceneApp {
   }
 
   beginAssetPlacement(assetId: string): void {
-    if (!this.models.has(assetId)) {
-      this.onStatus?.(`Asset is still loading: ${assetId}`, "warning");
+    if (this.models.has(assetId)) {
+      this.pendingAssetId = assetId;
+      this.onStatus?.(`Placement armed: ${assetId}`, "info");
       return;
     }
-    this.pendingAssetId = assetId;
-    this.onStatus?.(`Placement armed: ${assetId}`, "info");
+    // The Content Browser lists every manifest asset, but only the layout's
+    // loadGroups are loaded up front. Lazy-load on demand so any registered
+    // asset can be placed regardless of its loadGroup.
+    this.onStatus?.(`Loading ${assetId}…`, "info");
+    void this.ensureAssetLoaded(assetId).then((ok) => {
+      if (!ok) return;
+      this.pendingAssetId = assetId;
+      this.onStatus?.(`Placement armed: ${assetId}`, "info");
+    });
+  }
+
+  /**
+   * Ensure a single model is loaded and integrated (materials + local bounds)
+   * exactly as the bulk loadGroups path does, so on-demand placement of assets
+   * outside the layout's loadGroups behaves identically.
+   */
+  private async ensureAssetLoaded(assetId: string): Promise<boolean> {
+    if (this.models.has(assetId)) return true;
+    if (!this.assetLoader) return false;
+    try {
+      const gltf = await this.assetLoader.loadModel(assetId);
+      this.models.set(assetId, gltf);
+      const single = new Map<string, GLTF>([[assetId, gltf]]);
+      convertUnlitModelMaterialsToLit(single);
+      for (const [id, box] of computeModelLocalBounds(single)) {
+        this.localBounds.set(id, box);
+      }
+      return true;
+    } catch (error) {
+      this.onStatus?.(
+        `Asset failed to load: ${assetId} (${error instanceof Error ? error.message : String(error)})`,
+        "warning",
+      );
+      return false;
+    }
   }
 
   getSelected(): EditableSelection | null {
@@ -1127,8 +1171,49 @@ export class SceneApp {
     });
   }
 
+  /**
+   * Spawn a built-in primitive (cube/sphere/…) in front of the camera. Shapes
+   * are model instances under a synthetic `shape:<type>` asset, so they reuse
+   * the instance transform/selection/save pipeline; only the procedural model
+   * needs registering on first use.
+   */
+  addShapeActor(type: ShapePrimitiveType): void {
+    if (!this.layout) return;
+    const assetId = shapeAssetId(type);
+    this.ensureShapeModel(assetId);
+
+    const instance = this.layout.instances.find((entry) => entry.assetId === assetId);
+    const placementIndex = instance?.placements.length ?? 0;
+    const placement: LayoutPlacement = {
+      name: this.uniqueInstanceName(formatShapeType(type)),
+      position: this.defaultActorPosition(3),
+      scale: 1,
+    };
+    const selection: Selection = { kind: "instance", assetId, placementIndex };
+
+    this.executeCommand({
+      label: `Add ${formatShapeType(type)}`,
+      redo: () => {
+        this.insertInstancePlacement(assetId, placementIndex, placement);
+        this.select(selection);
+      },
+      undo: () => {
+        this.removeInstancePlacement(assetId, placementIndex);
+        this.select(null);
+      },
+    });
+  }
+
   addAssetAt(assetId: string, clientX: number, clientY: number): void {
-    if (!this.layout || !this.models.has(assetId)) return;
+    if (!this.layout) return;
+    // Drag-and-drop can target an asset whose loadGroup wasn't loaded up front;
+    // lazy-load it, then retry the placement at the original drop coordinates.
+    if (!this.models.has(assetId)) {
+      void this.ensureAssetLoaded(assetId).then((ok) => {
+        if (ok) this.addAssetAt(assetId, clientX, clientY);
+      });
+      return;
+    }
     const hit = this.picker.clientToSurface(clientX, clientY);
     if (!hit) return;
 
@@ -1248,6 +1333,10 @@ export class SceneApp {
     const convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);
     this.localBounds = computeModelLocalBounds(this.models);
 
+    // Shape actors persist as `shape:<type>` instances; their synthetic models
+    // aren't part of any loadGroup, so register them before the scene is built.
+    this.registerShapeModelsFromLayout();
+
     this.assetPlacements.clear();
     for (const asset of await this.assetLoader.loadEditableAssets()) {
       this.assetPlacements.set(asset.id, asset.placement);
@@ -1295,6 +1384,39 @@ export class SceneApp {
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
+  }
+
+  /** Register synthetic models for any `shape:<type>` instances in the layout. */
+  private registerShapeModelsFromLayout(): void {
+    for (const instance of this.layout?.instances ?? []) {
+      this.ensureShapeModel(instance.assetId);
+    }
+  }
+
+  /** Lazily build + register the procedural model and bounds for a shape asset. */
+  private ensureShapeModel(assetId: string): void {
+    if (this.models.has(assetId)) return;
+    const type = parseShapeAssetId(assetId);
+    if (!type) return;
+    const gltf = createShapePrimitiveGltf(type);
+    this.models.set(assetId, gltf);
+    for (const [id, box] of computeModelLocalBounds(new Map([[assetId, gltf]]))) {
+      this.localBounds.set(id, box);
+    }
+  }
+
+  /** A name unique across every instance placement (shapes show it verbatim). */
+  private uniqueInstanceName(baseName: string): string {
+    const existing = new Set<string>();
+    for (const instance of this.layout?.instances ?? []) {
+      for (const placement of instance.placements) {
+        if (placement.name) existing.add(placement.name);
+      }
+    }
+    if (!existing.has(baseName)) return baseName;
+    let index = 2;
+    while (existing.has(`${baseName} ${index}`)) index += 1;
+    return `${baseName} ${index}`;
   }
 
   private createInstancedModel(assetId: string, placements: LayoutPlacement[]): Group {
@@ -1624,6 +1746,14 @@ export class SceneApp {
       delete worldSettings.ambientIntensity;
     } else {
       worldSettings.ambientIntensity = settings.ambientIntensity;
+    }
+
+    // The default camera mode is implicit: omit it so layouts stay clean and old
+    // layouts (no gameMode) keep round-tripping unchanged.
+    if (settings.gameMode === DEFAULT_GAME_MODE_ID) {
+      delete worldSettings.gameMode;
+    } else {
+      worldSettings.gameMode = settings.gameMode;
     }
 
     if (Object.keys(worldSettings).length === 0) delete this.layout.worldSettings;
@@ -2473,6 +2603,10 @@ export class SceneApp {
 
   private ambientIntensity(): number {
     return resolveSceneWorldSettings(this.layout).ambientIntensity;
+  }
+
+  private gameMode(): string {
+    return normalizeGameModeId(this.layout?.worldSettings?.gameMode);
   }
 
   private hasSelection(selection: Selection): boolean {

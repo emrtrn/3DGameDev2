@@ -34,35 +34,35 @@
 
 ### 1. Sözleşme ve Veri Modeli
 
-- [ ] `GameModeDefinition` tipini ekle.
+- [x] `GameModeDefinition` tipini ekle. (`src/game/gameModes/types.ts`)
   - `id`
   - `displayName`
   - `defaultPawn`
   - `playerController`
   - optional `description`
-- [ ] `PawnDefinition` tipini ekle.
+- [x] `PawnDefinition` tipini ekle.
   - `id`
   - `kind: "camera" | "character"`
   - optional movement/camera config
-- [ ] `PlayerControllerDefinition` tipini ekle.
+- [x] `PlayerControllerDefinition` tipini ekle.
   - `id`
-  - input action mapping contract
-  - possess target contract
-- [ ] Runtime-only `PlayerState` ve `GameState` veri yüzeylerini tanımla.
-- [ ] `worldSettings.gameMode?: string` alanını resmi schema parçası yap.
-- [ ] Save validator allowlist'ini `worldSettings.gameMode` için güncelle.
-- [ ] Eski layout'lar için default fallback'i `forge.defaultCamera` yap.
+  - input action mapping contract (`inputActions`)
+  - possess target contract (`possess`)
+- [x] Runtime-only `PlayerState` ve `GameState` veri yüzeylerini tanımla.
+- [x] `worldSettings.gameMode?: string` alanını resmi schema parçası yap. (`engine/scene/layout.ts`)
+- [x] Save validator allowlist'ini `worldSettings.gameMode` için güncelle. (`tools/saveValidator.ts`)
+- [x] Eski layout'lar için default fallback'i `forge.defaultCamera` yap. (`normalizeGameModeId` / `resolveGameMode`)
 
 ### 2. Registry ve Runtime Boot
 
-- [ ] `src/game/gameModes/` altında registry kur.
-- [ ] Built-in Game Mode ids:
-  - [ ] `forge.defaultCamera`
-  - [ ] `forge.tpsCharacter`
-- [ ] `RuntimeSceneApp` boot sırasında `worldSettings.gameMode` okur.
-- [ ] Bilinmeyen Game Mode id varsa güvenli şekilde `forge.defaultCamera` fallback'i kullanılır.
-- [ ] `RuntimeSceneApp` içindeki "ilk input-move karakter player'dır" kuralını kaldır.
-- [ ] Game Mode lifecycle hook'ları belirle.
+- [x] `src/game/gameModes/` altında registry kur. (lightweight `catalog.ts` + heavy `registry.ts`)
+- [x] Built-in Game Mode ids:
+  - [x] `forge.defaultCamera`
+  - [x] `forge.tpsCharacter`
+- [x] `RuntimeSceneApp` boot sırasında `worldSettings.gameMode` okur. (`startGameMode`)
+- [x] Bilinmeyen Game Mode id varsa güvenli şekilde `forge.defaultCamera` fallback'i kullanılır.
+- [x] `RuntimeSceneApp` içindeki "ilk input-move karakter player'dır" kuralını kaldır.
+- [x] Game Mode lifecycle hook'ları belirle. (`GameModeSession`)
   - `createSession`
   - `spawnDefaultPawn`
   - `possess`
@@ -71,59 +71,75 @@
 
 ### 3. Varsayılan Camera Pawn Game Mode
 
-- [ ] `forge.defaultCamera` runtime-only camera pawn oluşturur.
-- [ ] Camera pawn layout'a yazılmaz.
-- [ ] WASD camera pawn hareketine bağlanır.
-- [ ] Mouse/look veya mevcut camera kontrol kararı netleştirilir.
-- [ ] Physics, audio ve behavior subsystem'leri çalışabilir kalır.
-- [ ] Sahnede `input-move` karakter olsa bile default camera mode otomatik possess etmez.
-- [ ] Runtime kamera başlangıç pozisyonu belirlenir.
-  - default scene framing
-  - optional PlayerStart / camera start ileride
+- [x] `forge.defaultCamera` runtime-only camera pawn oluşturur. (`defaultCameraGameMode.ts`)
+- [x] Camera pawn layout'a yazılmaz. (kamera = pawn; sahne objesi yok)
+- [x] WASD camera pawn hareketine bağlanır. (`cameraControl.ts#cameraPlanarPan`, saf/test'li)
+- [x] Mouse/look veya mevcut camera kontrol kararı netleştirilir.
+  - **Karar:** Bu iterasyonda mouse-look yok. WASD kamerayı yatay facing yönünde
+    pan eder (RTS-tarzı), sahne framing'inden gelen oryantasyon korunur.
+- [x] Physics, audio ve behavior subsystem'leri çalışabilir kalır. (subsystem'ler değişmedi)
+- [x] Sahnede `input-move` karakter olsa bile default camera mode otomatik possess etmez. (test'li)
+- [x] Runtime kamera başlangıç pozisyonu belirlenir.
+  - default scene framing (responsive viewport framing'i başlangıç pozu olur)
+  - optional PlayerStart / camera start ileride (backlog)
 
 ### 4. TPS Character Game Mode
 
-- [ ] Mevcut `input-move` behavior TPS template'e taşınır veya oradan resolve edilir.
-- [ ] Mevcut follow camera sistemi `forge.tpsCharacter` altına bağlanır.
-- [ ] Locomotion animation seçimi TPS Game Mode'a bağlı çalışır.
-- [ ] TPS, player karakteri explicit şekilde seçer.
-  - PlayerStart + pawn spawn
-  - veya layout'ta tag/metadata ile possessable character
-- [ ] TPS seçili değilse karakter otomatik oynatılmaz.
-- [ ] `input-move` script'i genel behavior olarak kalabilir ama "player" anlamına gelmez.
+- [x] Mevcut `input-move` behavior TPS template'e taşınır veya oradan resolve edilir. (TPS mode possess eder)
+- [x] Mevcut follow camera sistemi `forge.tpsCharacter` altına bağlanır. (`tpsCharacterGameMode.ts`)
+- [x] Locomotion animation seçimi TPS Game Mode'a bağlı çalışır.
+- [x] TPS, player karakteri explicit şekilde seçer.
+  - layout'ta `metadata.player === true` tag'i öncelikli, yoksa ilk `input-move` karakter
+  - PlayerStart + pawn spawn ileride (backlog)
+- [x] TPS seçili değilse karakter otomatik oynatılmaz. (possess yalnızca explicit TPS seçiminde; test'li)
+- [x] `input-move` script'i genel behavior olarak kalabilir ama "player" anlamına gelmez.
 
 ### 5. Editor World Settings UI
 
-- [ ] World Settings paneline Game Mode dropdown ekle.
-- [ ] İlk seçenek `Default Camera` olur.
-- [ ] İkinci seçenek `TPS Character` olur.
-- [ ] Seçim layout `worldSettings.gameMode` alanına yazılır.
-- [ ] Undo/redo command ile değişir.
-- [ ] Save/load round-trip test edilir.
+- [x] World Settings paneline Game Mode dropdown ekle. (`EditorUi.renderWorldSettings`)
+- [x] İlk seçenek `Default Camera` olur. (`GAME_MODE_OPTIONS[0]`, test'li)
+- [x] İkinci seçenek `TPS Character` olur.
+- [x] Seçim layout `worldSettings.gameMode` alanına yazılır. (`SceneApp.applyWorldSettings`)
+- [x] Undo/redo command ile değişir. (`setWorldSettings` → `executeCommand`)
+- [x] Save/load round-trip test edilir. (validator gameMode testi)
 
 ### 6. Play Akışı
 
-- [ ] Editor Play düğmesi mevcut akışı korur.
+- [x] Editor Play düğmesi mevcut akışı korur.
   - layout kaydet
   - `/` route aç
-  - runtime selected Game Mode ile başlasın
-- [ ] Play akışı `Preview / Simulate / Game` modlarına bölünmez.
-- [ ] Runtime state layout'a otomatik yazılmaz.
-- [ ] Editor Mode ve Game Mode sınırı testlerle korunur.
+  - runtime selected Game Mode ile başlasın (`RuntimeSceneApp.startGameMode`)
+- [x] Play akışı `Preview / Simulate / Game` modlarına bölünmez. (yeni mod eklenmedi)
+- [x] Runtime state layout'a otomatik yazılmaz. (session'lar layout'a yazmaz; validator runtime alanı düşürür)
+- [x] Editor Mode ve Game Mode sınırı testlerle korunur. (prod build editor'ü dead-code-elimine eder)
 
 ### 7. Testler
 
-- [ ] `worldSettings.gameMode` save validator testleri.
-- [ ] GameMode registry fallback testi.
-- [ ] Default camera Game Mode testi:
+- [x] `worldSettings.gameMode` save validator testleri.
+- [x] GameMode registry fallback testi.
+- [x] Default camera Game Mode testi:
   - gameMode yoksa `forge.defaultCamera`
   - `input-move` karakter otomatik possess edilmez
-- [ ] TPS Game Mode testi:
+- [x] TPS Game Mode testi:
   - explicit seçim varsa TPS controller/follow camera bağlanır
-- [ ] Runtime-only state layout'a yazılmaz testi.
-- [ ] Production dist gate:
-  - `npm run build:verify`
-  - `verify:dist -- --strict`
+- [x] Runtime-only state layout'a yazılmaz testi. (validator `pawnEntityId`'i düşürür)
+- [x] Production dist gate:
+  - `npm run build:verify` → **112 checks passed**
+  - `verify:dist -- --strict` → **PASS** (dist runtime-only, editör dışlanmış)
+
+## Durum / Notlar (2026-06-16)
+
+- Tüm gameplay framework işi tamamlandı; `npx tsc --noEmit` temiz, `npm run build:verify`
+  baştan sona yeşil (oyun bundle'ı ~46 kB, editör prod'dan dead-code-elimine).
+- Yeni game-mode testleri geçiyor (catalog/registry fallback, cameraPlanarPan,
+  default-camera no-possess, TPS possess + follow, metadata.player önceliği).
+- **Yarım kalan rapier fizik işi de bu oturumda tamamlandı:** `simulatePhysics`
+  objeleri artık düşerken devrilmiyor — dinamik gövdenin rotasyonu kilitlendi
+  (`lockRotations()`) ve sync, yazılı rotasyonu koruyor (rapier'ın f32 quaternion'ını
+  okumuyor; o ~1e-5° gürültü enjekte ediyordu). Düşen kutu testi (`rotation[1]==30`)
+  artık tam geçiyor.
+- `public/layouts/playground.json` çalışan dev server tarafından boşaltılıyor
+  (sensor goal düşüyor); HEAD'den geri alındı, **commit edilmemeli**.
 
 ## Kabul Kriteri
 

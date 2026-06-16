@@ -59,6 +59,20 @@ import {
   type LocomotionInput,
 } from "../src/game/locomotionAnimation";
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
+import {
+  DEFAULT_GAME_MODE_ID,
+  GAME_MODE_OPTIONS,
+  isKnownGameModeId,
+  normalizeGameModeId,
+} from "../src/game/gameModes/catalog";
+import { resolveGameMode } from "../src/game/gameModes/registry";
+import { cameraPlanarPan } from "../src/game/gameModes/cameraControl";
+import { defaultCameraGameMode } from "../src/game/gameModes/defaultCameraGameMode";
+import { tpsCharacterGameMode } from "../src/game/gameModes/tpsCharacterGameMode";
+import type {
+  GameModeContext,
+  RuntimeCharacterRef,
+} from "../src/game/gameModes/types";
 import type { Entity } from "../engine/scene/entity";
 import { selectionId, type Selection } from "../editor/core/selection";
 import { EditorSceneController } from "../editor/scene/EditorSceneController";
@@ -116,6 +130,7 @@ import {
   DirectionalLight,
   Mesh,
   Object3D,
+  PerspectiveCamera,
   Scene,
   Vector3,
 } from "three";
@@ -2691,6 +2706,170 @@ check("playground layout validates and carries the sensor goal trigger", () => {
   assert.equal(goal?.sensor, true);
   assert.equal(goal?.behavior?.script, "goal-reached");
   assert.equal(playground.characters[0]?.behavior?.script, "input-move");
+});
+
+// ---------------------------------------------------------------------------
+// Gameplay framework (Game Mode / Pawn / Controller) — catalog, registry,
+// camera-pawn math, and session possession rules.
+// ---------------------------------------------------------------------------
+
+const MOVE_BINDINGS = {
+  KeyW: "move-forward",
+  KeyS: "move-back",
+  KeyA: "move-left",
+  KeyD: "move-right",
+} as const;
+
+function makeCharacterRef(
+  index: number,
+  opts: { input?: boolean; player?: boolean } = {},
+): RuntimeCharacterRef {
+  const placement: LayoutCharacter = {
+    assetId: "hero",
+    position: [0, 0, 0],
+  };
+  if (opts.input) placement.behavior = { script: "input-move" };
+  if (opts.player) placement.metadata = { player: true };
+  return {
+    index,
+    entityId: characterEntityId(index),
+    object: new Object3D(),
+    gltf: { animations: [] } as unknown as GLTF,
+    placement,
+  };
+}
+
+function makeGameModeContext(options: {
+  camera?: PerspectiveCamera;
+  actions?: ActionMap;
+  characters?: RuntimeCharacterRef[];
+  locomotion?: Map<string, LocomotionInput>;
+}): { context: GameModeContext; mixers: AnimationMixer[]; cameraControlled: () => boolean } {
+  let controlled = false;
+  const mixers: AnimationMixer[] = [];
+  const locomotion = options.locomotion ?? new Map<string, LocomotionInput>();
+  const context: GameModeContext = {
+    camera: options.camera ?? new PerspectiveCamera(),
+    actions: options.actions ?? new ActionMap(),
+    characters: options.characters ?? [],
+    getLocomotion: (id) => locomotion.get(id),
+    addMixer: (mixer) => mixers.push(mixer),
+    markCameraControlled: () => {
+      controlled = true;
+    },
+  };
+  return { context, mixers, cameraControlled: () => controlled };
+}
+
+check("game mode catalog default is the first option", () => {
+  assert.equal(GAME_MODE_OPTIONS[0]?.id, DEFAULT_GAME_MODE_ID);
+  assert.ok(isKnownGameModeId(DEFAULT_GAME_MODE_ID));
+  assert.ok(isKnownGameModeId("forge.tpsCharacter"));
+  assert.equal(isKnownGameModeId("forge.unknown"), false);
+  assert.equal(isKnownGameModeId(undefined), false);
+});
+
+check("normalizeGameModeId / resolveGameMode fall back to the default camera mode", () => {
+  assert.equal(normalizeGameModeId(undefined), DEFAULT_GAME_MODE_ID);
+  assert.equal(normalizeGameModeId("forge.nope"), DEFAULT_GAME_MODE_ID);
+  assert.equal(normalizeGameModeId("forge.tpsCharacter"), "forge.tpsCharacter");
+  assert.equal(resolveGameMode(undefined).id, DEFAULT_GAME_MODE_ID);
+  assert.equal(resolveGameMode("forge.nope").id, DEFAULT_GAME_MODE_ID);
+  assert.equal(resolveGameMode("forge.tpsCharacter").id, "forge.tpsCharacter");
+});
+
+check("save validator preserves worldSettings.gameMode and drops runtime state", () => {
+  const out = validateLayout({
+    schema: 1,
+    name: "gm",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    // pawnEntityId is runtime-only and not on the allowlist, so it must not survive.
+    worldSettings: { gameMode: "forge.tpsCharacter", pawnEntityId: "character:0" },
+  }) as RoomLayout;
+  assert.equal(out.worldSettings?.gameMode, "forge.tpsCharacter");
+  assert.equal((out.worldSettings as Record<string, unknown>).pawnEntityId, undefined);
+});
+
+check("save validator rejects a non-string gameMode", () => {
+  assert.throws(() =>
+    validateLayout({
+      schema: 1,
+      name: "gm",
+      loadGroups: [],
+      instances: [],
+      characters: [],
+      worldSettings: { gameMode: 123 },
+    }),
+  );
+});
+
+check("cameraPlanarPan moves along the camera's horizontal forward", () => {
+  // Forward = world -z (a fresh camera). Holding forward moves -z, no x drift,
+  // at speed*dt = 2 units this tick.
+  const step = cameraPlanarPan(0, -1, { forward: true, back: false, left: false, right: false }, 4, 0.5);
+  assert.ok(Math.abs(step.dx) < 1e-9);
+  assert.ok(step.dz < 0);
+  assert.ok(Math.abs(Math.hypot(step.dx, step.dz) - 2) < 1e-9);
+});
+
+check("cameraPlanarPan cancels opposing keys and keeps diagonals at unit speed", () => {
+  assert.deepEqual(
+    cameraPlanarPan(0, -1, { forward: true, back: true, left: false, right: false }, 4, 0.5),
+    { dx: 0, dz: 0 },
+  );
+  // Looking straight down (zero XZ forward) falls back to world -z.
+  const down = cameraPlanarPan(0, 0, { forward: true, back: false, left: false, right: false }, 4, 0.5);
+  assert.ok(down.dz < 0 && Math.abs(down.dx) < 1e-9);
+  // Forward+right diagonal is not faster than a straight move.
+  const diag = cameraPlanarPan(0, -1, { forward: true, back: false, left: false, right: true }, 4, 0.5);
+  assert.ok(Math.abs(Math.hypot(diag.dx, diag.dz) - 2) < 1e-9);
+});
+
+check("default camera mode never possesses an input-move character", () => {
+  const camera = new PerspectiveCamera();
+  const actions = new ActionMap(MOVE_BINDINGS);
+  actions.handleDown("KeyW");
+  actions.advance();
+  const characters = [makeCharacterRef(0, { input: true })];
+  const { context, cameraControlled } = makeGameModeContext({ camera, actions, characters });
+  const session = defaultCameraGameMode.createSession(context);
+  session.spawnDefaultPawn();
+  session.possess();
+  assert.equal(session.playerState.pawnEntityId, null);
+  assert.ok(session.playerState.possessed);
+  assert.ok(cameraControlled());
+  const z0 = camera.position.z;
+  session.update(0.5);
+  assert.ok(camera.position.z < z0); // WASD moved the camera...
+  assert.deepEqual(characters[0].object.position.toArray(), [0, 0, 0]); // ...not the character.
+});
+
+check("tps mode possesses the input-move character and follows it", () => {
+  const camera = new PerspectiveCamera();
+  const characters = [makeCharacterRef(0, { input: true })];
+  characters[0].object.position.set(2, 0, 3);
+  const { context, mixers } = makeGameModeContext({ camera, characters });
+  const session = tpsCharacterGameMode.createSession(context);
+  session.spawnDefaultPawn();
+  assert.equal(session.playerState.pawnEntityId, characterEntityId(0));
+  session.possess();
+  assert.ok(session.playerState.possessed);
+  assert.equal(mixers.length, 1);
+  session.update(0.1);
+  // First frame snaps the follow camera to behind+above: player + [0, 1.2, 2.6].
+  assert.ok(Math.abs(camera.position.x - 2) < 1e-6);
+  assert.ok(Math.abs(camera.position.y - 1.2) < 1e-6);
+  assert.ok(Math.abs(camera.position.z - 5.6) < 1e-6);
+});
+
+check("tps mode prefers a metadata-tagged player over input-move order", () => {
+  const characters = [makeCharacterRef(0, { input: true }), makeCharacterRef(1, { player: true })];
+  const { context } = makeGameModeContext({ characters });
+  const session = tpsCharacterGameMode.createSession(context);
+  session.spawnDefaultPawn();
+  assert.equal(session.playerState.pawnEntityId, characterEntityId(1));
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

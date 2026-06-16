@@ -19,6 +19,7 @@ import {
   type MetadataSchema,
 } from "@engine/scene/metadataSchema";
 import type { MetadataValue } from "@engine/scene/layout";
+import { isShapePrimitiveType } from "@engine/scene/shapes";
 import { ThumbnailRenderer } from "./ThumbnailRenderer";
 import {
   fetchProjectDir,
@@ -29,6 +30,7 @@ import {
   type ProjectDirNode,
 } from "@/project/ProjectAssetTree";
 import { projectFileUrl } from "@/project/ProjectSystem";
+import { GAME_MODE_OPTIONS } from "@/game/gameModes/catalog";
 import {
   nextTransformTool,
   type EditorTool,
@@ -158,6 +160,12 @@ export class EditorUi {
               <button type="button" data-add-actor="directional">Directional Light</button>
               <button type="button" data-add-actor="point">Point Light</button>
               <button type="button" data-add-actor="spot">Spot Light</button>
+              <div class="add-actor-section-title">Shapes</div>
+              <button type="button" data-add-shape="cube">Cube</button>
+              <button type="button" data-add-shape="sphere">Sphere</button>
+              <button type="button" data-add-shape="cylinder">Cylinder</button>
+              <button type="button" data-add-shape="cone">Cone</button>
+              <button type="button" data-add-shape="plane">Plane</button>
             </div>
           </div>
           <div class="show-menu">
@@ -355,6 +363,15 @@ export class EditorUi {
         const type = button.dataset.addActor;
         if (type === "directional" || type === "point" || type === "spot") {
           this.app.addLightActor(type);
+        }
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-add-shape]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const type = button.dataset.addShape;
+        if (isShapePrimitiveType(type)) {
+          this.app.addShapeActor(type);
         }
       });
     });
@@ -1043,10 +1060,26 @@ export class EditorUi {
 
   private renderWorldSettings(settings: EditorWorldSettings): void {
     this.worldSettings = settings;
+    const gameModeOptions = GAME_MODE_OPTIONS.map(
+      (option) =>
+        `<option value="${escapeHtml(option.id)}" ${
+          option.id === settings.gameMode ? "selected" : ""
+        }>${escapeHtml(option.displayName)}</option>`,
+    ).join("");
+    const gameModeDescription =
+      GAME_MODE_OPTIONS.find((option) => option.id === settings.gameMode)?.description ?? "";
     this.worldSettingsBody.innerHTML = `
       <div class="detail-heading">
         <strong>World Settings</strong>
         <span>Scene rendering</span>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Game Mode</div>
+        <label class="detail-row">
+          <span>Mode</span>
+          <select data-world-game-mode>${gameModeOptions}</select>
+        </label>
+        <div class="detail-hint">${escapeHtml(gameModeDescription)}</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Lighting</div>
@@ -1124,6 +1157,12 @@ export class EditorUi {
       ?.addEventListener("change", (event) => {
         const value = Number((event.currentTarget as HTMLInputElement).value);
         if (Number.isFinite(value)) this.app.setWorldSettings({ ambientIntensity: value });
+      });
+
+    this.worldSettingsBody
+      .querySelector<HTMLSelectElement>("[data-world-game-mode]")
+      ?.addEventListener("change", (event) => {
+        this.app.setWorldSettings({ gameMode: (event.currentTarget as HTMLSelectElement).value });
       });
   }
 

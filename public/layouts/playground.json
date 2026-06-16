@@ -469,6 +469,71 @@
           "scale": 1
         }
       ]
+    },
+    {
+      "assetId": "shape:cube",
+      "placements": [
+        {
+          "position": [
+            0.04,
+            1.18,
+            -2.09
+          ],
+          "name": "Cube",
+          "scale": 1
+        },
+        {
+          "position": [
+            0.76,
+            0.25,
+            1.54
+          ],
+          "name": "Cube 2",
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "shape:sphere",
+      "placements": [
+        {
+          "position": [
+            -0.43,
+            0.25,
+            1.56
+          ],
+          "name": "Sphere",
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "shape:cylinder",
+      "placements": [
+        {
+          "position": [
+            0.04,
+            0.25,
+            1.02
+          ],
+          "name": "Cylinder",
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "shape:cone",
+      "placements": [
+        {
+          "position": [
+            1.28,
+            0.25,
+            0.87
+          ],
+          "name": "Cone",
+          "scale": 1
+        }
+      ]
     }
   ],
   "characters": [

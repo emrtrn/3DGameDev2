@@ -126,6 +126,13 @@ export interface LayoutWorldSettings {
   ambientIntensity?: number;
   /** World gravity (units/s^2); negative Y pulls down. Absent means the default. */
   gravity?: Vec3;
+  /**
+   * Selected runtime Game Mode id (Unreal's GameMode analogue). Absent means the
+   * built-in default camera mode; the runtime resolves unknown ids to that
+   * default. Editor-authored; runtime-only behavior — never written back here by
+   * a running session.
+   */
+  gameMode?: string;
 }
 
 export interface LayoutLightActor {

@@ -6,7 +6,6 @@ import { AssetLoader } from "./assetLoader";
 import { loadRoomLayout } from "./roomLayout";
 import { EngineApp } from "@engine/core/EngineApp";
 import { AnimationSubsystem } from "@engine/render-three/animationSubsystem";
-import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
 import { ActionMap, type ActionBindings } from "@engine/input/actionMap";
 import { InputSubsystem } from "@engine/input/inputSubsystem";
 import { BehaviorSubsystem } from "@engine/behavior/behaviorSubsystem";
@@ -14,18 +13,13 @@ import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
-import {
-  smoothingFactor,
-  stepFollowCamera,
-  type FollowCameraConfig,
-  type FollowCameraPose,
-  type Vec3,
-} from "@/game/followCamera";
-import {
-  selectLocomotionClip,
-  DEFAULT_LOCOMOTION_THRESHOLDS,
-  type LocomotionInput,
-} from "@/game/locomotionAnimation";
+import type { LocomotionInput } from "@/game/locomotionAnimation";
+import { resolveGameMode } from "@/game/gameModes/registry";
+import type {
+  GameModeContext,
+  GameModeSession,
+  RuntimeCharacterRef,
+} from "@/game/gameModes/types";
 import { loadActiveProject, type ActiveProject } from "@/project/ProjectSystem";
 import {
   applySceneBackgroundAndAmbient,
@@ -62,20 +56,6 @@ import {
   type ColliderTransformSource,
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import type { TransformComponent } from "@engine/scene/components";
-
-/**
- * Third-person follow camera: sits behind (+z) and above the player, looking
- * down -z so the world movement frame reads as camera-relative. `RATE` is the
- * exponential easing speed (per second) the camera uses to track the player.
- */
-const FOLLOW_CAMERA_CONFIG: FollowCameraConfig = {
-  offset: [0, 1.2, 2.6],
-  lookHeight: 0.5,
-};
-const FOLLOW_CAMERA_RATE = 8;
-
-/** Crossfade duration (seconds) between locomotion clips (G5). */
-const ANIMATION_CROSSFADE_SECONDS = 0.18;
 
 const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   KeyW: "move-forward",
@@ -117,16 +97,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private instanceGroups = new Map<string, Group>();
   private instanceMeshes = new Map<string, InstancedMesh[]>();
   private characterObjects: Object3D[] = [];
+  private characterRefs: RuntimeCharacterRef[] = [];
   private lightObjects: LightObjectRecord[] = [];
   private localBounds = new Map<string, Box3>();
   private sun: DirectionalLight | null = null;
   private ambientLight: AmbientLight | null = null;
   private cameraViewTouched = false;
-  private playerObject: Object3D | null = null;
-  private playerEntityId: string | null = null;
-  private playerAnimator: CrossfadeAnimator | null = null;
-  private playerLocomotion: LocomotionInput | null = null;
-  private followPose: FollowCameraPose | null = null;
+  /** Latest per-entity locomotion snapshot a behavior reported (read by the Game Mode). */
+  private readonly locomotionReports = new Map<string, LocomotionInput>();
+  /** The active Game Mode session driving camera/possession this Play boot. */
+  private gameModeSession: GameModeSession | null = null;
   private gravityY = DEFAULT_SCENE_GRAVITY[1];
 
   onFrame: ((deltaMs: number) => void) | null = null;
@@ -171,7 +151,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       createBehaviorRegistry({
         getGravityY: () => this.gravityY,
         reportLocomotion: (entityId, report) => {
-          if (entityId === this.playerEntityId) this.playerLocomotion = report;
+          this.locomotionReports.set(entityId, report);
         },
         onGoalReached: (entityId) => {
           console.info("[runtime] goal reached", entityId);
@@ -198,8 +178,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const deltaMs = Math.min(now - this.lastTime, 100);
       this.lastTime = now;
       this.engineApp.update(deltaMs / 1000);
-      this.updateFollowCamera(deltaMs / 1000);
-      this.updateCharacterAnimation();
+      this.gameModeSession?.update(deltaMs / 1000);
       this.renderer.render(this.scene, this.camera);
       this.onFrame?.(deltaMs);
     };
@@ -210,6 +189,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     cancelAnimationFrame(this.frameHandle);
     window.removeEventListener("resize", this.handleResize);
     this.keyboardInput.detach();
+    this.gameModeSession?.dispose();
     void this.engineApp.dispose();
     this.renderer.dispose();
   }
@@ -260,6 +240,44 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
+
+    this.startGameMode();
+  }
+
+  /**
+   * Resolves the layout's selected Game Mode (Unreal's GameMode analogue),
+   * spawns + possesses its default pawn, then attaches ambient single-clip
+   * animation to every character the mode did not possess. Unknown/absent
+   * `worldSettings.gameMode` falls back to the default camera mode.
+   */
+  private startGameMode(): void {
+    const session = resolveGameMode(this.layout?.worldSettings?.gameMode).createSession(
+      this.createGameModeContext(),
+    );
+    session.spawnDefaultPawn();
+    session.possess();
+    this.gameModeSession = session;
+
+    // Characters the Game Mode did not possess keep their single authored clip.
+    const possessedEntityId = session.playerState.pawnEntityId;
+    for (const ref of this.characterRefs) {
+      if (ref.entityId === possessedEntityId) continue;
+      const mixer = createSceneCharacterMixer(ref.object, ref.gltf, ref.placement.animation);
+      if (mixer) this.animationSubsystem.add(mixer);
+    }
+  }
+
+  private createGameModeContext(): GameModeContext {
+    return {
+      camera: this.camera,
+      actions: this.inputActions,
+      characters: this.characterRefs,
+      getLocomotion: (entityId) => this.locomotionReports.get(entityId),
+      addMixer: (mixer) => this.animationSubsystem.add(mixer),
+      markCameraControlled: () => {
+        this.cameraViewTouched = true;
+      },
+    };
   }
 
   /**
@@ -318,48 +336,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     character.userData.characterIndex = index;
     this.scene.add(character);
     this.characterObjects.push(character);
-    // The first input-driven character is the player the runtime camera follows;
-    // taking over the view stops the responsive resize handler from resetting it.
-    const isPlayer = !this.playerObject && placement.behavior?.script === "input-move";
-    if (isPlayer) {
-      this.playerObject = character;
-      this.playerEntityId = characterEntityId(index);
-      this.cameraViewTouched = true;
-      // The player gets the full clip set, crossfaded by movement state (G5);
-      // snap to the authored idle clip so it never flashes a bind pose.
-      const animator = new CrossfadeAnimator(character, gltf.animations);
-      animator.play(placement.animation ?? "idle", 0);
-      this.animationSubsystem.add(animator.mixer);
-      this.playerAnimator = animator;
-      return;
-    }
-    // Non-player characters keep the single authored clip.
-    const mixer = createSceneCharacterMixer(character, gltf, placement.animation);
-    if (mixer) this.animationSubsystem.add(mixer);
-  }
-
-  /**
-   * Drives the player's animation clip from the movement snapshot the behavior
-   * reported this tick (G5). Pure selection lives in `src/game`; here we only
-   * apply the chosen clip to the crossfade animator.
-   */
-  private updateCharacterAnimation(): void {
-    const animator = this.playerAnimator;
-    const report = this.playerLocomotion;
-    if (!animator || !report) return;
-    const clip = selectLocomotionClip(report, animator.clips, DEFAULT_LOCOMOTION_THRESHOLDS);
-    if (clip) animator.play(clip, ANIMATION_CROSSFADE_SECONDS);
-  }
-
-  private updateFollowCamera(deltaSeconds: number): void {
-    const player = this.playerObject;
-    if (!player) return;
-    const playerPos: Vec3 = [player.position.x, player.position.y, player.position.z];
-    const t = smoothingFactor(FOLLOW_CAMERA_RATE, deltaSeconds);
-    this.followPose = stepFollowCamera(this.followPose, playerPos, FOLLOW_CAMERA_CONFIG, t);
-    const { position, target } = this.followPose;
-    this.camera.position.set(position[0], position[1], position[2]);
-    this.camera.lookAt(target[0], target[1], target[2]);
+    // Offer the character to the active Game Mode; possession + animation are the
+    // mode's responsibility (the default camera mode possesses nothing). The
+    // single authored clip is attached for unpossessed characters in startGameMode.
+    this.characterRefs.push({
+      index,
+      entityId: characterEntityId(index),
+      object: character,
+      gltf,
+      placement,
+    });
   }
 
   private addLight(actor: LayoutLightActor): void {

@@ -80,6 +80,10 @@ body.editor-mode #debug-stats {
   position: relative;
 }
 
+.editor-actions button {
+  white-space: nowrap;
+}
+
 .add-actor-popover {
   position: absolute;
   top: calc(100% + 6px);
@@ -625,6 +629,12 @@ body.editor-mode #debug-stats {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  color: #9aa4a9;
+}
+
+.detail-hint {
+  font-size: 11px;
+  line-height: 1.4;
   color: #9aa4a9;
 }
 

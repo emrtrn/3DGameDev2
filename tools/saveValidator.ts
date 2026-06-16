@@ -232,6 +232,12 @@ function validateWorldSettings(value: unknown): Record<string, unknown> | null {
     }
     worldSettings.gravity = input.gravity.map((axis) => Number(axis.toFixed(3)));
   }
+  if (input.gameMode !== undefined) {
+    if (typeof input.gameMode !== "string" || input.gameMode.length === 0) {
+      throw new Error("worldSettings.gameMode must be a non-empty string");
+    }
+    worldSettings.gameMode = input.gameMode;
+  }
 
   return Object.keys(worldSettings).length > 0 ? worldSettings : null;
 }

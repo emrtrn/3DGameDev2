@@ -60,6 +60,8 @@ export interface EditorWorldSettings {
   backgroundColor: string;
   ambientColor: string;
   ambientIntensity: number;
+  /** Selected runtime Game Mode id (resolved to a default when unknown/absent). */
+  gameMode: string;
 }
 
 export interface EditorProjectInfo {
@@ -100,6 +102,7 @@ export function worldSettingsEqual(
     left.staticObjectsReceiveShadow === right.staticObjectsReceiveShadow &&
     left.backgroundColor.toLowerCase() === right.backgroundColor.toLowerCase() &&
     left.ambientColor.toLowerCase() === right.ambientColor.toLowerCase() &&
-    left.ambientIntensity === right.ambientIntensity
+    left.ambientIntensity === right.ambientIntensity &&
+    left.gameMode === right.gameMode
   );
 }
