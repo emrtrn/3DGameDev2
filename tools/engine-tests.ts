@@ -40,6 +40,9 @@ import { PhysicsSubsystem } from "../engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "../engine/audio/audioSubsystem";
 import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/audio";
 import { KeyboardInputSource } from "../src/input/keyboardInputSource";
+import { facingYawFromMove, planarMoveStep } from "../src/game/playerMovement";
+import { createBehaviorRegistry } from "../src/game/behaviors";
+import type { TransformComponent } from "../engine/scene/components";
 import type { Entity } from "../engine/scene/entity";
 import { selectionId, type Selection } from "../editor/core/selection";
 import { EditorSceneController } from "../editor/scene/EditorSceneController";
@@ -1750,6 +1753,130 @@ check("save validator allowlist keeps known light fields, drops unknown ones", (
   assert.equal(light.intensity, 2);
   assert.equal(light.distance, 8);
   assert.equal("bogusField" in light, false);
+});
+
+// G1 player movement core (src/game/playerMovement.ts): planar input resolves to
+// a normalized XZ delta plus a facing yaw, so diagonals are not ~1.41x faster and
+// the character turns to face its movement, holding facing when idle. Yaw values
+// are compared modulo 360 (so +/-180 match, and -0 reads as 0).
+const yawApproxEqual = (actual: number, expected: number, eps = 1e-9): void => {
+  const diff = ((((actual - expected) % 360) + 540) % 360) - 180;
+  assert.ok(Math.abs(diff) <= eps, `yaw ${actual} not ~= ${expected} (mod 360)`);
+};
+
+check("planarMoveStep: a single axis moves at exactly speed*dt", () => {
+  assert.deepEqual(
+    planarMoveStep({ forward: true, back: false, left: false, right: false }, 4, 0.5),
+    { dx: 0, dz: -2 },
+  );
+  assert.deepEqual(
+    planarMoveStep({ forward: false, back: true, left: false, right: false }, 4, 0.5),
+    { dx: 0, dz: 2 },
+  );
+  assert.deepEqual(
+    planarMoveStep({ forward: false, back: false, left: true, right: false }, 4, 0.5),
+    { dx: -2, dz: 0 },
+  );
+  assert.deepEqual(
+    planarMoveStep({ forward: false, back: false, left: false, right: true }, 4, 0.5),
+    { dx: 2, dz: 0 },
+  );
+});
+
+check("planarMoveStep: diagonals are normalized to the straight-line speed", () => {
+  const straight = planarMoveStep(
+    { forward: true, back: false, left: false, right: false },
+    3,
+    0.5,
+  );
+  const diagonal = planarMoveStep(
+    { forward: true, back: false, left: false, right: true },
+    3,
+    0.5,
+  );
+  const straightMag = Math.hypot(straight.dx, straight.dz);
+  const diagonalMag = Math.hypot(diagonal.dx, diagonal.dz);
+  assert.ok(Math.abs(diagonalMag - straightMag) <= 1e-12, "diagonal speed == straight");
+  assert.ok(Math.abs(diagonalMag - 1.5) <= 1e-12, "magnitude == speed*dt");
+  // Forward-right components: +x, -z, equal magnitudes.
+  assert.ok(diagonal.dx > 0 && diagonal.dz < 0);
+  assert.ok(Math.abs(Math.abs(diagonal.dx) - Math.abs(diagonal.dz)) <= 1e-12);
+});
+
+check("planarMoveStep: opposing keys cancel and idle/zero input yields no delta", () => {
+  assert.deepEqual(
+    planarMoveStep({ forward: true, back: true, left: true, right: true }, 5, 0.5),
+    { dx: 0, dz: 0 },
+  );
+  assert.deepEqual(
+    planarMoveStep({ forward: false, back: false, left: false, right: false }, 5, 0.5),
+    { dx: 0, dz: 0 },
+  );
+  // A paused frame (dt 0) or a zero speed produces no motion.
+  assert.deepEqual(
+    planarMoveStep({ forward: true, back: false, left: false, right: false }, 5, 0),
+    { dx: 0, dz: 0 },
+  );
+  assert.deepEqual(
+    planarMoveStep({ forward: true, back: false, left: false, right: false }, 0, 0.5),
+    { dx: 0, dz: 0 },
+  );
+});
+
+check("facingYawFromMove: the character faces its cardinal movement direction", () => {
+  yawApproxEqual(facingYawFromMove(0, -1) ?? NaN, 0); // forward (-z)
+  yawApproxEqual(facingYawFromMove(0, 1) ?? NaN, 180); // back (+z)
+  yawApproxEqual(facingYawFromMove(1, 0) ?? NaN, -90); // right (+x)
+  yawApproxEqual(facingYawFromMove(-1, 0) ?? NaN, 90); // left (-x)
+  yawApproxEqual(facingYawFromMove(1, -1) ?? NaN, -45); // forward-right
+});
+
+check("facingYawFromMove: no movement returns null so facing is held", () => {
+  assert.equal(facingYawFromMove(0, 0), null);
+});
+
+check("input-move behavior: normalizes diagonal travel, faces it, holds facing idle", () => {
+  const registry = createBehaviorRegistry();
+  const actions = new ActionMap({
+    KeyW: "move-forward",
+    KeyS: "move-back",
+    KeyA: "move-left",
+    KeyD: "move-right",
+  });
+  let synced: TransformComponent | undefined;
+  const subsystem = new BehaviorSubsystem(registry, actions, (_id, transform) => {
+    synced = transform;
+  });
+  subsystem.setEntities([
+    {
+      id: "character:0",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Behavior: { scriptId: "input-move", params: { speed: 2 } },
+      },
+    },
+  ]);
+
+  // Tick 1: hold forward+right 0.5s -> diagonal travel == speed*dt (== 1), faces it.
+  actions.handleDown("KeyW");
+  actions.handleDown("KeyD");
+  actions.advance();
+  subsystem.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 1 });
+  const moved = synced ?? assert.fail("transform synced");
+  assert.ok(Math.abs(Math.hypot(moved.position[0], moved.position[2]) - 1) <= 1e-12);
+  assert.ok(moved.position[0] > 0 && moved.position[2] < 0);
+  yawApproxEqual(moved.rotation[1], -45);
+
+  // Tick 2: no input -> position unchanged and facing held (not reset to 0).
+  const xBefore = moved.position[0];
+  const zBefore = moved.position[2];
+  actions.handleUp("KeyW");
+  actions.handleUp("KeyD");
+  actions.advance();
+  subsystem.update({ deltaSeconds: 0.5, elapsedSeconds: 1, frame: 2 });
+  assert.equal(moved.position[0], xBefore);
+  assert.equal(moved.position[2], zBefore);
+  yawApproxEqual(moved.rotation[1], -45);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);
