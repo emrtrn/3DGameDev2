@@ -50,6 +50,7 @@ import {
   stepFollowCamera,
   type FollowCameraConfig,
 } from "../src/game/followCamera";
+import { groundedAt, stepVerticalMotion } from "../src/game/verticalMotion";
 import type { Entity } from "../engine/scene/entity";
 import { selectionId, type Selection } from "../editor/core/selection";
 import { EditorSceneController } from "../editor/scene/EditorSceneController";
@@ -71,6 +72,7 @@ import {
   DEFAULT_SCENE_AMBIENT_COLOR,
   DEFAULT_SCENE_AMBIENT_INTENSITY,
   DEFAULT_SCENE_BACKGROUND_COLOR,
+  DEFAULT_SCENE_GRAVITY,
   DEFAULT_SCENE_LIGHT_COLOR,
   DEFAULT_SCENE_STATIC_OBJECTS_CAST_SHADOWS,
   DEFAULT_SCENE_STATIC_OBJECTS_RECEIVE_SHADOWS,
@@ -172,6 +174,7 @@ check("scene runtime world settings resolve defaults and layout overrides", () =
     backgroundColor: DEFAULT_SCENE_BACKGROUND_COLOR,
     ambientColor: DEFAULT_SCENE_AMBIENT_COLOR,
     ambientIntensity: DEFAULT_SCENE_AMBIENT_INTENSITY,
+    gravity: DEFAULT_SCENE_GRAVITY,
   });
 
   assert.deepEqual(
@@ -187,6 +190,7 @@ check("scene runtime world settings resolve defaults and layout overrides", () =
         backgroundColor: "#101010",
         ambientColor: "#202020",
         ambientIntensity: 0.4,
+        gravity: [0, -20, 0],
       },
     }),
     {
@@ -195,6 +199,7 @@ check("scene runtime world settings resolve defaults and layout overrides", () =
       backgroundColor: "#101010",
       ambientColor: "#202020",
       ambientIntensity: 0.4,
+      gravity: [0, -20, 0],
     },
   );
 });
@@ -1930,6 +1935,124 @@ check("stepFollowCamera: snaps on first frame, then eases and converges", () => 
   for (let i = 0; i < 200; i += 1) pose = stepFollowCamera(pose, [2, 0, 0], followConfig, 0.5);
   assert.ok(Math.abs(pose.position[0] - 2) <= 1e-9);
   assert.ok(Math.abs(pose.target[0] - 2) <= 1e-9);
+});
+
+// G2 vertical motion (src/game/verticalMotion.ts): gravity pulls the player
+// down, a grounded jump on the press edge launches it, and crossing the floor
+// re-grounds. Pure state machine the player behavior steps each tick.
+check("stepVerticalMotion: rests on the floor and stays grounded without input", () => {
+  let state = groundedAt(0);
+  for (let i = 0; i < 5; i += 1) {
+    state = stepVerticalMotion(state, { gravityY: -10, jumpSpeed: 5, floorY: 0, dt: 0.1, jump: false });
+    assert.equal(state.y, 0);
+    assert.equal(state.velocityY, 0);
+    assert.equal(state.grounded, true);
+  }
+});
+
+check("stepVerticalMotion: a grounded jump leaves the floor with upward velocity", () => {
+  const jumped = stepVerticalMotion(groundedAt(0), {
+    gravityY: -10,
+    jumpSpeed: 5,
+    floorY: 0,
+    dt: 0.1,
+    jump: true,
+  });
+  assert.equal(jumped.grounded, false);
+  assert.ok(Math.abs(jumped.velocityY - 4) <= 1e-12); // 5 - 10*0.1
+  assert.ok(Math.abs(jumped.y - 0.4) <= 1e-12); // 0 + 4*0.1
+});
+
+check("stepVerticalMotion: jump rises then re-grounds after one rise/fall cycle", () => {
+  const dt = 1 / 60;
+  const step = { gravityY: -10, jumpSpeed: 5, floorY: 0, dt, jump: false };
+  let state = stepVerticalMotion(groundedAt(0), { ...step, jump: true });
+  assert.equal(state.grounded, false);
+  let leftGround = false;
+  let landed = false;
+  for (let i = 0; i < 1000 && !landed; i += 1) {
+    state = stepVerticalMotion(state, step);
+    if (!state.grounded) leftGround = true;
+    else if (leftGround) landed = true;
+  }
+  assert.ok(leftGround && landed);
+  assert.equal(state.y, 0);
+  assert.equal(state.velocityY, 0);
+  assert.equal(state.grounded, true);
+});
+
+check("stepVerticalMotion: no mid-air double jump and a paused tick holds height", () => {
+  const step = { gravityY: -10, jumpSpeed: 5, floorY: 0, dt: 0.1, jump: true };
+  const airborne = stepVerticalMotion(groundedAt(0), step);
+  assert.equal(airborne.grounded, false);
+  // Jump pressed again while airborne: velocity only changes by gravity.
+  const again = stepVerticalMotion(airborne, step);
+  assert.ok(Math.abs(again.velocityY - (airborne.velocityY - 10 * 0.1)) <= 1e-12);
+  // A non-positive dt leaves the height unchanged (paused frame).
+  const paused = stepVerticalMotion(airborne, { ...step, dt: 0, jump: false });
+  assert.equal(paused.y, airborne.y);
+});
+
+check("input-move behavior: Space jumps from the ground, then gravity returns it", () => {
+  const registry = createBehaviorRegistry({ getGravityY: () => -10 });
+  const actions = new ActionMap({ Space: "jump" });
+  let synced: TransformComponent | undefined;
+  const subsystem = new BehaviorSubsystem(registry, actions, (_id, transform) => {
+    synced = transform;
+  });
+  subsystem.setEntities([
+    {
+      id: "player:g2",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Behavior: { scriptId: "input-move", params: { jumpSpeed: 5 } },
+      },
+    },
+  ]);
+  const dt = 1 / 60;
+
+  // Idle tick: stays grounded at the authored height (captured as the floor).
+  actions.advance();
+  subsystem.update({ deltaSeconds: dt, elapsedSeconds: dt, frame: 1 });
+  assert.equal((synced ?? assert.fail("synced")).position[1], 0);
+
+  // Press jump (edge) -> leaves the ground.
+  actions.handleDown("Space");
+  actions.advance();
+  subsystem.update({ deltaSeconds: dt, elapsedSeconds: 2 * dt, frame: 2 });
+  assert.ok((synced ?? assert.fail("synced")).position[1] > 0);
+
+  // Keep Space held (no new press edge) and run the arc out: it lands at the floor.
+  let landedAgain = false;
+  for (let frame = 3; frame < 1000 && !landedAgain; frame += 1) {
+    actions.advance();
+    subsystem.update({ deltaSeconds: dt, elapsedSeconds: frame * dt, frame });
+    if ((synced ?? assert.fail("synced")).position[1] === 0) landedAgain = true;
+  }
+  assert.ok(landedAgain);
+});
+
+check("save validator allowlist keeps a valid worldSettings.gravity, rejects a bad one", () => {
+  const layout = validateLayout({
+    schema: 1,
+    name: "g2-gravity",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    worldSettings: { gravity: [0, -12.5, 0] },
+  }) as RoomLayout;
+  assert.deepEqual(layout.worldSettings?.gravity, [0, -12.5, 0]);
+
+  assert.throws(() =>
+    validateLayout({
+      schema: 1,
+      name: "bad-gravity",
+      loadGroups: [],
+      instances: [],
+      characters: [],
+      worldSettings: { gravity: [0, -12.5] },
+    }),
+  );
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

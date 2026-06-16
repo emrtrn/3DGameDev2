@@ -116,6 +116,8 @@ export interface LayoutWorldSettings {
   ambientColor?: string;
   /** Ambient light intensity. Absent means 0 (no ambient). */
   ambientIntensity?: number;
+  /** World gravity (units/s^2); negative Y pulls down. Absent means the default. */
+  gravity?: Vec3;
 }
 
 export interface LayoutLightActor {

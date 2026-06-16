@@ -39,6 +39,7 @@ import type {
   LayoutLightActor,
   LayoutPlacement,
   RoomLayout,
+  Vec3,
 } from "@engine/scene/layout";
 import type { Entity } from "@engine/scene/entity";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
@@ -53,6 +54,7 @@ export const DEFAULT_SCENE_SUN_ID = "sun";
 export const DEFAULT_SCENE_BACKGROUND_COLOR = "#d7d7c7";
 export const DEFAULT_SCENE_AMBIENT_COLOR = "#ffffff";
 export const DEFAULT_SCENE_AMBIENT_INTENSITY = 0;
+export const DEFAULT_SCENE_GRAVITY: Vec3 = [0, -9.81, 0];
 
 export interface SceneRuntimeCore {
   renderer: WebGLRenderer;
@@ -66,6 +68,7 @@ export interface ResolvedSceneWorldSettings {
   backgroundColor: string;
   ambientColor: string;
   ambientIntensity: number;
+  gravity: Vec3;
 }
 
 export function createSceneRuntimeCore(
@@ -115,6 +118,7 @@ export function resolveSceneWorldSettings(
     backgroundColor: layout?.worldSettings?.backgroundColor ?? DEFAULT_SCENE_BACKGROUND_COLOR,
     ambientColor: layout?.worldSettings?.ambientColor ?? DEFAULT_SCENE_AMBIENT_COLOR,
     ambientIntensity: layout?.worldSettings?.ambientIntensity ?? DEFAULT_SCENE_AMBIENT_INTENSITY,
+    gravity: layout?.worldSettings?.gravity ?? DEFAULT_SCENE_GRAVITY,
   };
 }
 
