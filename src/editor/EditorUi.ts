@@ -1561,7 +1561,7 @@ export class EditorUi {
         this.pasteSelectedTransform();
         break;
       case "snap-floor":
-        this.app.surfaceSnapSelected();
+        this.app.snapSelectedToFloor();
         break;
       case "snap-wall":
         this.app.snapSelectedToWall();

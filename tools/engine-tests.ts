@@ -73,6 +73,7 @@ import {
 } from "../editor/gizmos/transformDrag";
 import type { GizmoPointerDrag } from "../editor/gizmos/interaction";
 import { computeWallSnap } from "../editor/render-three/wallSnap";
+import { floorSnapPosition } from "../editor/render-three/floorSnap";
 import { pivotCorrectedPosition } from "../editor/render-three/transformMatrices";
 import {
   applySceneBackgroundAndAmbient,
@@ -429,6 +430,16 @@ check("collisionWireboxes: one box per collider, skips collision:false, flags se
   const hero = boxes[2]!;
   assert.equal(hero.sensor, false);
   assert.deepEqual(hero.box.min.toArray(), [0.5, -0.5, -0.5]);
+});
+
+check("floorSnapPosition places the world-box bottom on y=0", () => {
+  const box = new Box3(new Vector3(2, 1.25, -1), new Vector3(4, 3.25, 1));
+  assert.deepEqual(floorSnapPosition(box, [3, 5, 0]), [3, 3.75, 0]);
+});
+
+check("floorSnapPosition no-ops when already on the floor", () => {
+  const box = new Box3(new Vector3(-1, 0, -1), new Vector3(1, 2, 1));
+  assert.equal(floorSnapPosition(box, [0, 0, 0]), null);
 });
 
 check("scene runtime builds entities in instance -> character -> light order", () => {

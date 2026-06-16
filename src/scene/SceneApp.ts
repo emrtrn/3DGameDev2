@@ -180,6 +180,7 @@ import { bindEditorInputEvents } from "@editor/input/bindings";
 import { EditorCameraController } from "@editor/input/editorCameraController";
 import { ScenePicker } from "@editor/render-three/scenePicker";
 import { EditorSceneController } from "@editor/scene/EditorSceneController";
+import { floorSnapPosition } from "@editor/render-three/floorSnap";
 import { computeWallSnap } from "@editor/render-three/wallSnap";
 import {
   matrixToTransform,
@@ -802,10 +803,36 @@ export class SceneApp {
     );
   }
 
-  /** End / "Snap" button entry: wall-snaps wall assets, otherwise surface-snaps. */
+  snapSelectedToFloor(): void {
+    if (!this.selection) {
+      this.onStatus?.("No selected object to snap.", "warning");
+      return;
+    }
+    if (this.isSelectionLocked(this.selection)) {
+      this.onStatus?.("Selected object is locked.", "warning");
+      return;
+    }
+
+    const before = this.captureTransform(this.selection);
+    const box = this.getSelectionWorldBox(this.selection);
+    if (!before || !box || box.isEmpty()) {
+      this.onStatus?.("Cannot compute bounds for floor snap.", "warning");
+      return;
+    }
+
+    const position = floorSnapPosition(box, before.position);
+    if (!position) {
+      this.onStatus?.("Already resting on the floor.", "info");
+      return;
+    }
+
+    this.updateSelectedTransform({ position });
+    this.commitTransformChange(this.selection, before, "Snap to floor");
+  }
+
+  /** End entry: drops the active selection onto the floor plane. */
   snapSelected(): void {
-    if (this.wallSnapSelected()) return;
-    this.surfaceSnapSelected();
+    this.snapSelectedToFloor();
   }
 
   isSelectionWallAsset(): boolean {
@@ -826,14 +853,6 @@ export class SceneApp {
       return;
     }
     this.performWallSnap(this.selection);
-  }
-
-  /** Returns true when the selection is a wall asset (handled here, no surface fallback). */
-  private wallSnapSelected(): boolean {
-    if (!this.selection || this.selection.kind !== "instance") return false;
-    if (!this.isWallAsset(this.selection.assetId)) return false;
-    this.performWallSnap(this.selection);
-    return true;
   }
 
   /** Slides and orients an instance flush against the nearest room wall. */
