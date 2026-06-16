@@ -72,8 +72,10 @@ import {
   computeModelLocalBounds,
   createSceneCharacterMixer,
   isSceneSunLight,
+  startSceneRuntime,
   tagSceneLightRecordIndex,
 } from "../src/scene/SceneRuntimeCore";
+import type { SceneDocument } from "../engine/scene/sceneDocument";
 import {
   validateLayout,
   validateLightActor,
@@ -365,6 +367,32 @@ check("scene runtime builds entities in instance -> character -> light order", (
     },
   );
   assert.deepEqual(noLights, []);
+});
+
+await checkAsync("scene runtime startup feeds entities to both sinks, then inits, then starts", async () => {
+  const order: string[] = [];
+  const sceneDocument: SceneDocument = { schema: 1, name: "startup-fixture", entities: [] };
+  const sink = (label: string) => ({
+    setEntities: (entities: readonly unknown[]) => {
+      order.push(`${label}:${entities === sceneDocument.entities}`);
+    },
+  });
+
+  await startSceneRuntime({
+    sceneDocument,
+    physics: sink("physics"),
+    behavior: sink("behavior"),
+    engineApp: {
+      init: async () => {
+        order.push("init");
+      },
+      start: async () => {
+        order.push("start");
+      },
+    },
+  });
+
+  assert.deepEqual(order, ["physics:true", "behavior:true", "init", "start"]);
 });
 check("instance entity count equals total placements (empty instances add none)", () => {
   const totalPlacements = layout.instances.reduce(

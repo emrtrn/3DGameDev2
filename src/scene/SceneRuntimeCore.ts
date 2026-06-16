@@ -40,6 +40,8 @@ import type {
   LayoutPlacement,
   RoomLayout,
 } from "@engine/scene/layout";
+import type { Entity } from "@engine/scene/entity";
+import type { SceneDocument } from "@engine/scene/sceneDocument";
 
 const MAX_PIXEL_RATIO = 2;
 
@@ -334,4 +336,33 @@ export function buildSceneEntities(
   for (const light of layout.lights ?? []) {
     handlers.addLight(light);
   }
+}
+
+/** Receives the derived entity set (physics + behavior subsystems). */
+export interface SceneEntitySink {
+  setEntities(entities: readonly Entity[]): void;
+}
+
+/** Engine-core spine brought online once the scene is fully built. */
+export interface SceneEngineSpine {
+  init(): Promise<void>;
+  start(): Promise<void>;
+}
+
+/**
+ * Bring the engine-core spine online once the scene graph is built: hand the
+ * derived entity set to physics + behavior, then init and start the engine.
+ * The order is a shared contract — physics relies on `setEntities()` running
+ * before `init()` to decide whether to load Rapier (see PhysicsSubsystem).
+ */
+export async function startSceneRuntime(options: {
+  sceneDocument: SceneDocument;
+  physics: SceneEntitySink;
+  behavior: SceneEntitySink;
+  engineApp: SceneEngineSpine;
+}): Promise<void> {
+  options.physics.setEntities(options.sceneDocument.entities);
+  options.behavior.setEntities(options.sceneDocument.entities);
+  await options.engineApp.init();
+  await options.engineApp.start();
 }

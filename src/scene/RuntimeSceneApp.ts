@@ -31,6 +31,7 @@ import {
   readSceneRuntimeStats,
   resolveSceneWorldSettings,
   resizeSceneRuntimeViewport,
+  startSceneRuntime,
   tagSceneLightRecordIndex,
 } from "./SceneRuntimeCore";
 import type { LightObjectRecord } from "@engine/render-three/lights";
@@ -181,11 +182,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }),
     );
 
-    const sceneDocument = roomLayoutToSceneDocument(this.layout);
-    this.physicsSubsystem.setEntities(sceneDocument.entities);
-    this.behaviorSubsystem.setEntities(sceneDocument.entities);
-    await this.engineApp.init();
-    await this.engineApp.start();
+    await startSceneRuntime({
+      sceneDocument: roomLayoutToSceneDocument(this.layout),
+      physics: this.physicsSubsystem,
+      behavior: this.behaviorSubsystem,
+      engineApp: this.engineApp,
+    });
   }
 
   private createInstancedModel(assetId: string, placements: LayoutPlacement[]): Group {

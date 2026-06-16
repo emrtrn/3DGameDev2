@@ -23,7 +23,7 @@ future session (Claude/Codex) can resume without re-deriving context.
 | 2 | Rapier physics always loaded at runtime | Medium (2.18 MB) | Low–Med | `[x]` |
 | 3 | Extract editor-only logic out of `SceneApp` | Medium (maintainability) | High | `[x]` |
 | 4 | Smoke tests for load/save + game/editor split | Medium (safety net) | Medium | `[x]` |
-| 5 | Consolidate `SceneApp` / `RuntimeSceneApp` shared runtime core | Medium (drift risk) | Med-High | `[~]` |
+| 5 | Consolidate `SceneApp` / `RuntimeSceneApp` shared runtime core | Medium (drift risk) | Med-High | `[x]` |
 
 Always-true gate before marking any item `[x]`:
 
@@ -373,6 +373,29 @@ npm run build:verify
 
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
+
+- *2026-06-16* - **Item 5 Piece 5 done - engine-startup tail shared; Item 5 now `[x]`.**
+  On branch `refactor/scene-load-prep-tail`, extracted the final identical cut of
+  `loadActiveProjectScene` into `src/scene/SceneRuntimeCore.ts`: `startSceneRuntime`
+  (+ structural `SceneEntitySink`/`SceneEngineSpine` interfaces). It hands the
+  derived `SceneDocument` entities to physics + behavior, then `init()` then
+  `start()` — a shared ordering contract (physics relies on `setEntities()` before
+  `init()` to decide whether to load Rapier). Both shells now `await
+  startSceneRuntime({ sceneDocument, physics, behavior, engineApp })`; `SceneApp`
+  feeds `getSceneDocument()`, `RuntimeSceneApp` feeds
+  `roomLayoutToSceneDocument(layout)`. Added 1 headless engine check (58 -> 59)
+  asserting the call order `physics -> behavior -> init -> start` with both sinks
+  receiving the same entity array. `npm run build:verify` green (build + 59 checks
+  + strict dist scan). `wc -l`: `SceneApp.ts` 2397 (flat), `RuntimeSceneApp.ts`
+  273 -> 275, `SceneRuntimeCore.ts` 337 -> 368.
+  **Item 5 closed.** What stays inline in `SceneApp.loadActiveProjectScene` is
+  intentionally editor-only per the plan (snap settings from manifest, manifest +
+  metadata-schema load, `assetPlacements`, `emit*` notifications) plus a single
+  `convertUnlitModelMaterialsToLit` call; everything genuinely shared between the
+  two shells (renderer/camera/stats/resize, world settings, default sun, room
+  bounds, shadow fit, background/ambient, model/character/light builders, model
+  bounds, entity-build loops, engine-startup tail) now lives in `SceneRuntimeCore`.
+  All checklist items 1-5 are `[x]`. Engine checks 32 (start of cleanup) -> 59.
 
 - *2026-06-16* - **Item 5 Piece 4 done - loadActiveProjectScene model-bounds + entity-build loops shared.**
   On branch `refactor/scene-load-consolidation`, started the last Item 5 target

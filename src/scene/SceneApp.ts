@@ -75,6 +75,7 @@ import {
   resolveSceneWorldSettings,
   resizeSceneRuntimeViewport,
   SCENE_CAMERA_TARGET,
+  startSceneRuntime,
   tagSceneLightRecordIndex,
 } from "./SceneRuntimeCore";
 import {
@@ -1232,19 +1233,18 @@ export class SceneApp {
       }),
     );
 
-    // Derive the runtime entity set once and hand it to the behavior subsystem.
-    // SceneDocument starts acting as a runtime source of truth here: behaviors
-    // mutate per-entity transform copies, synced back to the rendered objects
-    // each tick via syncEntityTransform.
-    const sceneDocument = this.getSceneDocument();
-    this.physicsSubsystem.setEntities(sceneDocument.entities);
-    this.behaviorSubsystem.setEntities(sceneDocument.entities);
-
-    // Bring the engine-core spine online now that the scene is fully built.
-    // The rAF loop's engineApp.update() has been ticking the registry since
-    // start(); behaviors only have entities to act on from here.
-    await this.engineApp.init();
-    await this.engineApp.start();
+    // Derive the runtime entity set once and bring the engine-core spine online
+    // now that the scene is fully built. SceneDocument starts acting as a runtime
+    // source of truth here: behaviors mutate per-entity transform copies, synced
+    // back to the rendered objects each tick via syncEntityTransform. The rAF
+    // loop's engineApp.update() has been ticking the registry since start();
+    // behaviors only have entities to act on from here.
+    await startSceneRuntime({
+      sceneDocument: this.getSceneDocument(),
+      physics: this.physicsSubsystem,
+      behavior: this.behaviorSubsystem,
+      engineApp: this.engineApp,
+    });
   }
 
   private createInstancedModel(assetId: string, placements: LayoutPlacement[]): Group {
