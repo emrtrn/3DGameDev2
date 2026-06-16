@@ -17,8 +17,10 @@ import { loadActiveProject, type ActiveProject } from "@/project/ProjectSystem";
 import {
   applySceneBackgroundAndAmbient,
   buildSceneCharacterObject,
+  buildSceneEntities,
   buildSceneInstancedModel,
   buildSceneLightObject,
+  computeModelLocalBounds,
   computeSceneRoomBounds,
   createSceneCharacterMixer,
   createSceneRuntimeCore,
@@ -154,21 +156,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.ensureDefaultLights();
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
     const convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);
-    this.localBounds.clear();
-    for (const [assetId, gltf] of this.models) {
-      gltf.scene.updateMatrixWorld(true);
-      this.localBounds.set(assetId, new Box3().setFromObject(gltf.scene));
-    }
+    this.localBounds = computeModelLocalBounds(this.models);
 
-    for (const instance of this.layout.instances) {
-      this.scene.add(this.createInstancedModel(instance.assetId, instance.placements));
-    }
-    for (const character of this.layout.characters) {
-      this.addCharacter(this.models.get(character.assetId), character);
-    }
-    for (const light of this.layout.lights ?? []) {
-      this.addLight(light);
-    }
+    buildSceneEntities(this.layout, {
+      addInstance: (assetId, placements) =>
+        this.scene.add(this.createInstancedModel(assetId, placements)),
+      addCharacter: (assetId, character) => this.addCharacter(this.models.get(assetId), character),
+      addLight: (light) => this.addLight(light),
+    });
 
     this.fitSunShadowToScene();
     this.applyBackgroundAndAmbient();

@@ -68,6 +68,8 @@ import {
   ensureDefaultSceneLights,
   fitDirectionalShadowToBounds,
   resolveSceneWorldSettings,
+  buildSceneEntities,
+  computeModelLocalBounds,
   createSceneCharacterMixer,
   isSceneSunLight,
   tagSceneLightRecordIndex,
@@ -84,8 +86,10 @@ import {
   AmbientLight,
   AnimationClip,
   Box3,
+  BoxGeometry,
   Color,
   DirectionalLight,
+  Mesh,
   Object3D,
   Scene,
   Vector3,
@@ -313,6 +317,54 @@ check("scene runtime sun election prefers empty slot then the canonical sun id",
     isSceneSunLight({ id: DEFAULT_SCENE_SUN_ID, type: "point", position: [0, 0, 0] } as LayoutLightActor, null),
     false,
   );
+});
+
+check("scene runtime computes local model bounds keyed by asset id", () => {
+  const gltf = { scene: new Mesh(new BoxGeometry(2, 2, 2)) } as unknown as GLTF;
+  const bounds = computeModelLocalBounds(new Map([["box", gltf]]));
+
+  assert.deepEqual(bounds.get("box")?.min.toArray(), [-1, -1, -1]);
+  assert.deepEqual(bounds.get("box")?.max.toArray(), [1, 1, 1]);
+});
+
+check("scene runtime builds entities in instance -> character -> light order", () => {
+  const recorded: string[] = [];
+  const buildLayout: RoomLayout = {
+    schema: 1,
+    name: "build-order-fixture",
+    loadGroups: [],
+    instances: [
+      { assetId: "a", placements: [{ position: [0, 0, 0] }] },
+      { assetId: "b", placements: [] },
+    ],
+    characters: [{ assetId: "hero", position: [0, 0, 0] }],
+    lights: [{ id: "sun", type: "directional", position: [0, 0, 0] }],
+  };
+
+  buildSceneEntities(buildLayout, {
+    addInstance: (assetId, placements) =>
+      recorded.push(`instance:${assetId}:${placements.length}`),
+    addCharacter: (assetId) => recorded.push(`character:${assetId}`),
+    addLight: (light) => recorded.push(`light:${light.id}`),
+  });
+
+  assert.deepEqual(recorded, [
+    "instance:a:1",
+    "instance:b:0",
+    "character:hero",
+    "light:sun",
+  ]);
+
+  const noLights: string[] = [];
+  buildSceneEntities(
+    { schema: 1, name: "no-lights", loadGroups: [], instances: [], characters: [] },
+    {
+      addInstance: () => noLights.push("instance"),
+      addCharacter: () => noLights.push("character"),
+      addLight: () => noLights.push("light"),
+    },
+  );
+  assert.deepEqual(noLights, []);
 });
 check("instance entity count equals total placements (empty instances add none)", () => {
   const totalPlacements = layout.instances.reduce(
