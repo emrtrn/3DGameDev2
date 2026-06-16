@@ -142,6 +142,7 @@ export function applyTransformFields(
   if (entry.castShadow === false) target.castShadow = false;
   if (entry.collision === false) target.collision = false;
   if (entry.sensor === true) target.sensor = true;
+  if (entry.simulatePhysics === true) target.simulatePhysics = true;
   if (typeof entry.groupId === "string") target.groupId = entry.groupId;
   if (typeof entry.nodeId === "string") target.nodeId = entry.nodeId;
   if (typeof entry.parentId === "string") target.parentId = entry.parentId;

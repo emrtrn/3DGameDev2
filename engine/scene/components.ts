@@ -60,6 +60,7 @@ export interface ColliderComponent {
   center?: Vec3;
   isStatic: boolean;
   isSensor: boolean;
+  simulatePhysics?: boolean;
 }
 
 export interface AudioComponent {
@@ -140,6 +141,7 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
     isSensor: data.isSensor,
   };
   if (center) component.center = center;
+  if (typeof data.simulatePhysics === "boolean") component.simulatePhysics = data.simulatePhysics;
   return component;
 }
 

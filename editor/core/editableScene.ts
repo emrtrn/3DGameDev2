@@ -27,6 +27,8 @@ export interface EditableSelection {
   castShadow: boolean;
   /** Resolved collision flag (absent in data means true). */
   collision: boolean;
+  /** Dynamic rigid-body simulation in Play mode. */
+  simulatePhysics: boolean;
   /** Project-defined gameplay metadata (schema-driven); empty when none set. */
   metadata: LayoutMetadata;
   lightType?: LayoutLightActor["type"];

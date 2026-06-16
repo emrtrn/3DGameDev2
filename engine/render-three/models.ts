@@ -71,6 +71,7 @@ export function createInstancedModelGroup(
     instanced.castShadow = castShadow;
     instanced.receiveShadow = receiveShadow;
     instanced.userData.assetId = assetId;
+    instanced.userData.sourceMatrix = object.matrixWorld.clone();
 
     for (let index = 0; index < items.length; index += 1) {
       const item = items[index];

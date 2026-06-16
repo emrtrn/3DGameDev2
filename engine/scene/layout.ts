@@ -56,6 +56,8 @@ export interface LayoutPlacement {
   collision?: boolean;
   /** Runtime hint: collider is a non-blocking sensor (trigger zone). Absent means false. */
   sensor?: boolean;
+  /** Runtime hint: this object is a dynamic rigid body in Play mode. Absent means false. */
+  simulatePhysics?: boolean;
   /** Project-defined gameplay metadata (schema-driven; omitted when empty). */
   metadata?: LayoutMetadata;
   /** Runtime behavior script reference (resolved by the behavior registry). */
@@ -100,6 +102,8 @@ export interface LayoutCharacter {
   collision?: boolean;
   /** Runtime hint: collider is a non-blocking sensor (trigger zone). Absent means false. */
   sensor?: boolean;
+  /** Runtime hint: this object is a dynamic rigid body in Play mode. Absent means false. */
+  simulatePhysics?: boolean;
   /** Project-defined gameplay metadata (schema-driven; omitted when empty). */
   metadata?: LayoutMetadata;
   animation?: string;

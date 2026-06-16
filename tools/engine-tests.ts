@@ -889,6 +889,46 @@ check("layout collision flags map to readable collider components", () => {
   );
 });
 
+check("layout simulatePhysics maps to a dynamic collider component", () => {
+  const fixture: RoomLayout = {
+    schema: 1,
+    name: "dynamic-rigidbody-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "crate",
+        placements: [
+          { position: [0, 5, 0], simulatePhysics: true },
+          { position: [1, 5, 0], collision: false, simulatePhysics: true },
+        ],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+
+  const document = roomLayoutToSceneDocument(fixture);
+  const dynamic = document.entities.find((entity) => entity.id === instanceEntityId("crate", 0));
+  const forcedCollider = document.entities.find(
+    (entity) => entity.id === instanceEntityId("crate", 1),
+  );
+
+  assert.deepEqual(dynamic ? readColliderComponent(dynamic) : undefined, {
+    shape: "box",
+    size: [1, 1, 1],
+    isStatic: false,
+    isSensor: false,
+    simulatePhysics: true,
+  });
+  assert.deepEqual(forcedCollider ? readColliderComponent(forcedCollider) : undefined, {
+    shape: "box",
+    size: [1, 1, 1],
+    isStatic: false,
+    isSensor: false,
+    simulatePhysics: true,
+  });
+});
+
 // Without a bounds resolver the adapter bakes the placement scale into a unit
 // box (physics no longer rescales); a resolver supplies the world-aligned
 // size + center so derived colliders match the rendered mesh.
@@ -1142,6 +1182,54 @@ await checkAsync("rapier physics backend reports contacts through the same contr
     assert.deepEqual(physics.contactsForEntity("dynamic"), [
       { a: "dynamic", b: "wall", isSensor: false },
     ]);
+    await app.dispose();
+  } finally {
+    console.warn = warn;
+  }
+});
+
+await checkAsync("rapier simulatePhysics body falls under configured gravity", async () => {
+  const physics = new PhysicsSubsystem({ backend: "rapier" });
+  physics.setGravity([0, -10, 0]);
+  const synced: TransformComponent[] = [];
+  physics.setTransformSink((_entityId, transform) => {
+    synced.push({
+      position: [...transform.position],
+      rotation: [...transform.rotation],
+      scale: [...transform.scale],
+    });
+  });
+  physics.setEntities([
+    {
+      id: "crate",
+      components: {
+        Transform: { position: [0, 5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [1, 1, 1],
+          isStatic: false,
+          isSensor: false,
+          simulatePhysics: true,
+        },
+      },
+    },
+  ]);
+
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (String(args[0] ?? "").includes("deprecated parameters for the initialization function")) {
+      return;
+    }
+    warn(...args);
+  };
+  try {
+    await app.init();
+    assert.equal(physics.usesRapier(), true);
+    for (let frame = 0; frame < 12; frame += 1) app.update(1 / 60);
+    assert.ok(synced.length > 0, "expected physics to sync dynamic transforms");
+    assert.ok((synced.at(-1) ?? assert.fail("synced")).position[1] < 5);
     await app.dispose();
   } finally {
     console.warn = warn;
@@ -1914,6 +2002,7 @@ check("save validator allowlist keeps known placement fields, drops unknown ones
     position: [1, 2, 3],
     name: "crate",
     collision: false,
+    simulatePhysics: true,
     metadata: { hp: 5 },
     bogusField: 123,
     nested: { evil: true },
@@ -1921,6 +2010,7 @@ check("save validator allowlist keeps known placement fields, drops unknown ones
   assert.deepEqual(placement.position, [1, 2, 3]);
   assert.equal(placement.name, "crate");
   assert.equal(placement.collision, false);
+  assert.equal(placement.simulatePhysics, true);
   assert.deepEqual(placement.metadata, { hp: 5 });
   // Fields not on the allowlist must be stripped (this is the save footgun).
   assert.equal("bogusField" in placement, false);

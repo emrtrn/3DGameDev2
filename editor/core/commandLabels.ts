@@ -1,10 +1,11 @@
-export type EditorFlagCommand = "hidden" | "locked" | "scaleLocked";
+export type EditorFlagCommand = "hidden" | "locked" | "scaleLocked" | "simulatePhysics";
 export type EditorDefaultTrueFlagCommand = "castShadow" | "collision";
 
 const FLAG_LABELS: Record<EditorFlagCommand, { on: string; off: string }> = {
   hidden: { on: "Hide object", off: "Show object" },
   locked: { on: "Lock object", off: "Unlock object" },
   scaleLocked: { on: "Lock scale ratio", off: "Unlock scale ratio" },
+  simulatePhysics: { on: "Enable simulate physics", off: "Disable simulate physics" },
 };
 
 const DEFAULT_TRUE_FLAG_LABELS: Record<

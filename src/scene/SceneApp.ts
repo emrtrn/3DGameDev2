@@ -436,8 +436,11 @@ export class SceneApp {
     this.engineApp.registerSubsystem(this.audioSubsystem);
 
     // The editor viewport is an authoring surface, not Play mode: keep gameplay
-    // behaviors from mutating placed characters while editing.
-    if (this.editorEnabled) this.behaviorSubsystem.setEnabled(false);
+    // behaviors and dynamic rigid bodies from mutating placed objects while editing.
+    if (this.editorEnabled) {
+      this.behaviorSubsystem.setEnabled(false);
+      this.physicsSubsystem.setEnabled(false);
+    }
 
     // Observer-only keyboard source: records raw codes into the action map in
     // both modes without consuming events, so editor shortcuts/camera nav are
@@ -1236,6 +1239,7 @@ export class SceneApp {
     });
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
     this.ensureDefaultLights();
+    this.physicsSubsystem.setGravity(resolveSceneWorldSettings(this.layout).gravity);
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
     const convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);
     this.localBounds = computeModelLocalBounds(this.models);
@@ -1547,6 +1551,11 @@ export class SceneApp {
   /** Details "Collision" toggle for the active selection (default on). */
   setSelectionCollision(value: boolean): void {
     this.editorSceneController.setSelectionCollision(value);
+  }
+
+  /** Details "Simulate Physics" toggle for the active selection (default off). */
+  setSelectionSimulatePhysics(value: boolean): void {
+    this.editorSceneController.setSelectionSimulatePhysics(value);
   }
 
   /** Active project's gameplay metadata schema, or null when none is declared. */

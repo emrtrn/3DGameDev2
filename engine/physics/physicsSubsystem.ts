@@ -7,9 +7,11 @@ import {
 } from "../scene/components";
 import type { Entity, EntityId } from "../scene/entity";
 import type { PhysicsAabb, PhysicsContact, PhysicsQuery } from "../behavior/behaviorSubsystem";
+import type { Vec3 } from "../scene/layout";
 
 export const PHYSICS_SUBSYSTEM_ID = "physics";
 export type PhysicsBackend = "placeholder" | "rapier";
+export type PhysicsTransformSink = (entityId: EntityId, transform: TransformComponent) => void;
 
 export interface PhysicsSubsystemOptions {
   backend?: PhysicsBackend;
@@ -47,6 +49,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private rapierWorld: RapierWorld | null = null;
   private rapierBodies = new Map<EntityId, RapierBodyRecord>();
   private rapierColliderToEntity = new Map<number, EntityId>();
+  private gravity: Vec3 = [0, -9.81, 0];
+  private transformSink: PhysicsTransformSink | null = null;
+  private enabled = true;
 
   constructor(options: PhysicsSubsystemOptions = {}) {
     this.backend = options.backend ?? "placeholder";
@@ -74,6 +79,21 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   /** True once the Rapier runtime has been loaded (i.e. the scene had colliders). */
   usesRapier(): boolean {
     return this.rapierModule !== null;
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
+
+  setGravity(gravity: Vec3): void {
+    this.gravity = [...gravity];
+    if (this.rapierWorld) {
+      this.rapierWorld.gravity = vectorFromVec3(this.gravity);
+    }
+  }
+
+  setTransformSink(sink: PhysicsTransformSink | null): void {
+    this.transformSink = sink;
   }
 
   setEntities(entities: readonly Entity[]): void {
@@ -137,8 +157,16 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   }
 
   update(_context: EngineUpdateContext): void {
+    if (!this.enabled) {
+      this.contacts = [];
+      return;
+    }
     if (this.rapierWorld) {
+      const deltaSeconds = Math.max(0, Math.min(_context.deltaSeconds, 1 / 20));
+      if (deltaSeconds > 0) this.rapierWorld.timestep = deltaSeconds;
+      this.rapierWorld.step();
       this.updateRapierContacts();
+      this.syncRapierDynamicTransforms();
       return;
     }
     const contacts: PhysicsContact[] = [];
@@ -176,14 +204,12 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const RAPIER = this.rapierModule;
     if (!RAPIER) return;
     this.rapierWorld?.free();
-    this.rapierWorld = new RAPIER.World({ x: 0, y: 0, z: 0 });
+    this.rapierWorld = new RAPIER.World(vectorFromVec3(this.gravity));
     this.rapierBodies.clear();
     this.rapierColliderToEntity.clear();
 
     for (const body of this.bodies) {
-      const desc = body.collider.isStatic
-        ? RAPIER.RigidBodyDesc.fixed()
-        : RAPIER.RigidBodyDesc.kinematicPositionBased();
+      const desc = rigidBodyDescForBody(RAPIER, body);
       desc.setTranslation(
         body.transform.position[0],
         body.transform.position[1],
@@ -206,7 +232,6 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
 
   private updateRapierContacts(): void {
     if (!this.rapierWorld) return;
-    this.rapierWorld.step();
     const contacts: PhysicsContact[] = [];
     const seen = new Set<string>();
     for (const record of this.rapierBodies.values()) {
@@ -218,6 +243,22 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       });
     }
     this.contacts = contacts;
+  }
+
+  private syncRapierDynamicTransforms(): void {
+    if (!this.transformSink) return;
+    for (const [entityId, rapier] of this.rapierBodies.entries()) {
+      const body = this.bodies.find((candidate) => candidate.id === entityId);
+      if (!body?.collider.simulatePhysics) continue;
+      const translation = rapier.body.translation();
+      const transform: TransformComponent = {
+        position: [translation.x, translation.y, translation.z],
+        rotation: [...body.transform.rotation],
+        scale: [...body.transform.scale],
+      };
+      body.transform = cloneTransform(transform);
+      this.transformSink(entityId, transform);
+    }
   }
 
   private addRapierContact(
@@ -291,6 +332,7 @@ function cloneCollider(collider: ColliderComponent): ColliderComponent {
     isSensor: collider.isSensor,
   };
   if (collider.center) clone.center = [...collider.center];
+  if (collider.simulatePhysics !== undefined) clone.simulatePhysics = collider.simulatePhysics;
   return clone;
 }
 
@@ -301,6 +343,12 @@ function colliderDescForBody(RAPIER: RapierModule, body: PhysicsBody) {
   const center = body.collider.center ?? [0, 0, 0];
   const desc = colliderShapeDesc(RAPIER, body.collider.shape, size);
   return desc.setTranslation(center[0] ?? 0, center[1] ?? 0, center[2] ?? 0);
+}
+
+function rigidBodyDescForBody(RAPIER: RapierModule, body: PhysicsBody) {
+  if (body.collider.isStatic) return RAPIER.RigidBodyDesc.fixed();
+  if (body.collider.simulatePhysics) return RAPIER.RigidBodyDesc.dynamic();
+  return RAPIER.RigidBodyDesc.kinematicPositionBased();
 }
 
 function colliderShapeDesc(
@@ -328,5 +376,13 @@ function vectorFromTransform(transform: TransformComponent): { x: number; y: num
     x: transform.position[0],
     y: transform.position[1],
     z: transform.position[2],
+  };
+}
+
+function vectorFromVec3(vec: Vec3): { x: number; y: number; z: number } {
+  return {
+    x: vec[0],
+    y: vec[1],
+    z: vec[2],
   };
 }

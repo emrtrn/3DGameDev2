@@ -1205,6 +1205,12 @@ export class EditorUi {
           } />
           <span>Collision</span>
         </label>
+        <label class="detail-toggle">
+          <input type="checkbox" data-detail-toggle="simulatePhysics" ${
+            selection.simulatePhysics ? "checked" : ""
+          } />
+          <span>Simulate Physics</span>
+        </label>
       </div>
       ${this.renderMetadataSections(selection)}
     `;
@@ -1580,6 +1586,9 @@ export class EditorUi {
         break;
       case "collision":
         this.app.setSelectionCollision(checked);
+        break;
+      case "simulatePhysics":
+        this.app.setSelectionSimulatePhysics(checked);
         break;
     }
   }

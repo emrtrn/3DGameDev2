@@ -52,6 +52,7 @@ type MutableHierarchyTransform = {
   scaleLocked?: boolean;
   castShadow?: boolean;
   collision?: boolean;
+  simulatePhysics?: boolean;
   metadata?: LayoutMetadata;
   nodeId?: string;
   parentId?: string;
@@ -565,6 +566,12 @@ export class EditorSceneController {
     if (!this.selection || !this.host.hasSelection(this.selection)) return;
     if (this.selection.kind === "light") return;
     this.setSelectionDefaultTrueFlag(this.selection, "collision", value);
+  }
+
+  setSelectionSimulatePhysics(value: boolean): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    if (this.selection.kind === "light") return;
+    this.setSelectionFlag(this.selection, "simulatePhysics", value);
   }
 
   setSelectionMetadata(key: string, value: MetadataValue | undefined, label?: string): void {

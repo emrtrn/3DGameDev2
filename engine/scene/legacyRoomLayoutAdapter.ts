@@ -334,11 +334,16 @@ function behaviorComponent(behavior: LayoutBehavior | undefined): BehaviorCompon
 
 function colliderComponent(
   assetId: string,
-  source: ColliderTransformSource & { collision?: boolean; sensor?: boolean },
+  source: ColliderTransformSource & {
+    collision?: boolean;
+    sensor?: boolean;
+    simulatePhysics?: boolean;
+  },
   isStatic: boolean,
   resolveBox: ColliderBoxResolver | undefined,
 ): ColliderComponent | null {
-  if (source.collision === false) return null;
+  const simulatePhysics = source.simulatePhysics === true;
+  if (source.collision === false && !simulatePhysics) return null;
   // World-aligned footprint from the model's bounds when the host can supply
   // them; otherwise a scaled unit box (rotation/bounds unknown). Both bake the
   // placement's scale into `size`, since the physics layer no longer rescales.
@@ -346,10 +351,11 @@ function colliderComponent(
   const component: ColliderComponent = {
     shape: "box",
     size: box?.size ?? readScale(source),
-    isStatic,
+    isStatic: isStatic && !simulatePhysics,
     isSensor: source.sensor === true,
   };
   if (box && !isZeroVec3(box.center)) component.center = box.center;
+  if (simulatePhysics) component.simulatePhysics = true;
   return component;
 }
 

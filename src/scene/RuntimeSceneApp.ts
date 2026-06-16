@@ -1,4 +1,4 @@
-import { Box3, DirectionalLight, Group, Object3D } from "three";
+import { Box3, DirectionalLight, Group, Matrix4, Object3D } from "three";
 import type { AmbientLight, InstancedMesh, PerspectiveCamera, Scene, WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
@@ -50,7 +50,11 @@ import {
 } from "./SceneRuntimeCore";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import { collectMaterialStats, convertUnlitModelMaterialsToLit } from "@engine/render-three/materials";
-import { applyEulerDegrees, colliderBoxFromBounds } from "@engine/render-three/transforms";
+import {
+  applyEulerDegrees,
+  colliderBoxFromBounds,
+  composeTransformMatrix,
+} from "@engine/render-three/transforms";
 import type { LayoutCharacter, LayoutLightActor, LayoutPlacement, RoomLayout } from "@engine/scene/layout";
 import {
   characterEntityId,
@@ -128,6 +132,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   onFrame: ((deltaMs: number) => void) | null = null;
 
   private readonly syncEntityTransform = (entityId: string, transform: TransformComponent): void => {
+    const instance = parseInstanceEntityId(entityId);
+    if (instance) {
+      this.syncInstanceTransform(instance.assetId, instance.placementIndex, transform);
+      this.physicsSubsystem.setEntityTransform(entityId, transform);
+      return;
+    }
+
     const index = parseCharacterEntityIndex(entityId);
     if (index === null) return;
     const object = this.characterObjects[index];
@@ -149,6 +160,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.engineApp.registerSubsystem(this.animationSubsystem);
     this.engineApp.registerSubsystem(this.inputSubsystem);
     this.engineApp.registerSubsystem(this.physicsSubsystem);
+    this.physicsSubsystem.setTransformSink(this.syncEntityTransform);
     this.behaviorSubsystem = new BehaviorSubsystem(
       createBehaviorRegistry({
         getGravityY: () => this.gravityY,
@@ -205,6 +217,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.assetLoader = new AssetLoader(this.activeProject.manifest);
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
     this.gravityY = resolveSceneWorldSettings(this.layout).gravity[1];
+    this.physicsSubsystem.setGravity(resolveSceneWorldSettings(this.layout).gravity);
     this.ensureDefaultLights();
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
     const convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);
@@ -267,6 +280,29 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.instanceGroups.set(assetId, group);
     this.instanceMeshes.set(assetId, meshes);
     return group;
+  }
+
+  private syncInstanceTransform(
+    assetId: string,
+    placementIndex: number,
+    transform: TransformComponent,
+  ): void {
+    const meshes = this.instanceMeshes.get(assetId);
+    if (!meshes) return;
+    const transformMatrix = composeTransformMatrix(
+      transform.position,
+      transform.rotation,
+      transform.scale,
+    );
+    for (const mesh of meshes) {
+      const sourceMatrix =
+        mesh.userData.sourceMatrix instanceof Matrix4
+          ? mesh.userData.sourceMatrix
+          : new Matrix4();
+      mesh.setMatrixAt(placementIndex, transformMatrix.clone().multiply(sourceMatrix));
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
   }
 
   private addCharacter(gltf: GLTF | undefined, placement: LayoutCharacter): void {
@@ -376,4 +412,16 @@ function parseCharacterEntityIndex(entityId: string): number | null {
   if (!entityId.startsWith("character:")) return null;
   const index = Number(entityId.slice("character:".length));
   return Number.isInteger(index) ? index : null;
+}
+
+function parseInstanceEntityId(entityId: string): { assetId: string; placementIndex: number } | null {
+  if (!entityId.startsWith("instance:")) return null;
+  const separator = entityId.lastIndexOf(":");
+  if (separator <= "instance:".length) return null;
+  const index = Number(entityId.slice(separator + 1));
+  if (!Number.isInteger(index) || index < 0) return null;
+  return {
+    assetId: decodeURIComponent(entityId.slice("instance:".length, separator)),
+    placementIndex: index,
+  };
 }

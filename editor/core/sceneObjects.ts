@@ -53,6 +53,7 @@ export function buildSceneObjects(
         locked: placement.locked ?? false,
         castShadow: deps.staticObjectsCastShadow,
         collision: placement.collision ?? true,
+        simulatePhysics: placement.simulatePhysics ?? false,
         metadata: {},
         groupId: placement.groupId,
         nodeId: placement.nodeId,
@@ -79,6 +80,7 @@ export function buildSceneObjects(
       locked: character.locked ?? false,
       castShadow: character.castShadow ?? true,
       collision: character.collision ?? true,
+      simulatePhysics: character.simulatePhysics ?? false,
       metadata: {},
       groupId: character.groupId,
       nodeId: character.nodeId,
@@ -104,6 +106,7 @@ export function buildSceneObjects(
       locked: light.locked ?? false,
       castShadow: light.castShadow ?? light.type === "directional",
       collision: false,
+      simulatePhysics: false,
       metadata: {},
       groupId: light.groupId,
       nodeId: light.nodeId,
@@ -148,6 +151,7 @@ export function buildEditableSelection(
       locked: placement.locked ?? false,
       castShadow: deps.staticObjectsCastShadow,
       collision: placement.collision ?? true,
+      simulatePhysics: placement.simulatePhysics ?? false,
       metadata: cloneMetadata(placement.metadata),
     };
   }
@@ -169,6 +173,7 @@ export function buildEditableSelection(
       locked: light.locked ?? false,
       castShadow: light.castShadow ?? light.type === "directional",
       collision: false,
+      simulatePhysics: false,
       metadata: {},
       lightType: light.type,
       color: light.color ?? DEFAULT_LIGHT_COLOR,
@@ -194,6 +199,7 @@ export function buildEditableSelection(
     locked: character.locked ?? false,
     castShadow: character.castShadow ?? true,
     collision: character.collision ?? true,
+    simulatePhysics: character.simulatePhysics ?? false,
     metadata: cloneMetadata(character.metadata),
   };
 }
