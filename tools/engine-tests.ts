@@ -52,6 +52,13 @@ import {
 } from "../src/game/followCamera";
 import { groundedAt, stepVerticalMotion } from "../src/game/verticalMotion";
 import { resolvePlanarMovement, type Aabb3 } from "../src/game/collision";
+import {
+  classifyLocomotion,
+  resolveLocomotionClip,
+  selectLocomotionClip,
+  type LocomotionInput,
+} from "../src/game/locomotionAnimation";
+import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
 import type { Entity } from "../engine/scene/entity";
 import { selectionId, type Selection } from "../editor/core/selection";
 import { EditorSceneController } from "../editor/scene/EditorSceneController";
@@ -2168,6 +2175,110 @@ check("input-move behavior: the player cannot walk through a static wall", () =>
   }
   assert.ok(maxX <= 1e-9, `player crossed the wall: maxX=${maxX}`);
   assert.ok(Math.abs((synced ?? assert.fail("synced")).position[0]) <= 1e-9); // resting flush at x=0
+});
+
+// G5 movement-driven animation (src/game/locomotionAnimation.ts): map the
+// player's per-tick movement snapshot to a semantic state, then to a concrete
+// clip via per-state fallback chains. Pure selection the runtime shell applies
+// to a crossfade animator.
+const ground = (planarSpeed: number): LocomotionInput => ({ planarSpeed, grounded: true, velocityY: 0 });
+
+check("classifyLocomotion: grounded planar speed picks idle/walk/run by threshold", () => {
+  const thresholds = { walkSpeed: 0.1, runSpeed: 3 };
+  assert.equal(classifyLocomotion(ground(0), thresholds), "idle");
+  assert.equal(classifyLocomotion(ground(0.05), thresholds), "idle"); // below walk
+  assert.equal(classifyLocomotion(ground(2), thresholds), "walk");
+  assert.equal(classifyLocomotion(ground(3), thresholds), "run"); // at runSpeed
+  assert.equal(classifyLocomotion(ground(4), thresholds), "run");
+});
+
+check("classifyLocomotion: airborne reads jump while rising, fall while descending", () => {
+  assert.equal(classifyLocomotion({ planarSpeed: 0, grounded: false, velocityY: 5 }), "jump");
+  assert.equal(classifyLocomotion({ planarSpeed: 9, grounded: false, velocityY: -5 }), "fall");
+  // Airborne overrides planar speed: moving fast off a ledge is still fall, not run.
+  assert.equal(classifyLocomotion({ planarSpeed: 0, grounded: false, velocityY: 0 }), "fall");
+});
+
+check("resolveLocomotionClip: walks the fallback chain to an available clip", () => {
+  const rich = new Set(["idle", "walk", "sprint", "static"]); // demo character's clips
+  assert.equal(resolveLocomotionClip("idle", rich), "idle");
+  assert.equal(resolveLocomotionClip("walk", rich), "walk");
+  assert.equal(resolveLocomotionClip("run", rich), "sprint"); // run -> sprint
+  assert.equal(resolveLocomotionClip("jump", rich), "idle"); // no jump clip -> idle
+  assert.equal(resolveLocomotionClip("fall", rich), "idle"); // no fall clip -> idle
+
+  // A sparser asset degrades run -> walk and idle -> static.
+  const sparse = new Set(["walk", "static"]);
+  assert.equal(resolveLocomotionClip("run", sparse), "walk");
+  assert.equal(resolveLocomotionClip("idle", sparse), "static");
+
+  // Last resort returns any clip; an empty set returns null.
+  assert.equal(resolveLocomotionClip("idle", new Set(["only"])), "only");
+  assert.equal(resolveLocomotionClip("idle", new Set<string>()), null);
+});
+
+check("selectLocomotionClip: composes classify + resolve end to end", () => {
+  const clips = new Set(["idle", "walk", "sprint"]);
+  assert.equal(selectLocomotionClip(ground(0), clips), "idle");
+  assert.equal(selectLocomotionClip(ground(2), clips), "walk");
+  assert.equal(selectLocomotionClip(ground(4), clips), "sprint");
+  assert.equal(selectLocomotionClip({ planarSpeed: 0, grounded: false, velocityY: 3 }, clips), "idle");
+});
+
+check("CrossfadeAnimator: exposes its clips and tracks the current clip on play", () => {
+  const root = new Object3D();
+  const clips = [new AnimationClip("idle", 1, []), new AnimationClip("walk", 1, [])];
+  const animator = new CrossfadeAnimator(root, clips);
+  assert.deepEqual([...animator.clips].sort(), ["idle", "walk"]);
+  assert.equal(animator.currentClip, null);
+
+  animator.play("idle", 0); // first play snaps in
+  assert.equal(animator.currentClip, "idle");
+  animator.play("walk", 0.2); // crossfades to walk
+  assert.equal(animator.currentClip, "walk");
+  animator.play("missing"); // unknown clip is a no-op
+  assert.equal(animator.currentClip, "walk");
+});
+
+check("input-move behavior: reports the movement snapshot and sprint raises planar speed", () => {
+  const reports = new Map<string, LocomotionInput>();
+  const registry = createBehaviorRegistry({
+    getGravityY: () => -10,
+    reportLocomotion: (id, report) => reports.set(id, report),
+  });
+  const actions = new ActionMap({ KeyW: "move-forward", ShiftLeft: "sprint" });
+  const subsystem = new BehaviorSubsystem(registry, actions, () => {});
+  subsystem.setEntities([
+    {
+      id: "character:0",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Behavior: { scriptId: "input-move", params: { speed: 2, sprintMultiplier: 2 } },
+      },
+    },
+  ]);
+  const dt = 0.1;
+
+  // Idle: grounded, zero planar speed.
+  actions.advance();
+  subsystem.update({ deltaSeconds: dt, elapsedSeconds: dt, frame: 1 });
+  const idle = reports.get("character:0") ?? assert.fail("reported");
+  assert.equal(idle.planarSpeed, 0);
+  assert.equal(idle.grounded, true);
+
+  // Walk: hold forward -> planar speed ~= base speed (2).
+  actions.handleDown("KeyW");
+  actions.advance();
+  subsystem.update({ deltaSeconds: dt, elapsedSeconds: 2 * dt, frame: 2 });
+  const walk = reports.get("character:0") ?? assert.fail("reported");
+  assert.ok(Math.abs(walk.planarSpeed - 2) <= 1e-9, `walk speed ${walk.planarSpeed}`);
+
+  // Run: also hold sprint -> planar speed ~= base * multiplier (4).
+  actions.handleDown("ShiftLeft");
+  actions.advance();
+  subsystem.update({ deltaSeconds: dt, elapsedSeconds: 3 * dt, frame: 3 });
+  const run = reports.get("character:0") ?? assert.fail("reported");
+  assert.ok(Math.abs(run.planarSpeed - 4) <= 1e-9, `run speed ${run.planarSpeed}`);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);
