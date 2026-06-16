@@ -13,6 +13,7 @@ import type {
 import { facingYawFromMove, planarMoveStep } from "./playerMovement";
 import { groundedAt, stepVerticalMotion, type VerticalMotionState } from "./verticalMotion";
 import { resolvePlanarMovement, type PlanarDelta } from "./collision";
+import type { LocomotionInput } from "./locomotionAnimation";
 
 /** Gravity used when the host does not inject one (e.g. headless tests). */
 const DEFAULT_GRAVITY_Y = -9.81;
@@ -21,6 +22,11 @@ const DEFAULT_GRAVITY_Y = -9.81;
 export interface BehaviorRegistryOptions {
   /** World gravity on Y (units/s^2; negative = down). Defaults to -9.81. */
   getGravityY?: () => number;
+  /**
+   * Sink for the player's per-tick movement snapshot, which the runtime shell
+   * maps to an animation clip (G5). Optional: headless tests omit it.
+   */
+  reportLocomotion?: (entityId: string, report: LocomotionInput) => void;
 }
 
 function numberParam(value: unknown, fallback: number): number {
@@ -88,12 +94,19 @@ interface PlayerVertical {
  */
 export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): BehaviorRegistry {
   const getGravityY = options.getGravityY ?? (() => DEFAULT_GRAVITY_Y);
+  const reportLocomotion = options.reportLocomotion;
   const vertical = new Map<string, PlayerVertical>();
 
   const inputMove: BehaviorUpdate = (context) => {
     const { engine, actions, params, transform } = context;
 
     // Planar movement (G1) resolved against static blockers (G3), then facing.
+    // Holding sprint scales the base speed so the run animation state (G5) can
+    // be reached; the intended (pre-collision) speed drives the animation.
+    const baseSpeed = numberParam(params.speed, 3);
+    const speed = actions.held("sprint")
+      ? baseSpeed * numberParam(params.sprintMultiplier, 2)
+      : baseSpeed;
     const planar = planarMoveStep(
       {
         forward: actions.held("move-forward"),
@@ -101,7 +114,7 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
         left: actions.held("move-left"),
         right: actions.held("move-right"),
       },
-      numberParam(params.speed, 3),
+      speed,
       engine.deltaSeconds,
     );
     const { dx, dz } = resolvePlanarAgainstBlockers(context, planar);
@@ -126,6 +139,15 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
       jump: actions.pressed("jump"),
     });
     transform.position[1] = runtime.state.y;
+
+    // Report the movement snapshot (G5) so the shell can pick a clip. Speed is
+    // the intended planar speed (before collision), so pushing into a wall still
+    // animates as walking/running rather than freezing to idle.
+    reportLocomotion?.(context.entityId, {
+      planarSpeed: engine.deltaSeconds > 0 ? Math.hypot(planar.dx, planar.dz) / engine.deltaSeconds : 0,
+      grounded: runtime.state.grounded,
+      velocityY: runtime.state.velocityY,
+    });
 
     playCollisionAudioOnce(context);
   };

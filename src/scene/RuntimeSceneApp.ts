@@ -6,6 +6,7 @@ import { AssetLoader } from "./assetLoader";
 import { loadRoomLayout } from "./roomLayout";
 import { EngineApp } from "@engine/core/EngineApp";
 import { AnimationSubsystem } from "@engine/render-three/animationSubsystem";
+import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
 import { ActionMap, type ActionBindings } from "@engine/input/actionMap";
 import { InputSubsystem } from "@engine/input/inputSubsystem";
 import { BehaviorSubsystem } from "@engine/behavior/behaviorSubsystem";
@@ -20,6 +21,11 @@ import {
   type FollowCameraPose,
   type Vec3,
 } from "@/game/followCamera";
+import {
+  selectLocomotionClip,
+  DEFAULT_LOCOMOTION_THRESHOLDS,
+  type LocomotionInput,
+} from "@/game/locomotionAnimation";
 import { loadActiveProject, type ActiveProject } from "@/project/ProjectSystem";
 import {
   applySceneBackgroundAndAmbient,
@@ -46,7 +52,7 @@ import type { LightObjectRecord } from "@engine/render-three/lights";
 import { collectMaterialStats, convertUnlitModelMaterialsToLit } from "@engine/render-three/materials";
 import { applyEulerDegrees } from "@engine/render-three/transforms";
 import type { LayoutCharacter, LayoutLightActor, LayoutPlacement, RoomLayout } from "@engine/scene/layout";
-import { roomLayoutToSceneDocument } from "@engine/scene/legacyRoomLayoutAdapter";
+import { characterEntityId, roomLayoutToSceneDocument } from "@engine/scene/legacyRoomLayoutAdapter";
 import type { TransformComponent } from "@engine/scene/components";
 
 /**
@@ -60,6 +66,9 @@ const FOLLOW_CAMERA_CONFIG: FollowCameraConfig = {
 };
 const FOLLOW_CAMERA_RATE = 8;
 
+/** Crossfade duration (seconds) between locomotion clips (G5). */
+const ANIMATION_CROSSFADE_SECONDS = 0.18;
+
 const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   KeyW: "move-forward",
   ArrowUp: "move-forward",
@@ -70,6 +79,8 @@ const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   KeyD: "move-right",
   ArrowRight: "move-right",
   Space: "jump",
+  ShiftLeft: "sprint",
+  ShiftRight: "sprint",
 };
 
 export interface RuntimeStatsApp {
@@ -104,6 +115,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private ambientLight: AmbientLight | null = null;
   private cameraViewTouched = false;
   private playerObject: Object3D | null = null;
+  private playerEntityId: string | null = null;
+  private playerAnimator: CrossfadeAnimator | null = null;
+  private playerLocomotion: LocomotionInput | null = null;
   private followPose: FollowCameraPose | null = null;
   private gravityY = DEFAULT_SCENE_GRAVITY[1];
 
@@ -132,7 +146,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.engineApp.registerSubsystem(this.inputSubsystem);
     this.engineApp.registerSubsystem(this.physicsSubsystem);
     this.behaviorSubsystem = new BehaviorSubsystem(
-      createBehaviorRegistry({ getGravityY: () => this.gravityY }),
+      createBehaviorRegistry({
+        getGravityY: () => this.gravityY,
+        reportLocomotion: (entityId, report) => {
+          if (entityId === this.playerEntityId) this.playerLocomotion = report;
+        },
+      }),
       this.inputActions,
       this.syncEntityTransform,
       this.physicsSubsystem,
@@ -155,6 +174,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.lastTime = now;
       this.engineApp.update(deltaMs / 1000);
       this.updateFollowCamera(deltaMs / 1000);
+      this.updateCharacterAnimation();
       this.renderer.render(this.scene, this.camera);
       this.onFrame?.(deltaMs);
     };
@@ -238,12 +258,35 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.characterObjects.push(character);
     // The first input-driven character is the player the runtime camera follows;
     // taking over the view stops the responsive resize handler from resetting it.
-    if (!this.playerObject && placement.behavior?.script === "input-move") {
+    const isPlayer = !this.playerObject && placement.behavior?.script === "input-move";
+    if (isPlayer) {
       this.playerObject = character;
+      this.playerEntityId = characterEntityId(index);
       this.cameraViewTouched = true;
+      // The player gets the full clip set, crossfaded by movement state (G5);
+      // snap to the authored idle clip so it never flashes a bind pose.
+      const animator = new CrossfadeAnimator(character, gltf.animations);
+      animator.play(placement.animation ?? "idle", 0);
+      this.animationSubsystem.add(animator.mixer);
+      this.playerAnimator = animator;
+      return;
     }
+    // Non-player characters keep the single authored clip.
     const mixer = createSceneCharacterMixer(character, gltf, placement.animation);
     if (mixer) this.animationSubsystem.add(mixer);
+  }
+
+  /**
+   * Drives the player's animation clip from the movement snapshot the behavior
+   * reported this tick (G5). Pure selection lives in `src/game`; here we only
+   * apply the chosen clip to the crossfade animator.
+   */
+  private updateCharacterAnimation(): void {
+    const animator = this.playerAnimator;
+    const report = this.playerLocomotion;
+    if (!animator || !report) return;
+    const clip = selectLocomotionClip(report, animator.clips, DEFAULT_LOCOMOTION_THRESHOLDS);
+    if (clip) animator.play(clip, ANIMATION_CROSSFADE_SECONDS);
   }
 
   private updateFollowCamera(deltaSeconds: number): void {

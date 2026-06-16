@@ -102,7 +102,7 @@ tutkalı shell'lerde ince kalır.
 | G2 | Yerçekimi, zemin & zıplama | G1 | §3, §4 | `[x]` |
 | G3 | Çarpışma yanıtı (duvardan geçmeyi durdur) | G1 | §3 | `[x]` |
 | G4 | 3. şahıs takip kamerası + kameraya-göreli hareket | G1 | §5 | `[x]` |
-| G5 | Harekete bağlı animasyon durumları | G1, G2 | §3 | `[ ]` |
+| G5 | Harekete bağlı animasyon durumları | G1, G2 | §3 | `[x]` |
 | G6 | Authored oynanabilir örnek sahne | G1–G5 | §4, §5 | `[ ]` |
 
 **Önerilen sıra:** G1 → G4 → (G1'i kameraya-göreli yap) → G2 → G3 → G5 → G6.
@@ -200,7 +200,7 @@ viewport kamerası değişmez. Headless testler kamera-target matematiğini sabi
 
 **Doğrulama.** `npm run build:verify` + `/` üzerinde manuel.
 
-### G5 — Harekete bağlı animasyon durumları  `[ ]`
+### G5 — Harekete bağlı animasyon durumları  `[x]`
 
 **Problem.** Yalnızca yüklemede tek klip oynuyor; karakter hareketle animasyon
 değiştirmiyor (idle/walk/run/jump).
@@ -264,6 +264,35 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-16* — **G5 bitti (harekete bağlı animasyon durumları).** Yeni saf
+  seçici `src/game/locomotionAnimation.ts`: iki katman — `classifyLocomotion(
+  {planarSpeed, grounded, velocityY}, thresholds)` semantik durum (idle/walk/run/
+  jump/fall) üretir (havadayken planar hızı **ezer**: yükseliş=jump, iniş=fall;
+  zeminde walk/run eşik ile) ve `resolveLocomotionClip(state, available)` durumu
+  **fallback zinciriyle** asset'te gerçekten var olan bir klibe çevirir (run→
+  sprint, jump/fall→idle gibi → asset eksik klipte T-pose'a düşmez, idle'a
+  zarifçe iner). `selectLocomotionClip` ikisini birleştirir. Üçü de saf, headless.
+  Üç.js tutkalı generic: `engine/render-three/characterAnimator.ts` —
+  `CrossfadeAnimator` bir `AnimationMixer`'ı tüm kliplerle sarar, `play(name,
+  duration)` ile isimle crossfade eder (ilk oynatış/duration≤0 snap); mixer'ı
+  `AnimationSubsystem` tickler. `input-move` davranışı (`src/game/behaviors.ts`)
+  her tick **niyet** planar hızını + grounded + velocityY'yi yeni opsiyonel
+  `reportLocomotion(entityId, snapshot)` sink'i ile raporlar (niyet hızı →
+  duvara bastırınca idle'a donmaz, yürür/koşar). **Sprint:** `Shift` →`sprint`
+  action'ı eklendi; `input-move` sprint tutulunca `speed*sprintMultiplier`
+  (default 2) uygular → run durumuna erişilir. `RuntimeSceneApp` (runtime shell)
+  oyuncuya `CrossfadeAnimator` kurar (authored idle'a snap), sink'i player
+  entity'sine bağlar, her frame `updateCharacterAnimation` ile seçilen klibi
+  crossfade'ler; oyuncu-olmayan karakterler tek authored klipte kalır. Headless
+  testler eklendi (tools/engine-tests.ts: 82 → 88 check) — classify (eşik +
+  airborne öncelik), resolve fallback zinciri (zengin/seyrek/boş set), select
+  uçtan uca, CrossfadeAnimator clip/current defteri, gerçek `input-move`
+  rapor+sprint entegrasyonu. `npm run build:verify` yeşil (build + 88 check +
+  strict dist scan). **Karar/Açık soru kapandı:** demo karakter (Kenney Blocky)
+  `idle/walk/sprint` taşıyor ama `jump/fall` **taşımıyor** → airborne fallback
+  ile idle'a iner (G5'i idle/walk'a sınırlamak gerekmedi; run sprint-key ile
+  gerçek). Layout değişmedi (karakter zaten `animation:"idle"` + `input-move`).
+  Sıradaki: **G6** (authored oynanabilir örnek sahne).
 - *2026-06-16* — **G3 bitti (çarpışma yanıtı — A Seçeneği, saf AABB).** Yeni saf
   helper `src/game/collision.ts`: `resolvePlanarMovement(position, {dx,dz}, half,
   blockers)` — önerilen XZ hareketini statik collider AABB'lerine karşı çözer;
