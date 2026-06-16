@@ -136,15 +136,13 @@
     {
       "assetId": "character-a",
       "position": [
-        1,
+        0.38,
         0,
-        1.56
+        1.64
       ],
       "animation": "idle",
       "name": "customer-character-a",
       "scaleLocked": true,
-      "rotationYDeg": 30,
-      "scale": 0.3,
       "behavior": {
         "script": "input-move",
         "params": {
@@ -156,7 +154,9 @@
         "volume": 0.35,
         "loop": false,
         "spatial": false
-      }
+      },
+      "rotationYDeg": 30,
+      "scale": 0.3
     }
   ],
   "worldSettings": {
