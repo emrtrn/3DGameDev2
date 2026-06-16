@@ -10,6 +10,7 @@ import type {
   BehaviorRegistry,
   BehaviorUpdate,
 } from "@engine/behavior/behaviorSubsystem";
+import { facingYawFromMove, planarMoveStep } from "./playerMovement";
 
 function numberParam(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -45,11 +46,20 @@ function playCollisionAudioOnce(
 
 const inputMove: BehaviorUpdate = (context) => {
   const { engine, actions, params, transform } = context;
-  const step = numberParam(params.speed, 3) * engine.deltaSeconds;
-  if (actions.held("move-forward")) transform.position[2] -= step;
-  if (actions.held("move-back")) transform.position[2] += step;
-  if (actions.held("move-left")) transform.position[0] -= step;
-  if (actions.held("move-right")) transform.position[0] += step;
+  const { dx, dz } = planarMoveStep(
+    {
+      forward: actions.held("move-forward"),
+      back: actions.held("move-back"),
+      left: actions.held("move-left"),
+      right: actions.held("move-right"),
+    },
+    numberParam(params.speed, 3),
+    engine.deltaSeconds,
+  );
+  transform.position[0] += dx;
+  transform.position[2] += dz;
+  const yaw = facingYawFromMove(dx, dz);
+  if (yaw !== null) transform.rotation[1] = yaw;
   playCollisionAudioOnce(context);
 };
 

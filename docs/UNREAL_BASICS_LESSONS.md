@@ -98,7 +98,7 @@ tutkalı shell'lerde ince kalır.
 
 | # | Madde | Bağımlılık | İlgili § | Durum |
 |---|-------|-----------|----------|-------|
-| G1 | Oyuncu hareket çekirdeği (normalize + yön) | — | §3 | `[ ]` |
+| G1 | Oyuncu hareket çekirdeği (normalize + yön) | — | §3 | `[x]` |
 | G2 | Yerçekimi, zemin & zıplama | G1 | §3, §4 | `[ ]` |
 | G3 | Çarpışma yanıtı (duvardan geçmeyi durdur) | G1 | §3 | `[ ]` |
 | G4 | 3. şahıs takip kamerası + kameraya-göreli hareket | G1 | §5 | `[ ]` |
@@ -109,7 +109,7 @@ tutkalı shell'lerde ince kalır.
 G1 ile başla: matematiği saf ve headless-test edilebilir, projenin
 çıkar-ve-test ritmine uyar.
 
-### G1 — Oyuncu hareket çekirdeği  `[ ]`
+### G1 — Oyuncu hareket çekirdeği  `[x]`
 
 **Problem.** `input-move` dünya-eksen pozisyon delta'sını doğrudan yazıyor:
 diagonal ~1.41× fazla hızlı (normalize yok), karakter yöne dönmüyor, hız
@@ -264,6 +264,20 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-16* — **G1 bitti (oyuncu hareket çekirdeği).** Yeni saf helper
+  `src/game/playerMovement.ts`: `planarMoveStep({forward,back,left,right}, speed,
+  dt) -> {dx,dz}` (raw yön normalize edilip `speed*dt` ile ölçeklenir → diagonal
+  artık düz hızla eşit; karşıt tuşlar iptal; dt/speed ≤ 0 → sıfır) ve
+  `facingYawFromMove(dx,dz) -> yawDeg|null` (`atan2(-dx,-dz)` derece; hareketsizken
+  null → yön korunur). `input-move` davranışı (`src/game/behaviors.ts`) bu
+  helper'larla yeniden yazıldı: dört `move-*` action'ı okur, `dx/dz`'yi
+  `position`'a, yaw'ı `rotation[1]`'e yazar; `playCollisionAudioOnce` korundu.
+  Başka davranış değişmedi. Headless testler eklendi (tools/engine-tests.ts:
+  59 → 65 check) — tek-eksen=speed*dt, diagonal-normalize, iptal/sıfır, kardinal
+  yaw, idle-null hold, ve gerçek `input-move` entegrasyonu (diagonal+facing+idle
+  hold). `npm run build:verify` yeşil (build + 65 check + strict dist scan).
+  **Karar:** kamera-göreli yön G4'e bırakıldı (yön şimdilik dünya-eksen); G2
+  bunun üstüne yerçekimi/zıplama ekler. Sıradaki: önerilen sıraya göre **G4**.
 - *2026-06-16* — **Yol haritası birleştirildi.** Cleanup sonrası
   Gameplay/Runtime track'ine geçildi. Ayrı `docs/ROADMAP.md` taslağı bu dokümana
   katıldı (tek kaynak, `UNREAL_BASICS_LESSONS.md`); §1–§6 mimari dersleri
