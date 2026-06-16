@@ -114,6 +114,44 @@ body.editor-mode #debug-stats {
   text-align: left;
 }
 
+.show-menu {
+  position: relative;
+}
+
+.show-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  min-width: 180px;
+  display: none;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(19, 22, 25, 0.98);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.show-menu:hover .show-popover,
+.show-menu:focus-within .show-popover {
+  display: grid;
+  gap: 4px;
+}
+
+.show-popover label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  color: #cdd5d9;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.show-popover input[type="checkbox"] {
+  cursor: pointer;
+}
+
 .editor-snaps {
   justify-content: flex-start;
   min-width: 0;

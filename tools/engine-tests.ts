@@ -103,6 +103,7 @@ import {
 } from "./saveValidator";
 import type { LayoutCharacter, LayoutLightActor, RoomLayout } from "../engine/scene/layout";
 import { colliderBoxFromBounds } from "../engine/render-three/transforms";
+import { collisionWireboxes } from "../engine/render-three/collisionView";
 import type { LightObjectRecord } from "../engine/render-three/lights";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
@@ -380,6 +381,54 @@ check("colliderBoxFromBounds reorients and offsets from rotation + off-origin bo
   assert.ok(Math.abs(box.center[0]) < 1e-9);
   assert.ok(Math.abs(box.center[1] - 1) < 1e-9);
   assert.ok(Math.abs(box.center[2]) < 1e-9);
+});
+
+// The editor "Show > Collision" overlay derives one world box per collidable
+// placement/character: `collision: false` opts out, the sensor flag carries
+// through, and each box is the model's bounds under its placement transform.
+check("collisionWireboxes: one box per collider, skips collision:false, flags sensors", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "collision-overlay-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "wall",
+        placements: [
+          { position: [0, 0, 0], scale: [2, 1, 1] },
+          { position: [5, 0, 0], collision: false }, // opted out -> no box
+        ],
+      },
+      { assetId: "zone", placements: [{ position: [0, 0, -3], sensor: true }] },
+    ],
+    characters: [{ assetId: "hero", position: [1, 0, 0] }],
+    lights: [],
+  };
+  const unit = () => new Box3(new Vector3(-0.5, -0.5, -0.5), new Vector3(0.5, 0.5, 0.5));
+  const localBounds = new Map([
+    ["wall", unit()],
+    ["zone", unit()],
+    ["hero", unit()],
+  ]);
+
+  const boxes = collisionWireboxes(layout, localBounds);
+  assert.equal(boxes.length, 3); // wall[0] + zone + hero; wall[1] opted out
+
+  // wall[0]: unit bounds scaled x2 on X about origin -> x span [-1,1].
+  const wall = boxes[0]!;
+  assert.equal(wall.sensor, false);
+  assert.deepEqual(wall.box.min.toArray(), [-1, -0.5, -0.5]);
+  assert.deepEqual(wall.box.max.toArray(), [1, 0.5, 0.5]);
+
+  // zone is a sensor centered at z=-3.
+  const zone = boxes[1]!;
+  assert.equal(zone.sensor, true);
+  assert.deepEqual(zone.box.min.toArray(), [-0.5, -0.5, -3.5]);
+
+  // hero (character) is collidable by default, centered at x=1.
+  const hero = boxes[2]!;
+  assert.equal(hero.sensor, false);
+  assert.deepEqual(hero.box.min.toArray(), [0.5, -0.5, -0.5]);
 });
 
 check("scene runtime builds entities in instance -> character -> light order", () => {

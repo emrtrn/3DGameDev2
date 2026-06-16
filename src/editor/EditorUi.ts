@@ -160,6 +160,16 @@ export class EditorUi {
               <button type="button" data-add-actor="spot">Spot Light</button>
             </div>
           </div>
+          <div class="show-menu">
+            <button type="button" data-show-button title="Show flags">Show</button>
+            <div class="show-popover" data-show-popover>
+              <div class="add-actor-section-title">Show Flags</div>
+              <label>
+                <input type="checkbox" data-show-flag="collision" />
+                Collision
+              </label>
+            </div>
+          </div>
           <button type="button" data-action="undo" title="Undo">Undo</button>
           <button type="button" data-action="redo" title="Redo">Redo</button>
           <button type="button" data-action="delete">Delete</button>
@@ -327,6 +337,15 @@ export class EditorUi {
     this.root.querySelector('[data-action="play"]')?.addEventListener("click", () => {
       void this.playTest();
     });
+    const collisionToggle = this.root.querySelector<HTMLInputElement>(
+      '[data-show-flag="collision"]',
+    );
+    if (collisionToggle) {
+      collisionToggle.checked = this.app.getShowCollision();
+      collisionToggle.addEventListener("change", () => {
+        this.app.setShowCollision(collisionToggle.checked);
+      });
+    }
     this.root.querySelector('[data-action="save"]')?.addEventListener("click", () => {
       void this.save();
     });

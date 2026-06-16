@@ -42,6 +42,7 @@ import {
   colliderBoxFromBounds,
   composePlacementMatrix,
 } from "@engine/render-three/transforms";
+import { collisionWireboxes } from "@engine/render-three/collisionView";
 import {
   collectMaterialStats,
   convertUnlitModelMaterialsToLit,
@@ -310,6 +311,9 @@ export class SceneApp {
     this.editorSceneController.selection = value;
   }
   private readonly selectionBoxes: Box3Helper[] = [];
+  /** "Show > Collision" overlay: wireframe boxes of every collider, off by default. */
+  private readonly collisionBoxes: Box3Helper[] = [];
+  private showCollision = false;
   private readonly gizmoGroup = new Group();
   private readonly gizmoPickables: Object3D[] = [];
   /** Owns active/hovered gizmo handle state (editor-only interaction state). */
@@ -2158,6 +2162,9 @@ export class SceneApp {
   private updateSelectionBox(): void {
     this.removeSelectionBox();
     this.updateLightGizmoVisibility();
+    // Collision overlay refreshes with the same cadence as selection boxes, so it
+    // tracks live transform edits (drag/cascade all route through here).
+    this.updateCollisionBoxes();
     if (!this.layout) return;
 
     for (const selection of this.getSelectedSelections()) {
@@ -2169,6 +2176,47 @@ export class SceneApp {
       this.selectionBoxes.push(helper);
       this.scene.add(helper);
     }
+  }
+
+  /** Whether the "Show > Collision" overlay is on. */
+  getShowCollision(): boolean {
+    return this.showCollision;
+  }
+
+  /** Toggles the "Show > Collision" overlay and rebuilds it immediately. */
+  setShowCollision(visible: boolean): void {
+    if (this.showCollision === visible) return;
+    this.showCollision = visible;
+    this.updateCollisionBoxes();
+  }
+
+  /**
+   * Rebuilds the collision overlay from the current layout + model bounds. Solid
+   * colliders draw green, sensors amber; both match the collider physics derives
+   * (see `collisionWireboxes`). A no-op (after clearing) while the overlay is off.
+   */
+  private updateCollisionBoxes(): void {
+    this.removeCollisionBoxes();
+    if (!this.showCollision || !this.layout) return;
+    for (const { box, sensor } of collisionWireboxes(this.layout, this.localBounds)) {
+      if (box.isEmpty()) continue;
+      const helper = new Box3Helper(box, sensor ? 0xffb454 : 0x4cd07d);
+      helper.name = "editor-collision-box";
+      this.collisionBoxes.push(helper);
+      this.scene.add(helper);
+    }
+  }
+
+  private removeCollisionBoxes(): void {
+    for (const collisionBox of this.collisionBoxes) {
+      this.scene.remove(collisionBox);
+      collisionBox.geometry.dispose();
+      const materials = Array.isArray(collisionBox.material)
+        ? collisionBox.material
+        : [collisionBox.material];
+      for (const material of materials) material.dispose();
+    }
+    this.collisionBoxes.length = 0;
   }
 
   /** Shows a light's wireframe reach only while it is selected. */
