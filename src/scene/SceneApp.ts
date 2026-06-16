@@ -428,6 +428,13 @@ export class SceneApp {
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
     this.engineApp.registerSubsystem(this.audioSubsystem);
 
+    // The editor viewport is an authoring surface, not a play surface: keep the
+    // scene static in edit mode so gameplay behaviors (WASD movement, gravity,
+    // goal/chime triggers) do not run. The runtime route (RuntimeSceneApp) and a
+    // future in-editor Play toggle re-enable simulation. Subsystem still ticks
+    // for lifecycle; only its per-frame behavior mutation is suppressed.
+    if (this.editorEnabled) this.behaviorSubsystem.setEnabled(false);
+
     // Observer-only keyboard source: records raw codes into the action map in
     // both modes without consuming events, so editor shortcuts/camera nav are
     // untouched.
