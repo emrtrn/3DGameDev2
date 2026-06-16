@@ -51,7 +51,13 @@ export interface BehaviorComponent {
 
 export interface ColliderComponent {
   shape: ColliderShape;
+  /** World-axis-aligned full size (rotation + scale already baked in). */
   size: Vec3;
+  /**
+   * Offset of the collider center from the entity's transform position, in world
+   * space (rotation + scale baked in). Absent means centered on the position.
+   */
+  center?: Vec3;
   isStatic: boolean;
   isSensor: boolean;
 }
@@ -126,12 +132,15 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
   const size = readVec3(data.size);
   if (!size) return undefined;
   if (typeof data.isStatic !== "boolean" || typeof data.isSensor !== "boolean") return undefined;
-  return {
+  const center = readVec3(data.center);
+  const component: ColliderComponent = {
     shape: data.shape as ColliderShape,
     size,
     isStatic: data.isStatic,
     isSensor: data.isSensor,
   };
+  if (center) component.center = center;
+  return component;
 }
 
 /** Reads a typed audio cue from an entity's serializable component data. */

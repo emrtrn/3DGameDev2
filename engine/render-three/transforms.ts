@@ -1,4 +1,4 @@
-import { Euler, Matrix4, Object3D, Quaternion, Vector3 } from "three";
+import { Box3, Euler, Matrix4, Object3D, Quaternion, Vector3 } from "three";
 
 import type { LayoutCharacter, LayoutPlacement, Vec3 } from "@engine/scene/layout";
 import { degreesToRadians, readRotation, readScale } from "@engine/scene/transform";
@@ -31,4 +31,41 @@ export function eulerDegrees(rotation: Vec3): Euler {
 /** Applies a degrees rotation vector to an Object3D's Euler (XYZ order). */
 export function applyEulerDegrees(object: Object3D, rotation: Vec3): void {
   object.rotation.copy(eulerDegrees(rotation));
+}
+
+/** A world-axis-aligned collider footprint: full `size` plus a `center` offset
+ *  from the entity's transform position (both already incorporate the
+ *  placement's rotation and scale). */
+export interface ColliderBox {
+  size: Vec3;
+  center: Vec3;
+}
+
+/**
+ * Derives the world-axis-aligned box that encloses a model's local bounds once
+ * the placement's rotation and scale are applied, so a derived collider matches
+ * the rendered mesh instead of a unit cube. `center` is returned relative to the
+ * placement position (translation is excluded) so it stays valid as the entity
+ * moves. Rotation is baked from the authored transform; the box does not track
+ * runtime re-orientation.
+ */
+export function colliderBoxFromBounds(
+  localBounds: Box3,
+  placement: { position: Vec3; rotation?: Vec3; rotationYDeg?: number; scale?: number | Vec3 },
+): ColliderBox {
+  const world = localBounds
+    .clone()
+    .applyMatrix4(
+      composeTransformMatrix(placement.position, readRotation(placement), readScale(placement)),
+    );
+  const size = world.getSize(new Vector3());
+  const center = world.getCenter(new Vector3());
+  return {
+    size: [size.x, size.y, size.z],
+    center: [
+      center.x - placement.position[0],
+      center.y - placement.position[1],
+      center.z - placement.position[2],
+    ],
+  };
 }

@@ -39,6 +39,7 @@ import {
 import { loadRoomLayout } from "./roomLayout";
 import {
   applyEulerDegrees,
+  colliderBoxFromBounds,
   composePlacementMatrix,
 } from "@engine/render-three/transforms";
 import {
@@ -100,6 +101,7 @@ import type {
 import {
   lightEntity,
   roomLayoutToSceneDocument,
+  type ColliderTransformSource,
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 import type { TransformComponent } from "@engine/scene/components";
@@ -528,7 +530,20 @@ export class SceneApp {
    */
   getSceneDocument(): SceneDocument {
     if (!this.layout) throw new Error("Layout is not loaded yet.");
-    return roomLayoutToSceneDocument(this.layout);
+    return roomLayoutToSceneDocument(this.layout, {
+      colliderBox: (assetId, source) => this.colliderBoxFor(assetId, source),
+    });
+  }
+
+  /**
+   * World-aligned collider footprint for a placed asset, from its loaded model
+   * bounds, so derived colliders match the rendered mesh instead of a unit cube.
+   * Returns undefined when the model's bounds are not loaded (adapter falls back
+   * to a scaled unit box).
+   */
+  private colliderBoxFor(assetId: string, source: ColliderTransformSource) {
+    const bounds = this.localBounds.get(assetId);
+    return bounds ? colliderBoxFromBounds(bounds, source) : undefined;
   }
 
   getSceneObjects(): EditableSceneObject[] {

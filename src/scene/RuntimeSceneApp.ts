@@ -50,9 +50,13 @@ import {
 } from "./SceneRuntimeCore";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import { collectMaterialStats, convertUnlitModelMaterialsToLit } from "@engine/render-three/materials";
-import { applyEulerDegrees } from "@engine/render-three/transforms";
+import { applyEulerDegrees, colliderBoxFromBounds } from "@engine/render-three/transforms";
 import type { LayoutCharacter, LayoutLightActor, LayoutPlacement, RoomLayout } from "@engine/scene/layout";
-import { characterEntityId, roomLayoutToSceneDocument } from "@engine/scene/legacyRoomLayoutAdapter";
+import {
+  characterEntityId,
+  roomLayoutToSceneDocument,
+  type ColliderTransformSource,
+} from "@engine/scene/legacyRoomLayoutAdapter";
 import type { TransformComponent } from "@engine/scene/components";
 
 /**
@@ -230,11 +234,24 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     );
 
     await startSceneRuntime({
-      sceneDocument: roomLayoutToSceneDocument(this.layout),
+      sceneDocument: roomLayoutToSceneDocument(this.layout, {
+        colliderBox: (assetId, source) => this.colliderBoxFor(assetId, source),
+      }),
       physics: this.physicsSubsystem,
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
+  }
+
+  /**
+   * World-aligned collider footprint for a placed asset, from its loaded model
+   * bounds, so derived colliders match the rendered mesh instead of a unit cube.
+   * Returns undefined when bounds are unavailable (adapter falls back to a
+   * scaled unit box).
+   */
+  private colliderBoxFor(assetId: string, source: ColliderTransformSource) {
+    const bounds = this.localBounds.get(assetId);
+    return bounds ? colliderBoxFromBounds(bounds, source) : undefined;
   }
 
   private createInstancedModel(assetId: string, placements: LayoutPlacement[]): Group {

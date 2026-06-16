@@ -65,6 +65,30 @@ import {
   type SceneWorldSettings,
 } from "./sceneDocument";
 
+/** Transform-bearing source a collider-box resolver reads to size a collider. */
+export type ColliderTransformSource = {
+  position: Vec3;
+  rotation?: Vec3;
+  rotationYDeg?: number;
+  scale?: number | Vec3;
+};
+
+/**
+ * Resolves the world-aligned collider footprint (size + center offset) for a
+ * placed asset. Supplied by the render-capable host (it needs the loaded model
+ * bounds); returns undefined when bounds are unknown so the adapter falls back
+ * to a scaled unit box. Kept as a pure function type so this adapter stays
+ * Three.js-free.
+ */
+export type ColliderBoxResolver = (
+  assetId: string,
+  source: ColliderTransformSource,
+) => { size: Vec3; center: Vec3 } | undefined;
+
+export interface RoomLayoutAdapterOptions {
+  colliderBox?: ColliderBoxResolver;
+}
+
 /** Mirrors `editor/core/selection.ts#selectionId` for the instance kind. */
 export function instanceEntityId(assetId: string, placementIndex: number): string {
   return `instance:${encodeURIComponent(assetId)}:${placementIndex}`;
@@ -135,7 +159,10 @@ export function lightEntity(index: number, light: LayoutLightActor): Entity {
   );
 }
 
-export function roomLayoutToSceneDocument(layout: RoomLayout): SceneDocument {
+export function roomLayoutToSceneDocument(
+  layout: RoomLayout,
+  options: RoomLayoutAdapterOptions = {},
+): SceneDocument {
   const pending: PendingEntity[] = [];
   const nodeIdToEntityId = new Map<string, string>();
 
@@ -151,7 +178,7 @@ export function roomLayoutToSceneDocument(layout: RoomLayout): SceneDocument {
         entity: buildEntity(
           id,
           placement.name,
-          instanceComponents(instance.assetId, placement),
+          instanceComponents(instance.assetId, placement, options.colliderBox),
           flagTags(placement),
         ),
         legacyParentId: placement.parentId,
@@ -163,7 +190,12 @@ export function roomLayoutToSceneDocument(layout: RoomLayout): SceneDocument {
     const id = characterEntityId(index);
     registerNode(id, character.nodeId);
     pending.push({
-      entity: buildEntity(id, character.name, characterComponents(character), flagTags(character)),
+      entity: buildEntity(
+        id,
+        character.name,
+        characterComponents(character, options.colliderBox),
+        flagTags(character),
+      ),
       legacyParentId: character.parentId,
     });
   });
@@ -210,12 +242,16 @@ function buildEntity(
   return entity;
 }
 
-function instanceComponents(assetId: string, placement: LayoutPlacement): EntityComponentMap {
+function instanceComponents(
+  assetId: string,
+  placement: LayoutPlacement,
+  resolveBox?: ColliderBoxResolver,
+): EntityComponentMap {
   const components: EntityComponentMap = {
     [TRANSFORM_COMPONENT]: toData(transformComponent(placement)),
     [MESH_RENDERER_COMPONENT]: toData(meshRendererComponent(assetId, placement.castShadow)),
   };
-  const collider = colliderComponent(placement, true);
+  const collider = colliderComponent(assetId, placement, true, resolveBox);
   if (collider) components[COLLIDER_COMPONENT] = toData(collider);
   const metadata = metadataComponent(placement.metadata);
   if (metadata) components[METADATA_COMPONENT] = toData(metadata);
@@ -226,12 +262,15 @@ function instanceComponents(assetId: string, placement: LayoutPlacement): Entity
   return components;
 }
 
-function characterComponents(character: LayoutCharacter): EntityComponentMap {
+function characterComponents(
+  character: LayoutCharacter,
+  resolveBox?: ColliderBoxResolver,
+): EntityComponentMap {
   const components: EntityComponentMap = {
     [TRANSFORM_COMPONENT]: toData(transformComponent(character)),
     [MESH_RENDERER_COMPONENT]: toData(meshRendererComponent(character.assetId, character.castShadow)),
   };
-  const collider = colliderComponent(character, false);
+  const collider = colliderComponent(character.assetId, character, false, resolveBox);
   if (collider) components[COLLIDER_COMPONENT] = toData(collider);
   const metadata = metadataComponent(character.metadata);
   if (metadata) components[METADATA_COMPONENT] = toData(metadata);
@@ -294,16 +333,28 @@ function behaviorComponent(behavior: LayoutBehavior | undefined): BehaviorCompon
 }
 
 function colliderComponent(
-  source: { collision?: boolean; sensor?: boolean },
+  assetId: string,
+  source: ColliderTransformSource & { collision?: boolean; sensor?: boolean },
   isStatic: boolean,
+  resolveBox: ColliderBoxResolver | undefined,
 ): ColliderComponent | null {
   if (source.collision === false) return null;
-  return {
+  // World-aligned footprint from the model's bounds when the host can supply
+  // them; otherwise a scaled unit box (rotation/bounds unknown). Both bake the
+  // placement's scale into `size`, since the physics layer no longer rescales.
+  const box = resolveBox?.(assetId, source);
+  const component: ColliderComponent = {
     shape: "box",
-    size: [1, 1, 1],
+    size: box?.size ?? readScale(source),
     isStatic,
     isSensor: source.sensor === true,
   };
+  if (box && !isZeroVec3(box.center)) component.center = box.center;
+  return component;
+}
+
+function isZeroVec3(vec: Vec3): boolean {
+  return vec[0] === 0 && vec[1] === 0 && vec[2] === 0;
 }
 
 function audioComponent(audio: LayoutAudio | undefined): AudioComponent | null {

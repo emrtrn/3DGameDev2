@@ -102,6 +102,7 @@ import {
   validatePlacement,
 } from "./saveValidator";
 import type { LayoutCharacter, LayoutLightActor, RoomLayout } from "../engine/scene/layout";
+import { colliderBoxFromBounds } from "../engine/render-three/transforms";
 import type { LightObjectRecord } from "../engine/render-three/lights";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
@@ -350,6 +351,35 @@ check("scene runtime computes local model bounds keyed by asset id", () => {
 
   assert.deepEqual(bounds.get("box")?.min.toArray(), [-1, -1, -1]);
   assert.deepEqual(bounds.get("box")?.max.toArray(), [1, 1, 1]);
+});
+
+// colliderBoxFromBounds bakes the placement's scale into the world-aligned size;
+// for an origin-centered model the center offset stays zero.
+check("colliderBoxFromBounds bakes scale into a centered model's footprint", () => {
+  const box = colliderBoxFromBounds(
+    new Box3(new Vector3(-1, -1, -1), new Vector3(1, 1, 1)),
+    { position: [10, 0, 0], scale: [3, 1, 2] },
+  );
+  assert.deepEqual(box.size, [6, 2, 4]);
+  assert.deepEqual(box.center, [0, 0, 0]);
+});
+
+// Rotation reorients a non-square footprint (a long-X thin-Z wall becomes
+// long-Z after a 90 deg Y turn); an off-origin model yields a center offset
+// relative to its placement position.
+check("colliderBoxFromBounds reorients and offsets from rotation + off-origin bounds", () => {
+  const box = colliderBoxFromBounds(
+    new Box3(new Vector3(-1, 0, -0.25), new Vector3(1, 2, 0.25)),
+    { position: [5, 0, 0], rotationYDeg: 90 },
+  );
+  // Size axes X/Z swap under the 90 deg Y rotation (within float tolerance).
+  assert.ok(Math.abs(box.size[0] - 0.5) < 1e-9);
+  assert.ok(Math.abs(box.size[1] - 2) < 1e-9);
+  assert.ok(Math.abs(box.size[2] - 2) < 1e-9);
+  // The box spans y [0,2] about position y=0, so its center sits 1 unit up.
+  assert.ok(Math.abs(box.center[0]) < 1e-9);
+  assert.ok(Math.abs(box.center[1] - 1) < 1e-9);
+  assert.ok(Math.abs(box.center[2]) < 1e-9);
 });
 
 check("scene runtime builds entities in instance -> character -> light order", () => {
@@ -797,6 +827,45 @@ check("layout collision flags map to readable collider components", () => {
     characterDisabled ? readColliderComponent(characterDisabled) : undefined,
     undefined,
   );
+});
+
+// Without a bounds resolver the adapter bakes the placement scale into a unit
+// box (physics no longer rescales); a resolver supplies the world-aligned
+// size + center so derived colliders match the rendered mesh.
+check("adapter derives collider size from placement scale and a bounds resolver", () => {
+  const fixture: RoomLayout = {
+    schema: 1,
+    name: "collider-size-fixture",
+    loadGroups: [],
+    instances: [
+      { assetId: "crate", placements: [{ position: [0, 0, 0], scale: [2, 3, 4] }] },
+      { assetId: "wall", placements: [{ position: [0, 0, 0], scale: 1 }] },
+    ],
+    characters: [],
+    lights: [],
+  };
+
+  const defaulted = roomLayoutToSceneDocument(fixture).entities.find(
+    (entity) => entity.id === instanceEntityId("crate", 0),
+  );
+  assert.deepEqual(defaulted ? readColliderComponent(defaulted) : undefined, {
+    shape: "box",
+    size: [2, 3, 4], // scale baked, no resolver -> no center
+    isStatic: true,
+    isSensor: false,
+  });
+
+  const resolved = roomLayoutToSceneDocument(fixture, {
+    colliderBox: (assetId) =>
+      assetId === "wall" ? { size: [0.5, 2, 4], center: [0, 1, 0] } : undefined,
+  }).entities.find((entity) => entity.id === instanceEntityId("wall", 0));
+  assert.deepEqual(resolved ? readColliderComponent(resolved) : undefined, {
+    shape: "box",
+    size: [0.5, 2, 4],
+    center: [0, 1, 0],
+    isStatic: true,
+    isSensor: false,
+  });
 });
 
 check("layout audio maps to a readable audio component", () => {
@@ -2135,8 +2204,35 @@ check("physics subsystem exposes static blocker AABBs and collider half-extents"
   const blockers = physics.staticBlockerAabbs();
   assert.equal(blockers.length, 1); // wall only: the sensor and the non-static player are excluded
   assert.deepEqual(blockers[0], { min: [1.5, -0.5, -0.5], max: [2.5, 0.5, 0.5] });
-  assert.deepEqual(physics.colliderHalfExtents("player"), [1, 0.5, 0.5]); // size*scale/2
+  // Collider size is world-space (scale baked at scene-build), so half = size/2;
+  // the entity's transform.scale is no longer reapplied here.
+  assert.deepEqual(physics.colliderHalfExtents("player"), [0.5, 0.5, 0.5]);
   assert.equal(physics.colliderHalfExtents("missing"), null);
+});
+
+// A collider with a center offset places its AABB at position + center, so a
+// model whose geometry is not centered on its origin still aligns to the mesh.
+check("physics subsystem offsets a collider AABB by its center", () => {
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([
+    {
+      id: "wall",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [2, 4, 0.5],
+          center: [0, 2, 1],
+          isStatic: true,
+          isSensor: false,
+        },
+      },
+    },
+  ]);
+  assert.deepEqual(physics.staticBlockerAabbs()[0], {
+    min: [-1, 0, 0.75],
+    max: [1, 4, 1.25],
+  });
 });
 
 check("input-move behavior: the player cannot walk through a static wall", () => {

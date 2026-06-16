@@ -121,14 +121,18 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     return blockers;
   }
 
-  /** Half-extents (size*scale/2) of an entity's collider, or null if it has none. */
+  /**
+   * Half-extents of an entity's collider, or null if it has none. The collider
+   * `size` is already world-space (rotation + scale baked at scene-build), so
+   * this is just `size / 2`.
+   */
   colliderHalfExtents(entityId: EntityId): readonly [number, number, number] | null {
     const body = this.bodies.find((candidate) => candidate.id === entityId);
     if (!body) return null;
     return [
-      Math.abs(body.transform.scale[0] ?? 1) * (body.collider.size[0] ?? 0) / 2,
-      Math.abs(body.transform.scale[1] ?? 1) * (body.collider.size[1] ?? 0) / 2,
-      Math.abs(body.transform.scale[2] ?? 1) * (body.collider.size[2] ?? 0) / 2,
+      (body.collider.size[0] ?? 0) / 2,
+      (body.collider.size[1] ?? 0) / 2,
+      (body.collider.size[2] ?? 0) / 2,
     ];
   }
 
@@ -239,20 +243,23 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
 }
 
 function bodyAabb(body: PhysicsBody): Aabb {
-  const half = body.collider.size.map((size, axis) => {
-    const scale = Math.abs(body.transform.scale[axis] ?? 1);
-    return (size * scale) / 2;
-  });
+  // `size` and `center` are world-space (rotation + scale baked at scene-build),
+  // so the AABB is centered at position + center with half-extents size / 2.
+  const half = body.collider.size.map((size) => size / 2);
+  const center = body.collider.center ?? [0, 0, 0];
+  const point = body.transform.position.map(
+    (axis, index) => axis + (center[index] ?? 0),
+  );
   return {
     min: [
-      body.transform.position[0] - (half[0] ?? 0),
-      body.transform.position[1] - (half[1] ?? 0),
-      body.transform.position[2] - (half[2] ?? 0),
+      (point[0] ?? 0) - (half[0] ?? 0),
+      (point[1] ?? 0) - (half[1] ?? 0),
+      (point[2] ?? 0) - (half[2] ?? 0),
     ],
     max: [
-      body.transform.position[0] + (half[0] ?? 0),
-      body.transform.position[1] + (half[1] ?? 0),
-      body.transform.position[2] + (half[2] ?? 0),
+      (point[0] ?? 0) + (half[0] ?? 0),
+      (point[1] ?? 0) + (half[1] ?? 0),
+      (point[2] ?? 0) + (half[2] ?? 0),
     ],
   };
 }
@@ -277,23 +284,34 @@ function cloneTransform(transform: TransformComponent): TransformComponent {
 }
 
 function cloneCollider(collider: ColliderComponent): ColliderComponent {
-  return {
+  const clone: ColliderComponent = {
     shape: collider.shape,
     size: [...collider.size],
     isStatic: collider.isStatic,
     isSensor: collider.isSensor,
   };
+  if (collider.center) clone.center = [...collider.center];
+  return clone;
 }
 
 function colliderDescForBody(RAPIER: RapierModule, body: PhysicsBody) {
-  const size = body.collider.size.map((value, axis) => {
-    const scale = Math.abs(body.transform.scale[axis] ?? 1);
-    return value * scale;
-  });
-  if (body.collider.shape === "sphere") {
+  // `size` is world-space (scale already baked); the `center` offset is applied
+  // as the collider's translation relative to the body at the entity position.
+  const size = body.collider.size;
+  const center = body.collider.center ?? [0, 0, 0];
+  const desc = colliderShapeDesc(RAPIER, body.collider.shape, size);
+  return desc.setTranslation(center[0] ?? 0, center[1] ?? 0, center[2] ?? 0);
+}
+
+function colliderShapeDesc(
+  RAPIER: RapierModule,
+  shape: ColliderComponent["shape"],
+  size: readonly number[],
+) {
+  if (shape === "sphere") {
     return RAPIER.ColliderDesc.ball(Math.max(size[0] ?? 1, size[1] ?? 1, size[2] ?? 1) / 2);
   }
-  if (body.collider.shape === "capsule") {
+  if (shape === "capsule") {
     const radius = Math.max(size[0] ?? 1, size[2] ?? 1) / 2;
     const halfHeight = Math.max(0, ((size[1] ?? 1) / 2) - radius);
     return RAPIER.ColliderDesc.capsule(halfHeight, radius);
