@@ -374,6 +374,26 @@ npm run build:verify
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
 
+- *2026-06-16* - **Item 5 Piece 4 done - loadActiveProjectScene model-bounds + entity-build loops shared.**
+  On branch `refactor/scene-load-consolidation`, started the last Item 5 target
+  (the `loadActiveProjectScene` consolidation) with its two smallest safe cuts.
+  Extracted into `src/scene/SceneRuntimeCore.ts`: `computeModelLocalBounds`
+  (refresh world matrices + `Box3.setFromObject` per model, returns a fresh map)
+  and `buildSceneEntities` (the identical instances -> characters -> lights
+  iteration, taking shell-supplied handlers so the editor keeps its per-entity
+  policy). Both shells now assign `this.localBounds = computeModelLocalBounds(...)`
+  and drive placement via `buildSceneEntities`; the editor's interleaved
+  editor-only steps (snap settings, manifest/schema load, assetPlacements,
+  emit* notifications, getSceneDocument tail) are untouched and still ordered
+  exactly as before. Added 2 headless engine checks (56 -> 58): model bounds from
+  a BoxGeometry mesh, and the instance/character/light build order incl. the
+  missing-lights path. `npm run build:verify` green (build + 58 checks + strict
+  dist scan). `wc -l`: `SceneApp.ts` 2405 -> 2397, `RuntimeSceneApp.ts` 278 ->
+  273, `SceneRuntimeCore.ts` 297 -> 337. Remaining `loadActiveProjectScene`
+  duplication is the model-load prep (loadGroups + convertUnlitModelMaterialsToLit)
+  and the shared init/start tail, both still inline; the editor-specific glue
+  (snap/manifest/schema/emit) is intentionally staying in `SceneApp`.
+
 - *2026-06-16* - **Item 5 Piece 3 done - shared model/character/light scene-build builders extracted.**
   On branch `refactor/scene-build-entity-builders`, moved the entity-builder
   bodies that `SceneApp` and `RuntimeSceneApp` duplicated near-verbatim into

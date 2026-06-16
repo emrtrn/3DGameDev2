@@ -295,3 +295,43 @@ export function isSceneSunLight(
     (!currentSun || actor.id === DEFAULT_SCENE_SUN_ID)
   );
 }
+
+/**
+ * Compute the local-space bounding box of every loaded model, keyed by asset id.
+ * Mirrors the bounds both shells build before placing instances; the world
+ * matrices are refreshed first so `setFromObject` sees the model's own geometry.
+ */
+export function computeModelLocalBounds(
+  models: ReadonlyMap<string, GLTF>,
+): Map<string, Box3> {
+  const localBounds = new Map<string, Box3>();
+  for (const [assetId, gltf] of models) {
+    gltf.scene.updateMatrixWorld(true);
+    localBounds.set(assetId, new Box3().setFromObject(gltf.scene));
+  }
+  return localBounds;
+}
+
+/**
+ * Drive the shared scene-build iteration: instances, then characters, then
+ * lights, in the exact order both shells use. The handlers stay in the shell so
+ * each can apply its own per-entity policy (editor selection refresh, etc.).
+ */
+export function buildSceneEntities(
+  layout: RoomLayout,
+  handlers: {
+    addInstance: (assetId: string, placements: LayoutPlacement[]) => void;
+    addCharacter: (assetId: string, character: LayoutCharacter) => void;
+    addLight: (light: LayoutLightActor) => void;
+  },
+): void {
+  for (const instance of layout.instances) {
+    handlers.addInstance(instance.assetId, instance.placements);
+  }
+  for (const character of layout.characters) {
+    handlers.addCharacter(character.assetId, character);
+  }
+  for (const light of layout.lights ?? []) {
+    handlers.addLight(light);
+  }
+}
