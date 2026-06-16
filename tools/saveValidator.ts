@@ -224,6 +224,12 @@ function validateWorldSettings(value: unknown): Record<string, unknown> | null {
     const intensity = validateOptionalNumber(input.ambientIntensity, "ambientIntensity", 0, 20);
     if (intensity !== undefined) worldSettings.ambientIntensity = intensity;
   }
+  if (input.gravity !== undefined) {
+    if (!isNumberTuple(input.gravity)) {
+      throw new Error("worldSettings.gravity must be a [x, y, z] number tuple");
+    }
+    worldSettings.gravity = input.gravity.map((axis) => Number(axis.toFixed(3)));
+  }
 
   return Object.keys(worldSettings).length > 0 ? worldSettings : null;
 }

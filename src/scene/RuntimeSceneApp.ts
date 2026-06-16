@@ -32,6 +32,7 @@ import {
   createSceneCharacterMixer,
   createSceneRuntimeCore,
   DEFAULT_SCENE_BACKGROUND_COLOR,
+  DEFAULT_SCENE_GRAVITY,
   ensureDefaultSceneLights,
   fitDirectionalShadowToBounds,
   isSceneSunLight,
@@ -104,6 +105,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private cameraViewTouched = false;
   private playerObject: Object3D | null = null;
   private followPose: FollowCameraPose | null = null;
+  private gravityY = DEFAULT_SCENE_GRAVITY[1];
 
   onFrame: ((deltaMs: number) => void) | null = null;
 
@@ -130,7 +132,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.engineApp.registerSubsystem(this.inputSubsystem);
     this.engineApp.registerSubsystem(this.physicsSubsystem);
     this.behaviorSubsystem = new BehaviorSubsystem(
-      createBehaviorRegistry(),
+      createBehaviorRegistry({ getGravityY: () => this.gravityY }),
       this.inputActions,
       this.syncEntityTransform,
       this.physicsSubsystem,
@@ -175,6 +177,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.activeProject = await loadActiveProject();
     this.assetLoader = new AssetLoader(this.activeProject.manifest);
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
+    this.gravityY = resolveSceneWorldSettings(this.layout).gravity[1];
     this.ensureDefaultLights();
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
     const convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);

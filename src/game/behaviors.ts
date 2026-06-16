@@ -11,6 +11,16 @@ import type {
   BehaviorUpdate,
 } from "@engine/behavior/behaviorSubsystem";
 import { facingYawFromMove, planarMoveStep } from "./playerMovement";
+import { groundedAt, stepVerticalMotion, type VerticalMotionState } from "./verticalMotion";
+
+/** Gravity used when the host does not inject one (e.g. headless tests). */
+const DEFAULT_GRAVITY_Y = -9.81;
+
+/** Host-provided dependencies for the runtime behaviors. */
+export interface BehaviorRegistryOptions {
+  /** World gravity on Y (units/s^2; negative = down). Defaults to -9.81. */
+  getGravityY?: () => number;
+}
 
 function numberParam(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -44,29 +54,62 @@ function playCollisionAudioOnce(
   });
 }
 
-const inputMove: BehaviorUpdate = (context) => {
-  const { engine, actions, params, transform } = context;
-  const { dx, dz } = planarMoveStep(
-    {
-      forward: actions.held("move-forward"),
-      back: actions.held("move-back"),
-      left: actions.held("move-left"),
-      right: actions.held("move-right"),
-    },
-    numberParam(params.speed, 3),
-    engine.deltaSeconds,
-  );
-  transform.position[0] += dx;
-  transform.position[2] += dz;
-  const yaw = facingYawFromMove(dx, dz);
-  if (yaw !== null) transform.rotation[1] = yaw;
-  playCollisionAudioOnce(context);
-};
-
 const collisionChime: BehaviorUpdate = playCollisionAudioOnce;
 
-/** Builds the runtime behavior registry used by the BehaviorSubsystem. */
-export function createBehaviorRegistry(): BehaviorRegistry {
+/** Per-entity vertical motion state plus the floor height captured on entry. */
+interface PlayerVertical {
+  state: VerticalMotionState;
+  floorY: number;
+}
+
+/**
+ * Builds the runtime behavior registry used by the BehaviorSubsystem. Vertical
+ * (gravity/jump) state is scoped to this registry instance, so it starts fresh
+ * on each scene load and never leaks between scenes.
+ */
+export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): BehaviorRegistry {
+  const getGravityY = options.getGravityY ?? (() => DEFAULT_GRAVITY_Y);
+  const vertical = new Map<string, PlayerVertical>();
+
+  const inputMove: BehaviorUpdate = (context) => {
+    const { engine, actions, params, transform } = context;
+
+    // Planar movement + facing (G1).
+    const { dx, dz } = planarMoveStep(
+      {
+        forward: actions.held("move-forward"),
+        back: actions.held("move-back"),
+        left: actions.held("move-left"),
+        right: actions.held("move-right"),
+      },
+      numberParam(params.speed, 3),
+      engine.deltaSeconds,
+    );
+    transform.position[0] += dx;
+    transform.position[2] += dz;
+    const yaw = facingYawFromMove(dx, dz);
+    if (yaw !== null) transform.rotation[1] = yaw;
+
+    // Gravity + jump (G2). The first tick captures the authored height as the
+    // floor the entity rests on and jumps from.
+    let runtime = vertical.get(context.entityId);
+    if (!runtime) {
+      const floorY = transform.position[1];
+      runtime = { state: groundedAt(floorY), floorY };
+      vertical.set(context.entityId, runtime);
+    }
+    runtime.state = stepVerticalMotion(runtime.state, {
+      gravityY: getGravityY(),
+      jumpSpeed: numberParam(params.jumpSpeed, 4),
+      floorY: runtime.floorY,
+      dt: engine.deltaSeconds,
+      jump: actions.pressed("jump"),
+    });
+    transform.position[1] = runtime.state.y;
+
+    playCollisionAudioOnce(context);
+  };
+
   const behaviors = new Map<string, BehaviorUpdate>([
     ["spin", spin],
     ["input-move", inputMove],
