@@ -2281,4 +2281,104 @@ check("input-move behavior: reports the movement snapshot and sprint raises plan
   assert.ok(Math.abs(run.planarSpeed - 4) <= 1e-9, `run speed ${run.planarSpeed}`);
 });
 
+// G6 authored playable scene: a `sensor` placement flag yields a non-blocking
+// trigger collider, and the `goal-reached` behavior fires once on the first
+// contact (only the player can touch a static sensor), playing its cue and
+// signalling the shell. The playground layout is the authored default scene.
+check("layout sensor flag maps to a non-blocking sensor collider", () => {
+  const fixture: RoomLayout = {
+    schema: 1,
+    name: "sensor-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "zone",
+        placements: [{ position: [0, 0, 0], sensor: true }, { position: [1, 0, 0] }],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+  const doc = roomLayoutToSceneDocument(fixture);
+  const sensor = doc.entities.find((e) => e.id === instanceEntityId("zone", 0));
+  const solid = doc.entities.find((e) => e.id === instanceEntityId("zone", 1));
+  assert.deepEqual(sensor ? readColliderComponent(sensor) : undefined, {
+    shape: "box",
+    size: [1, 1, 1],
+    isStatic: true,
+    isSensor: true,
+  });
+  assert.equal(solid ? readColliderComponent(solid)?.isSensor : undefined, false);
+});
+
+check("save validator allowlist keeps a placement sensor flag", () => {
+  const layout = validateLayout({
+    schema: 1,
+    name: "sensor",
+    loadGroups: [],
+    instances: [{ assetId: "zone", placements: [{ position: [0, 0, 0], sensor: true }] }],
+    characters: [],
+  }) as RoomLayout;
+  assert.equal(layout.instances[0]?.placements[0]?.sensor, true);
+});
+
+check("goal-reached behavior: fires once on contact, plays its cue, signals the shell", () => {
+  const reached: string[] = [];
+  const registry = createBehaviorRegistry({ onGoalReached: (id) => reached.push(id) });
+  const physics = new PhysicsSubsystem();
+  const audio = new AudioSubsystem();
+  const goal: Entity = {
+    id: "goal:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      Behavior: { scriptId: "goal-reached" },
+      Audio: { clipId: "collision-chime", volume: 0.6, loop: false, spatial: false },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [5, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([goal, player]);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics, audio);
+  behavior.setEntities([goal, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+  app.registerSubsystem(audio);
+
+  // The sensor goal never blocks movement, and far away there is no trigger.
+  assert.equal(physics.staticBlockerAabbs().length, 0);
+  app.update(0.016);
+  assert.deepEqual(reached, []);
+  assert.deepEqual(audio.playedRequests(), []);
+
+  // Walk the player onto the goal and tick twice: it fires exactly once.
+  physics.setEntityTransform("player:0", {
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  app.update(0.016);
+  app.update(0.016);
+  assert.deepEqual(reached, ["goal:0"]);
+  assert.deepEqual(audio.playedRequests(), [
+    { clipId: "collision-chime", volume: 0.6, loop: false, spatial: false },
+  ]);
+});
+
+check("playground layout validates and carries the sensor goal trigger", () => {
+  const raw = JSON.parse(readFileSync("public/layouts/playground.json", "utf8"));
+  const playground = validateLayout(raw) as RoomLayout;
+  assert.deepEqual(validateLayout(playground), playground); // idempotent
+  const goal = playground.instances.find((i) => i.assetId === "potted-plant")?.placements[0];
+  assert.equal(goal?.sensor, true);
+  assert.equal(goal?.behavior?.script, "goal-reached");
+  assert.equal(playground.characters[0]?.behavior?.script, "input-move");
+});
+
 console.log(`[engine-tests] ${checks} checks passed`);

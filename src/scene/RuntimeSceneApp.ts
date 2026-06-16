@@ -151,6 +151,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         reportLocomotion: (entityId, report) => {
           if (entityId === this.playerEntityId) this.playerLocomotion = report;
         },
+        onGoalReached: (entityId) => {
+          console.info("[runtime] goal reached", entityId);
+        },
       }),
       this.inputActions,
       this.syncEntityTransform,
