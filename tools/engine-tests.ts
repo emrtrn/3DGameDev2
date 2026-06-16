@@ -1032,6 +1032,46 @@ check("behavior subsystem ticks behaviors and mutates transforms deterministical
   assert.equal(synced.filter((s) => s.id === "character:1").at(-1)?.x, 1);
 });
 
+// A disabled behavior subsystem holds the scene static: no behavior runs and no
+// transform is synced, even with entities and held input. This is how the editor
+// keeps WASD from driving the character in edit mode; re-enabling resumes ticking.
+check("behavior subsystem: setEnabled(false) suppresses ticking until re-enabled", () => {
+  const synced: string[] = [];
+  const registry: BehaviorRegistry = {
+    get: (scriptId) =>
+      scriptId === "input-move"
+        ? ({ engine, actions, transform }) => {
+            if (actions.held("move-right")) transform.position[0] += 2 * engine.deltaSeconds;
+          }
+        : undefined,
+  };
+  const actions = new ActionMap({ KeyD: "move-right" });
+  const subsystem = new BehaviorSubsystem(registry, actions, (_id, transform) => {
+    synced.push(String(transform.position[0]));
+  });
+  subsystem.setEntities([
+    {
+      id: "character:0",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Behavior: { scriptId: "input-move" },
+      },
+    },
+  ]);
+  actions.handleDown("KeyD");
+  const app = new EngineApp();
+  app.registerSubsystem(new InputSubsystem(actions));
+  app.registerSubsystem(subsystem);
+
+  subsystem.setEnabled(false);
+  app.update(0.5);
+  assert.deepEqual(synced, []);
+
+  subsystem.setEnabled(true);
+  app.update(0.5);
+  assert.deepEqual(synced, ["1"]);
+});
+
 check("physics subsystem reports deterministic placeholder contacts", () => {
   const physics = new PhysicsSubsystem();
   physics.setEntities([

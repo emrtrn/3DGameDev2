@@ -74,6 +74,7 @@ interface BehaviorInstance {
 export class BehaviorSubsystem implements Subsystem {
   readonly id = BEHAVIOR_SUBSYSTEM_ID;
   private instances: BehaviorInstance[] = [];
+  private enabled = true;
 
   constructor(
     private readonly registry: BehaviorRegistry,
@@ -114,7 +115,16 @@ export class BehaviorSubsystem implements Subsystem {
     this.instances = [];
   }
 
+  /**
+   * Enables or disables behavior simulation. When disabled, update() is a no-op
+   * so edit-mode hosts can keep authored scenes static until Play mode runs.
+   */
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
+
   update(engine: EngineUpdateContext): void {
+    if (!this.enabled) return;
     for (const instance of this.instances) {
       const context: BehaviorContext = {
         entityId: instance.id,

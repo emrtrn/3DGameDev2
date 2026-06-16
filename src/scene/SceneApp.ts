@@ -435,6 +435,10 @@ export class SceneApp {
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
     this.engineApp.registerSubsystem(this.audioSubsystem);
 
+    // The editor viewport is an authoring surface, not Play mode: keep gameplay
+    // behaviors from mutating placed characters while editing.
+    if (this.editorEnabled) this.behaviorSubsystem.setEnabled(false);
+
     // Observer-only keyboard source: records raw codes into the action map in
     // both modes without consuming events, so editor shortcuts/camera nav are
     // untouched.
