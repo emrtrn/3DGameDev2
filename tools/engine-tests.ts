@@ -1831,11 +1831,12 @@ check("planarMoveStep: opposing keys cancel and idle/zero input yields no delta"
 });
 
 check("facingYawFromMove: the character faces its cardinal movement direction", () => {
-  yawApproxEqual(facingYawFromMove(0, -1) ?? NaN, 0); // forward (-z)
-  yawApproxEqual(facingYawFromMove(0, 1) ?? NaN, 180); // back (+z)
-  yawApproxEqual(facingYawFromMove(1, 0) ?? NaN, -90); // right (+x)
-  yawApproxEqual(facingYawFromMove(-1, 0) ?? NaN, 90); // left (-x)
-  yawApproxEqual(facingYawFromMove(1, -1) ?? NaN, -45); // forward-right
+  // Mesh is +z-forward, so the yaw turns local +z to the movement direction.
+  yawApproxEqual(facingYawFromMove(0, -1) ?? NaN, 180); // forward (-z)
+  yawApproxEqual(facingYawFromMove(0, 1) ?? NaN, 0); // back (+z)
+  yawApproxEqual(facingYawFromMove(1, 0) ?? NaN, 90); // right (+x)
+  yawApproxEqual(facingYawFromMove(-1, 0) ?? NaN, -90); // left (-x)
+  yawApproxEqual(facingYawFromMove(1, -1) ?? NaN, 135); // forward-right
 });
 
 check("facingYawFromMove: no movement returns null so facing is held", () => {
@@ -1872,7 +1873,7 @@ check("input-move behavior: normalizes diagonal travel, faces it, holds facing i
   const moved = synced ?? assert.fail("transform synced");
   assert.ok(Math.abs(Math.hypot(moved.position[0], moved.position[2]) - 1) <= 1e-12);
   assert.ok(moved.position[0] > 0 && moved.position[2] < 0);
-  yawApproxEqual(moved.rotation[1], -45);
+  yawApproxEqual(moved.rotation[1], 135); // +z-forward mesh faces the +x/-z move
 
   // Tick 2: no input -> position unchanged and facing held (not reset to 0).
   const xBefore = moved.position[0];
@@ -1883,7 +1884,7 @@ check("input-move behavior: normalizes diagonal travel, faces it, holds facing i
   subsystem.update({ deltaSeconds: 0.5, elapsedSeconds: 1, frame: 2 });
   assert.equal(moved.position[0], xBefore);
   assert.equal(moved.position[2], zBefore);
-  yawApproxEqual(moved.rotation[1], -45);
+  yawApproxEqual(moved.rotation[1], 135);
 });
 
 // G4 follow camera (src/game/followCamera.ts): a fixed-orientation third-person

@@ -264,6 +264,12 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-16* — **Fix (G1 yön): karakter yüzü tersti.** Manuel testte hareket
+  yönleri doğruydu ama karakter hareketin tam tersine bakıyordu (180°). Sebep:
+  demo karakter mesh'i yerel **`+z`** yönüne bakacak şekilde modellenmiş (Three
+  varsayılanı `-z` değil). `facingYawFromMove` `atan2(-dx,-dz)` → `atan2(dx,dz)`
+  olarak düzeltildi (kardinaller: forward→180°, back→0°, right→90°, left→−90°).
+  Sadece bu fonksiyon + ilgili testler değişti; `build:verify` yeşil (69 check).
 - *2026-06-16* — **G4 bitti (3. şahıs takip kamerası).** Yeni saf helper
   `src/game/followCamera.ts`: `desiredFollowPose(playerPos, {offset, lookHeight})`,
   `smoothingFactor(rate, dt)` (framerate-bağımsız `1-e^(-rate*dt)`, dejenere

@@ -51,13 +51,13 @@ export function planarMoveStep(
  * Yaw (in degrees) that faces the movement direction `(dx, dz)`, or `null` when
  * there is no movement so the caller holds the current facing.
  *
- * Three.js is right-handed Y-up with local forward `-z`; a Y rotation of theta
- * sends local forward to world `(-sin theta, 0, -cos theta)`. Aligning that with
- * `(dx, dz)` gives `theta = atan2(-dx, -dz)`. atan2 is invariant to positive
- * scaling, so the scaled delta works directly. Cardinal checks: forward -> 0deg,
- * back -> 180deg, right -> -90deg, left -> 90deg.
+ * The demo character mesh is authored facing local `+z` (not Three.js' default
+ * `-z`). A Y rotation of theta sends local `+z` to world `(sin theta, 0, cos
+ * theta)`, so aligning that with `(dx, dz)` gives `theta = atan2(dx, dz)`. atan2
+ * is invariant to positive scaling, so the scaled delta works directly. Cardinal
+ * checks: forward -> 180deg, back -> 0deg, right -> 90deg, left -> -90deg.
  */
 export function facingYawFromMove(dx: number, dz: number): number | null {
   if (dx === 0 && dz === 0) return null;
-  return Math.atan2(-dx, -dz) * RAD_TO_DEG;
+  return Math.atan2(dx, dz) * RAD_TO_DEG;
 }
