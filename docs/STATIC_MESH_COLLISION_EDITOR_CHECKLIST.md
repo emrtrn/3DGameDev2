@@ -253,7 +253,7 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [x] Birden fazla primitif ekleyip her birini ayrı düzenleme (gizmo seçili olana bağlanır)
 - [x] **Alt + Move sürükle = kopyala** (Unreal tarzı; orijinal yerinde kalır, kopya taşınır)
 - [ ] "Show Simple/Complex Collision" görünürlük toggle'ı
-- [ ] Sahne viewport'unda da collider görselleştirme tutarlılığı (mevcut `getShowCollision` ile uyum)
+- [x] Sahne viewport'unda authored collision görselleştirme: "Show > Collision" overlay'i sidecar primitiflerini çizer (her primitif için yerleşim transform'u ile kompoze; varsa tek-kutu yerine geçer)
 
 ### Faz 5 — SM Editor Details Paneli (Collision başlığı)
 
@@ -280,8 +280,8 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 ### Faz 7 — Runtime Bağlama (Rapier)
 
 - [x] Placement `collisionPreset` → runtime collider eşlemesi (`legacyRoomLayoutAdapter`): `none`=collider yok, `query`=sensor, `physics/queryAndPhysics`=solid
-- [ ] Asset-düzeyi collision primitiflerini runtime'a yükle (async sidecar plumbing — sonraki adım)
-- [ ] Çok-primitifli collider derleme (şu an tek box)
+- [x] Asset sidecar'larını async yükle (SceneApp `refreshCollisionDefs`) — şimdilik **overlay görselleştirme** için (Show>Collision)
+- [ ] Asset primitiflerini runtime **fizik** collider'ına derle (Rapier, çok-primitifli — şu an fizik hâlâ tek box)
 - [ ] Kanal yanıtları → Rapier **collision groups** (membership/filter bitmask)
 - [ ] Convex hull (Rapier `convexHull`) ve (ertele) trimesh complex collision
 - [ ] Phys material → collider friction/restitution/density (sabit 0.8/0 yerine)
