@@ -80,6 +80,9 @@ interface BrowserAssetItem {
   editable?: EditableAsset;
 }
 
+const CONTENT_FILTER_ALL = "__all__";
+type ContentTypeFilter = BrowserAssetItem["type"] | typeof CONTENT_FILTER_ALL;
+
 export class EditorUi {
   private root: HTMLDivElement;
   private contentList: HTMLDivElement;
@@ -89,6 +92,8 @@ export class EditorUi {
   private contentPathLabel: HTMLElement;
   private contentStatus: HTMLElement;
   private contentSearch: HTMLInputElement;
+  private contentTypeFilter: HTMLSelectElement;
+  private contentCategoryFilter: HTMLSelectElement;
   private folderTree: HTMLElement;
   private outlinerList: HTMLDivElement;
   private detailsBody: HTMLDivElement;
@@ -109,6 +114,8 @@ export class EditorUi {
   /** Cached 1x1 transparent image used to suppress the native drag thumbnail. */
   private emptyDragImage: HTMLImageElement | null = null;
   private contentQuery = "";
+  private contentType: ContentTypeFilter = CONTENT_FILTER_ALL;
+  private contentCategory = CONTENT_FILTER_ALL;
   private contentDrawerOpen = false;
   private contentRefreshTimer = 0;
   private outlinerObjects: EditableSceneObject[] = [];
@@ -263,6 +270,14 @@ export class EditorUi {
             data-content-search
             placeholder="Search assets"
           />
+          <div class="content-filters" data-content-filters>
+            <select class="content-filter" data-content-type-filter aria-label="Asset type">
+              <option value="${CONTENT_FILTER_ALL}">All types</option>
+            </select>
+            <select class="content-filter" data-content-category-filter aria-label="Asset category">
+              <option value="${CONTENT_FILTER_ALL}">All categories</option>
+            </select>
+          </div>
           <button type="button" data-content-refresh>Refresh</button>
         </div>
         <div class="content-drawer-body">
@@ -293,6 +308,8 @@ export class EditorUi {
     this.contentPathLabel = requireElement(this.root, "[data-content-path]");
     this.contentStatus = requireElement(this.root, "[data-content-status]");
     this.contentSearch = requireElement(this.root, "[data-content-search]");
+    this.contentTypeFilter = requireElement(this.root, "[data-content-type-filter]");
+    this.contentCategoryFilter = requireElement(this.root, "[data-content-category-filter]");
     this.folderTree = requireElement(this.root, "[data-folder-tree]");
     this.outlinerList = requireElement(this.root, "[data-outliner-list]");
     this.detailsBody = requireElement(this.root, "[data-details-body]");
@@ -468,6 +485,17 @@ export class EditorUi {
 
     this.contentSearch.addEventListener("input", () => {
       this.contentQuery = this.contentSearch.value.trim().toLocaleLowerCase();
+      this.renderContentAssets();
+    });
+
+    this.contentTypeFilter.addEventListener("change", () => {
+      const value = this.contentTypeFilter.value;
+      this.contentType = isContentTypeFilter(value) ? value : CONTENT_FILTER_ALL;
+      this.renderContentAssets();
+    });
+
+    this.contentCategoryFilter.addEventListener("change", () => {
+      this.contentCategory = this.contentCategoryFilter.value || CONTENT_FILTER_ALL;
       this.renderContentAssets();
     });
 
@@ -664,9 +692,10 @@ export class EditorUi {
         this.selectedFolder = tree.root;
       }
       this.contentRootLabel.textContent = `${this.projectInfo.rootName} / ${tree.root}`;
-      this.renderFolderTree();
-      this.renderContentAssets();
       this.contentStatus.textContent = `${flattenProjectFiles([this.assetTreeRoot]).length} files`;
+      this.renderFolderTree();
+      this.renderContentFilters();
+      this.renderContentAssets();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.contentStatus.textContent = message;
@@ -729,9 +758,14 @@ export class EditorUi {
     const items = files
       .filter((file) => this.shouldDisplayAssetFile(file))
       .map((file) => this.toBrowserAssetItem(file))
+      .filter((item) => this.contentType === CONTENT_FILTER_ALL || item.type === this.contentType)
+      .filter(
+        (item) =>
+          this.contentCategory === CONTENT_FILTER_ALL || item.category === this.contentCategory,
+      )
       .filter((item) => {
         if (!this.contentQuery) return true;
-        return `${item.label} ${item.category} ${item.path}`.toLocaleLowerCase().includes(
+        return `${item.label} ${item.category} ${item.type} ${item.path}`.toLocaleLowerCase().includes(
           this.contentQuery,
         );
       });
@@ -752,6 +786,52 @@ export class EditorUi {
     this.contentList.replaceChildren(
       ...items.map((item) => this.createAssetCard(item)),
     );
+  }
+
+  private renderContentFilters(): void {
+    const allItems = this.assetTreeRoot
+      ? flattenProjectFiles([this.assetTreeRoot])
+          .filter((file) => this.shouldDisplayAssetFile(file))
+          .map((file) => this.toBrowserAssetItem(file))
+      : [];
+    const types = [...new Set(allItems.map((item) => item.type))].sort(compareContentTypes);
+    const categories = [...new Set(allItems.map((item) => item.category))]
+      .filter(Boolean)
+      .sort((left, right) => left.localeCompare(right));
+
+    this.contentType = this.replaceContentFilterOptions(
+      this.contentTypeFilter,
+      "All types",
+      types,
+      this.contentType,
+      formatContentTypeLabel,
+    ) as ContentTypeFilter;
+    this.contentCategory = this.replaceContentFilterOptions(
+      this.contentCategoryFilter,
+      "All categories",
+      categories,
+      this.contentCategory,
+      formatContentFilterLabel,
+    );
+  }
+
+  private replaceContentFilterOptions(
+    select: HTMLSelectElement,
+    allLabel: string,
+    values: string[],
+    selected: string,
+    labelForValue: (value: string) => string,
+  ): string {
+    const validValues = new Set([CONTENT_FILTER_ALL, ...values]);
+    const nextValue = validValues.has(selected) ? selected : CONTENT_FILTER_ALL;
+    const options = [
+      new Option(allLabel, CONTENT_FILTER_ALL),
+      ...values.map((value) => new Option(labelForValue(value), value)),
+    ];
+    select.replaceChildren(...options);
+    select.value = nextValue;
+    select.disabled = values.length === 0;
+    return nextValue;
   }
 
   private shouldDisplayAssetFile(file: ProjectDirNode): boolean {
@@ -2225,6 +2305,29 @@ function outlinerKindLabel(kind: EditableSceneObject["kind"]): string {
   if (kind === "character") return "C";
   if (kind === "light") return "L";
   return "I";
+}
+
+function isContentTypeFilter(value: string): value is ContentTypeFilter {
+  return value === CONTENT_FILTER_ALL || value === "model" || value === "file";
+}
+
+function compareContentTypes(left: BrowserAssetItem["type"], right: BrowserAssetItem["type"]): number {
+  const order: Record<BrowserAssetItem["type"], number> = { model: 0, file: 1 };
+  return order[left] - order[right];
+}
+
+function formatContentTypeLabel(value: string): string {
+  if (value === "model") return "Models";
+  if (value === "file") return "Files";
+  return formatContentFilterLabel(value);
+}
+
+function formatContentFilterLabel(value: string): string {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => `${part.slice(0, 1).toLocaleUpperCase()}${part.slice(1)}`)
+    .join(" ");
 }
 
 function formatShapeTypeLabel(type: ShapePrimitiveType): string {
