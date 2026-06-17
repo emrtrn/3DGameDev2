@@ -30,6 +30,9 @@
             -0.21
           ],
           "simulatePhysics": true,
+          "physics": {
+            "enableGravity": false
+          },
           "rotationYDeg": 0,
           "scale": [
             0.47,
@@ -237,15 +240,6 @@
       "placements": [
         {
           "position": [
-            0.04,
-            1.18,
-            -2.09
-          ],
-          "name": "Cube",
-          "scale": 1
-        },
-        {
-          "position": [
             0.76,
             0.25,
             1.54
@@ -300,6 +294,10 @@
           "scale": 1
         }
       ]
+    },
+    {
+      "assetId": "bed-single",
+      "placements": []
     }
   ],
   "characters": [

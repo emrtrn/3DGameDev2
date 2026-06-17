@@ -338,6 +338,12 @@ function cloneCollider(collider: ColliderComponent): ColliderComponent {
   };
   if (collider.center) clone.center = [...collider.center];
   if (collider.simulatePhysics !== undefined) clone.simulatePhysics = collider.simulatePhysics;
+  if (collider.massKg !== undefined) clone.massKg = collider.massKg;
+  if (collider.linearDamping !== undefined) clone.linearDamping = collider.linearDamping;
+  if (collider.angularDamping !== undefined) clone.angularDamping = collider.angularDamping;
+  if (collider.enableGravity !== undefined) clone.enableGravity = collider.enableGravity;
+  if (collider.lockPosition !== undefined) clone.lockPosition = [...collider.lockPosition];
+  if (collider.lockRotation !== undefined) clone.lockRotation = [...collider.lockRotation];
   return clone;
 }
 
@@ -347,19 +353,33 @@ function colliderDescForBody(RAPIER: RapierModule, body: PhysicsBody) {
   const size = body.collider.size;
   const center = body.collider.center ?? [0, 0, 0];
   const desc = colliderShapeDesc(RAPIER, body.collider.shape, size);
-  return desc
+  const colliderDesc = desc
     .setTranslation(center[0] ?? 0, center[1] ?? 0, center[2] ?? 0)
     .setFriction(0.8)
     .setRestitution(0);
+  if (body.collider.simulatePhysics && body.collider.massKg !== undefined) {
+    return colliderDesc.setMass(body.collider.massKg);
+  }
+  return colliderDesc;
 }
 
 function rigidBodyDescForBody(RAPIER: RapierModule, body: PhysicsBody) {
   if (body.collider.isStatic) return RAPIER.RigidBodyDesc.fixed();
   if (body.collider.simulatePhysics) {
-    return RAPIER.RigidBodyDesc.dynamic()
+    const desc = RAPIER.RigidBodyDesc.dynamic()
       .setCcdEnabled(true)
-      .setLinearDamping(0.12)
-      .setAngularDamping(0.45);
+      .setLinearDamping(body.collider.linearDamping ?? 0.12)
+      .setAngularDamping(body.collider.angularDamping ?? 0.45)
+      .setGravityScale(body.collider.enableGravity === false ? 0 : 1);
+    const lockPosition = body.collider.lockPosition;
+    if (lockPosition) {
+      desc.restrictTranslations(!lockPosition[0], !lockPosition[1], !lockPosition[2]);
+    }
+    const lockRotation = body.collider.lockRotation;
+    if (lockRotation) {
+      desc.restrictRotations(!lockRotation[0], !lockRotation[1], !lockRotation[2]);
+    }
+    return desc;
   }
   return RAPIER.RigidBodyDesc.kinematicPositionBased();
 }

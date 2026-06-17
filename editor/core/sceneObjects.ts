@@ -6,7 +6,7 @@ import {
   type EditableSceneObject,
   type EditableSelection,
 } from "./editableScene";
-import { cloneMetadata } from "./layoutSnapshots";
+import { cloneMetadata, clonePhysics } from "./layoutSnapshots";
 import { selectionId, type Selection } from "./selection";
 
 const DEFAULT_LIGHT_COLOR = "#ffffff";
@@ -54,6 +54,7 @@ export function buildSceneObjects(
         castShadow: deps.staticObjectsCastShadow,
         collision: placement.collision ?? true,
         simulatePhysics: placement.simulatePhysics ?? false,
+        physics: clonePhysics(placement.physics) ?? {},
         metadata: {},
         groupId: placement.groupId,
         nodeId: placement.nodeId,
@@ -81,6 +82,7 @@ export function buildSceneObjects(
       castShadow: character.castShadow ?? true,
       collision: character.collision ?? true,
       simulatePhysics: character.simulatePhysics ?? false,
+      physics: clonePhysics(character.physics) ?? {},
       metadata: {},
       groupId: character.groupId,
       nodeId: character.nodeId,
@@ -107,6 +109,7 @@ export function buildSceneObjects(
       castShadow: light.castShadow ?? light.type === "directional",
       collision: false,
       simulatePhysics: false,
+      physics: {},
       metadata: {},
       groupId: light.groupId,
       nodeId: light.nodeId,
@@ -152,6 +155,7 @@ export function buildEditableSelection(
       castShadow: deps.staticObjectsCastShadow,
       collision: placement.collision ?? true,
       simulatePhysics: placement.simulatePhysics ?? false,
+      physics: clonePhysics(placement.physics) ?? {},
       metadata: cloneMetadata(placement.metadata),
     };
   }
@@ -174,6 +178,7 @@ export function buildEditableSelection(
       castShadow: light.castShadow ?? light.type === "directional",
       collision: false,
       simulatePhysics: false,
+      physics: {},
       metadata: {},
       lightType: light.type,
       color: light.color ?? DEFAULT_LIGHT_COLOR,
@@ -200,6 +205,7 @@ export function buildEditableSelection(
     castShadow: character.castShadow ?? true,
     collision: character.collision ?? true,
     simulatePhysics: character.simulatePhysics ?? false,
+    physics: clonePhysics(character.physics) ?? {},
     metadata: cloneMetadata(character.metadata),
   };
 }

@@ -40,6 +40,7 @@ import {
   registerSceneShapeModels,
   resolveSceneWorldSettings,
   resizeSceneRuntimeViewport,
+  sceneModelAssetIds,
   startSceneRuntime,
   tagSceneLightRecordIndex,
 } from "./SceneRuntimeCore";
@@ -207,6 +208,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.physicsSubsystem.setGravity(resolveSceneWorldSettings(this.layout).gravity);
     this.ensureDefaultLights();
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
+    await this.loadMissingSceneModels();
     const convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);
     this.localBounds = computeModelLocalBounds(this.models);
     // Shape actors persist as `shape:<type>` instances whose synthetic models are
@@ -295,6 +297,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private colliderBoxFor(assetId: string, source: ColliderTransformSource) {
     const bounds = this.localBounds.get(assetId);
     return bounds ? colliderBoxFromBounds(bounds, source) : undefined;
+  }
+
+  private async loadMissingSceneModels(): Promise<void> {
+    if (!this.assetLoader) return;
+    const missing = sceneModelAssetIds(this.layout).filter((assetId) => !this.models.has(assetId));
+    if (missing.length === 0) return;
+    const models = await this.assetLoader.loadModels(missing);
+    for (const [assetId, model] of models) this.models.set(assetId, model);
   }
 
   private createInstancedModel(assetId: string, placements: LayoutPlacement[]): Group {

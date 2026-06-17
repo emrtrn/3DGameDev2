@@ -26,6 +26,23 @@ export interface LayoutAudio {
   spatial?: boolean;
 }
 
+export type LayoutPhysicsAxisLocks = [boolean, boolean, boolean];
+
+export interface LayoutPhysics {
+  /** Override mass in kilograms. Absent lets the physics backend derive mass from the collider. */
+  massKg?: number;
+  /** Linear velocity damping. Absent means the runtime default. */
+  linearDamping?: number;
+  /** Angular velocity damping. Absent means the runtime default. */
+  angularDamping?: number;
+  /** Whether world gravity affects this body. Absent means true. */
+  enableGravity?: boolean;
+  /** Per-axis translation locks, X/Y/Z. Absent means all axes are free. */
+  lockPosition?: LayoutPhysicsAxisLocks;
+  /** Per-axis rotation locks, X/Y/Z. Absent means all axes are free. */
+  lockRotation?: LayoutPhysicsAxisLocks;
+}
+
 export interface LayoutPlacement {
   name?: string;
   hidden?: boolean;
@@ -58,6 +75,8 @@ export interface LayoutPlacement {
   sensor?: boolean;
   /** Runtime hint: this object is a dynamic rigid body in Play mode. Absent means false. */
   simulatePhysics?: boolean;
+  /** Runtime physics body settings used when this object simulates physics. */
+  physics?: LayoutPhysics;
   /** Project-defined gameplay metadata (schema-driven; omitted when empty). */
   metadata?: LayoutMetadata;
   /** Runtime behavior script reference (resolved by the behavior registry). */
@@ -104,6 +123,8 @@ export interface LayoutCharacter {
   sensor?: boolean;
   /** Runtime hint: this object is a dynamic rigid body in Play mode. Absent means false. */
   simulatePhysics?: boolean;
+  /** Runtime physics body settings used when this object simulates physics. */
+  physics?: LayoutPhysics;
   /** Project-defined gameplay metadata (schema-driven; omitted when empty). */
   metadata?: LayoutMetadata;
   animation?: string;

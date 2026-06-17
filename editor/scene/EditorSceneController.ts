@@ -5,6 +5,7 @@ import {
   cloneCharacter,
   cloneLightActor,
   cloneMetadataValue,
+  clonePhysics,
   clonePlacement,
   cloneUngroupedCharacter,
   cloneUngroupedLightActor,
@@ -38,12 +39,16 @@ import type {
   LayoutLightActor,
   LayoutMetadata,
   LayoutPlacement,
+  LayoutPhysics,
   MetadataValue,
   RoomLayout,
 } from "@engine/scene/layout";
 import { metadataValuesEqual } from "@engine/scene/metadataSchema";
 
 type StatusTone = "info" | "success" | "warning" | "error";
+
+const DEFAULT_LINEAR_DAMPING = 0.12;
+const DEFAULT_ANGULAR_DAMPING = 0.45;
 
 type MutableHierarchyTransform = {
   groupId?: string;
@@ -53,6 +58,7 @@ type MutableHierarchyTransform = {
   castShadow?: boolean;
   collision?: boolean;
   simulatePhysics?: boolean;
+  physics?: LayoutPhysics;
   metadata?: LayoutMetadata;
   nodeId?: string;
   parentId?: string;
@@ -85,6 +91,42 @@ export interface EditorSceneControllerHost {
   removeLightActor: (index: number) => LayoutLightActor | null;
   updateGizmo: () => void;
   updateSelectionBox: () => void;
+}
+
+function normalizePhysicsSettings(physics: LayoutPhysics | undefined): LayoutPhysics | undefined {
+  if (!physics) return undefined;
+  const normalized: LayoutPhysics = {};
+  const massKg = normalizeNumber(physics.massKg, 0.001, 1_000_000);
+  if (massKg !== undefined) normalized.massKg = massKg;
+  const linearDamping = normalizeNumber(physics.linearDamping, 0, 100);
+  if (linearDamping !== undefined && linearDamping !== DEFAULT_LINEAR_DAMPING) {
+    normalized.linearDamping = linearDamping;
+  }
+  const angularDamping = normalizeNumber(physics.angularDamping, 0, 100);
+  if (angularDamping !== undefined && angularDamping !== DEFAULT_ANGULAR_DAMPING) {
+    normalized.angularDamping = angularDamping;
+  }
+  if (physics.enableGravity === false) normalized.enableGravity = false;
+  if (physics.lockPosition?.some(Boolean)) normalized.lockPosition = [...physics.lockPosition];
+  if (physics.lockRotation?.some(Boolean)) normalized.lockRotation = [...physics.lockRotation];
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeNumber(
+  value: number | undefined,
+  min: number,
+  max: number,
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isFinite(value)) return undefined;
+  return Number(Math.min(Math.max(value, min), max).toFixed(3));
+}
+
+function physicsSettingsEqual(
+  left: LayoutPhysics | undefined,
+  right: LayoutPhysics | undefined,
+): boolean {
+  return JSON.stringify(left ?? {}) === JSON.stringify(right ?? {});
 }
 
 /**
@@ -574,6 +616,26 @@ export class EditorSceneController {
     this.setSelectionFlag(this.selection, "simulatePhysics", value);
   }
 
+  setSelectionPhysics(patch: Partial<LayoutPhysics>): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    if (this.selection.kind === "light") return;
+    const target = this.host.getMutableTransform(this.selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    const previous = normalizePhysicsSettings(target.physics);
+    const next = normalizePhysicsSettings({ ...(previous ?? {}), ...patch });
+    if (physicsSettingsEqual(previous, next)) return;
+
+    const commandSelection = cloneSelection(this.selection);
+    this.executeCommand({
+      label: "Set physics",
+      redo: () => this.applyPhysicsSettings(commandSelection, next),
+      undo: () => this.applyPhysicsSettings(commandSelection, previous),
+    });
+  }
+
   setSelectionMetadata(key: string, value: MetadataValue | undefined, label?: string): void {
     if (!this.selection || !this.host.hasSelection(this.selection)) return;
     if (this.selection.kind === "light") return;
@@ -908,6 +970,22 @@ export class EditorSceneController {
       target.metadata ??= {};
       target.metadata[key] = cloneMetadataValue(value) as MetadataValue;
     }
+    this.host.emitSelectionChanged();
+  }
+
+  private applyPhysicsSettings(
+    selection: Selection,
+    physics: LayoutPhysics | undefined,
+  ): void {
+    if (selection.kind === "light") return;
+    const target = this.host.getMutableTransform(selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    const next = clonePhysics(physics);
+    if (next) target.physics = next;
+    else delete target.physics;
     this.host.emitSelectionChanged();
   }
 

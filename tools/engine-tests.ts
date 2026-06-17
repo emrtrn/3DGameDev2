@@ -107,6 +107,7 @@ import {
   computeModelLocalBounds,
   createSceneCharacterMixer,
   isSceneSunLight,
+  sceneModelAssetIds,
   startSceneRuntime,
   tagSceneLightRecordIndex,
 } from "../src/scene/SceneRuntimeCore";
@@ -246,6 +247,27 @@ check("scene runtime inserts one default sun when a layout has no lights", () =>
   assert.equal(emptyLightLayout.lights?.[0]?.id, DEFAULT_SCENE_SUN_ID);
   assert.equal(emptyLightLayout.lights?.[0]?.type, "directional");
   assert.equal(emptyLightLayout.lights?.[0]?.color, DEFAULT_SCENE_LIGHT_COLOR);
+});
+
+check("sceneModelAssetIds includes authored assets and excludes procedural shapes", () => {
+  const modelLayout: RoomLayout = {
+    schema: 1,
+    name: "model-asset-fixture",
+    loadGroups: ["core"],
+    instances: [
+      { assetId: "floor-full", placements: [{ position: [0, 0, 0] }] },
+      { assetId: "bed-single", placements: [{ position: [1, 0, 0] }] },
+      { assetId: "shape:cube", placements: [{ position: [2, 0, 0] }] },
+    ],
+    characters: [{ assetId: "character-a", position: [0, 0, 1] }],
+    lights: [],
+  };
+
+  assert.deepEqual(sceneModelAssetIds(modelLayout).sort(), [
+    "bed-single",
+    "character-a",
+    "floor-full",
+  ]);
 });
 
 check("scene runtime room bounds unions placements and honors asset filters", () => {
@@ -968,6 +990,52 @@ check("layout simulatePhysics maps to a dynamic collider component", () => {
   });
 });
 
+check("layout physics settings map to collider components", () => {
+  const fixture: RoomLayout = {
+    schema: 1,
+    name: "physics-settings-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "crate",
+        placements: [
+          {
+            position: [0, 5, 0],
+            simulatePhysics: true,
+            physics: {
+              massKg: 12.5,
+              linearDamping: 0.2,
+              angularDamping: 0.3,
+              enableGravity: false,
+              lockPosition: [true, false, false],
+              lockRotation: [false, true, false],
+            },
+          },
+        ],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+
+  const document = roomLayoutToSceneDocument(fixture);
+  const dynamic = document.entities.find((entity) => entity.id === instanceEntityId("crate", 0));
+
+  assert.deepEqual(dynamic ? readColliderComponent(dynamic) : undefined, {
+    shape: "box",
+    size: [1, 1, 1],
+    isStatic: false,
+    isSensor: false,
+    simulatePhysics: true,
+    massKg: 12.5,
+    linearDamping: 0.2,
+    angularDamping: 0.3,
+    enableGravity: false,
+    lockPosition: [true, false, false],
+    lockRotation: [false, true, false],
+  });
+});
+
 // Without a bounds resolver the adapter bakes the placement scale into a unit
 // box (physics no longer rescales); a resolver supplies the world-aligned
 // size + center so derived colliders match the rendered mesh.
@@ -1271,6 +1339,54 @@ await checkAsync("rapier simulatePhysics body falls under configured gravity", a
     const last = synced.at(-1) ?? assert.fail("synced");
     assert.ok(last.position[1] < 5);
     assert.ok(Math.abs(last.rotation[1] - 30) < 1e-3, `rotationY=${last.rotation[1]}`);
+    await app.dispose();
+  } finally {
+    console.warn = warn;
+  }
+});
+
+await checkAsync("rapier simulatePhysics enableGravity false disables world gravity", async () => {
+  const physics = new PhysicsSubsystem({ backend: "rapier" });
+  physics.setGravity([0, -10, 0]);
+  const synced: TransformComponent[] = [];
+  physics.setTransformSink((_entityId, transform) => {
+    synced.push({
+      position: [...transform.position],
+      rotation: [...transform.rotation],
+      scale: [...transform.scale],
+    });
+  });
+  physics.setEntities([
+    {
+      id: "crate",
+      components: {
+        Transform: { position: [0, 5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [1, 1, 1],
+          isStatic: false,
+          isSensor: false,
+          simulatePhysics: true,
+          enableGravity: false,
+        },
+      },
+    },
+  ]);
+
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (String(args[0] ?? "").includes("deprecated parameters for the initialization function")) {
+      return;
+    }
+    warn(...args);
+  };
+  try {
+    await app.init();
+    for (let frame = 0; frame < 30; frame += 1) app.update(1 / 60);
+    const last = synced.at(-1) ?? assert.fail("synced");
+    assert.ok(Math.abs(last.position[1] - 5) < 0.001, `gravity disabled y=${last.position[1]}`);
     await app.dispose();
   } finally {
     console.warn = warn;
@@ -2104,6 +2220,14 @@ check("save validator allowlist keeps known placement fields, drops unknown ones
     name: "crate",
     collision: false,
     simulatePhysics: true,
+    physics: {
+      massKg: 2,
+      linearDamping: 0.25,
+      angularDamping: 0.5,
+      enableGravity: false,
+      lockPosition: [true, false, false],
+      lockRotation: [false, true, false],
+    },
     metadata: { hp: 5 },
     bogusField: 123,
     nested: { evil: true },
@@ -2112,6 +2236,14 @@ check("save validator allowlist keeps known placement fields, drops unknown ones
   assert.equal(placement.name, "crate");
   assert.equal(placement.collision, false);
   assert.equal(placement.simulatePhysics, true);
+  assert.deepEqual(placement.physics, {
+    massKg: 2,
+    linearDamping: 0.25,
+    angularDamping: 0.5,
+    enableGravity: false,
+    lockPosition: [true, false, false],
+    lockRotation: [false, true, false],
+  });
   assert.deepEqual(placement.metadata, { hp: 5 });
   // Fields not on the allowlist must be stripped (this is the save footgun).
   assert.equal("bogusField" in placement, false);

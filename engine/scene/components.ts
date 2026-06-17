@@ -1,5 +1,5 @@
 import type { Entity, SceneJsonValue } from "./entity";
-import type { Vec3 } from "./layout";
+import type { LayoutPhysicsAxisLocks, Vec3 } from "./layout";
 
 export const TRANSFORM_COMPONENT = "Transform";
 export const MESH_RENDERER_COMPONENT = "MeshRenderer";
@@ -61,6 +61,12 @@ export interface ColliderComponent {
   isStatic: boolean;
   isSensor: boolean;
   simulatePhysics?: boolean;
+  massKg?: number;
+  linearDamping?: number;
+  angularDamping?: number;
+  enableGravity?: boolean;
+  lockPosition?: LayoutPhysicsAxisLocks;
+  lockRotation?: LayoutPhysicsAxisLocks;
 }
 
 export interface AudioComponent {
@@ -74,6 +80,17 @@ function readVec3(value: SceneJsonValue | undefined): Vec3 | undefined {
   if (!Array.isArray(value) || value.length !== 3) return undefined;
   const [x, y, z] = value;
   if (typeof x !== "number" || typeof y !== "number" || typeof z !== "number") return undefined;
+  return [x, y, z];
+}
+
+function readPhysicsAxisLocks(
+  value: SceneJsonValue | undefined,
+): LayoutPhysicsAxisLocks | undefined {
+  if (!Array.isArray(value) || value.length !== 3) return undefined;
+  const [x, y, z] = value;
+  if (typeof x !== "boolean" || typeof y !== "boolean" || typeof z !== "boolean") {
+    return undefined;
+  }
   return [x, y, z];
 }
 
@@ -142,6 +159,14 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
   };
   if (center) component.center = center;
   if (typeof data.simulatePhysics === "boolean") component.simulatePhysics = data.simulatePhysics;
+  if (typeof data.massKg === "number") component.massKg = data.massKg;
+  if (typeof data.linearDamping === "number") component.linearDamping = data.linearDamping;
+  if (typeof data.angularDamping === "number") component.angularDamping = data.angularDamping;
+  if (typeof data.enableGravity === "boolean") component.enableGravity = data.enableGravity;
+  const lockPosition = readPhysicsAxisLocks(data.lockPosition);
+  if (lockPosition) component.lockPosition = lockPosition;
+  const lockRotation = readPhysicsAxisLocks(data.lockRotation);
+  if (lockRotation) component.lockRotation = lockRotation;
   return component;
 }
 

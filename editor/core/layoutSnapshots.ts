@@ -3,6 +3,7 @@ import type {
   LayoutLightActor,
   LayoutMetadata,
   LayoutPlacement,
+  LayoutPhysics,
   MetadataValue,
   Vec3,
 } from "@engine/scene/layout";
@@ -32,6 +33,18 @@ export function cloneScale(scale: number | Vec3): number | Vec3 {
   return Array.isArray(scale) ? [scale[0], scale[1], scale[2]] : scale;
 }
 
+export function clonePhysics(physics: LayoutPhysics | undefined): LayoutPhysics | undefined {
+  if (!physics) return undefined;
+  const clone: LayoutPhysics = {};
+  if (physics.massKg !== undefined) clone.massKg = physics.massKg;
+  if (physics.linearDamping !== undefined) clone.linearDamping = physics.linearDamping;
+  if (physics.angularDamping !== undefined) clone.angularDamping = physics.angularDamping;
+  if (physics.enableGravity !== undefined) clone.enableGravity = physics.enableGravity;
+  if (physics.lockPosition !== undefined) clone.lockPosition = [...physics.lockPosition];
+  if (physics.lockRotation !== undefined) clone.lockRotation = [...physics.lockRotation];
+  return Object.keys(clone).length > 0 ? clone : undefined;
+}
+
 export function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
   const clone: LayoutPlacement = {
     position: [...placement.position],
@@ -48,6 +61,10 @@ export function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
   if (placement.castShadow !== undefined) clone.castShadow = placement.castShadow;
   if (placement.collision !== undefined) clone.collision = placement.collision;
   if (placement.simulatePhysics !== undefined) clone.simulatePhysics = placement.simulatePhysics;
+  if (placement.physics !== undefined) {
+    const physics = clonePhysics(placement.physics);
+    if (physics) clone.physics = physics;
+  }
   if (placement.metadata !== undefined) clone.metadata = cloneMetadata(placement.metadata);
   if (placement.audio !== undefined) clone.audio = { ...placement.audio };
   if (placement.nodeId !== undefined) clone.nodeId = placement.nodeId;
@@ -78,6 +95,10 @@ export function cloneCharacter(character: LayoutCharacter): LayoutCharacter {
   if (character.castShadow !== undefined) clone.castShadow = character.castShadow;
   if (character.collision !== undefined) clone.collision = character.collision;
   if (character.simulatePhysics !== undefined) clone.simulatePhysics = character.simulatePhysics;
+  if (character.physics !== undefined) {
+    const physics = clonePhysics(character.physics);
+    if (physics) clone.physics = physics;
+  }
   if (character.metadata !== undefined) clone.metadata = cloneMetadata(character.metadata);
   if (character.audio !== undefined) clone.audio = { ...character.audio };
   if (character.nodeId !== undefined) clone.nodeId = character.nodeId;

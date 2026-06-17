@@ -1,4 +1,4 @@
-import type { LayoutLightActor, LayoutMetadata, Vec3 } from "@engine/scene/layout";
+import type { LayoutLightActor, LayoutMetadata, LayoutPhysics, Vec3 } from "@engine/scene/layout";
 import type { Selection } from "./selection";
 
 export interface EditableTransform {
@@ -29,6 +29,8 @@ export interface EditableSelection {
   collision: boolean;
   /** Dynamic rigid-body simulation in Play mode. */
   simulatePhysics: boolean;
+  /** Runtime physics settings for the selected object. */
+  physics: LayoutPhysics;
   /** Project-defined gameplay metadata (schema-driven); empty when none set. */
   metadata: LayoutMetadata;
   lightType?: LayoutLightActor["type"];

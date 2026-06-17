@@ -348,6 +348,22 @@ export function registerSceneShapeModels(
 }
 
 /**
+ * Model asset ids that the scene graph will instantiate. This includes authored
+ * instances and characters, but excludes procedural `shape:<type>` ids because
+ * those are registered locally instead of loaded from the asset manifest.
+ */
+export function sceneModelAssetIds(layout: RoomLayout | null): string[] {
+  const ids = new Set<string>();
+  for (const instance of layout?.instances ?? []) {
+    if (!parseShapeAssetId(instance.assetId)) ids.add(instance.assetId);
+  }
+  for (const character of layout?.characters ?? []) {
+    ids.add(character.assetId);
+  }
+  return [...ids];
+}
+
+/**
  * Drive the shared scene-build iteration: instances, then characters, then
  * lights, in the exact order both shells use. The handlers stay in the shell so
  * each can apply its own per-entity policy (editor selection refresh, etc.).

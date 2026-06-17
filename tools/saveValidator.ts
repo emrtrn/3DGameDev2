@@ -66,6 +66,56 @@ function validateOptionalNumber(
   return Number(number.toFixed(3));
 }
 
+function validateBooleanTuple(value: unknown, label: string): [boolean, boolean, boolean] {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 3 ||
+    !value.every((item) => typeof item === "boolean")
+  ) {
+    throw new Error(`invalid ${label}`);
+  }
+  const [x, y, z] = value as [boolean, boolean, boolean];
+  return [x, y, z];
+}
+
+function validatePhysics(value: unknown, label: string): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} physics must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  const physics: Record<string, unknown> = {};
+  const massKg = validateOptionalNumber(input.massKg, `${label} physics.massKg`, 0.001, 1_000_000);
+  if (massKg !== undefined) physics.massKg = massKg;
+  const linearDamping = validateOptionalNumber(
+    input.linearDamping,
+    `${label} physics.linearDamping`,
+    0,
+    100,
+  );
+  if (linearDamping !== undefined) physics.linearDamping = linearDamping;
+  const angularDamping = validateOptionalNumber(
+    input.angularDamping,
+    `${label} physics.angularDamping`,
+    0,
+    100,
+  );
+  if (angularDamping !== undefined) physics.angularDamping = angularDamping;
+  if (input.enableGravity !== undefined) {
+    if (typeof input.enableGravity !== "boolean") {
+      throw new Error(`${label} physics.enableGravity must be boolean`);
+    }
+    physics.enableGravity = input.enableGravity;
+  }
+  if (input.lockPosition !== undefined) {
+    physics.lockPosition = validateBooleanTuple(input.lockPosition, `${label} physics.lockPosition`);
+  }
+  if (input.lockRotation !== undefined) {
+    physics.lockRotation = validateBooleanTuple(input.lockRotation, `${label} physics.lockRotation`);
+  }
+  return Object.keys(physics).length > 0 ? physics : undefined;
+}
+
 /** Validates a schema-driven gameplay metadata blob (string/number/boolean/string[]). */
 function validateMetadata(value: unknown, label: string): Record<string, unknown> | undefined {
   if (value === undefined) return undefined;
@@ -143,6 +193,8 @@ export function applyTransformFields(
   if (entry.collision === false) target.collision = false;
   if (entry.sensor === true) target.sensor = true;
   if (entry.simulatePhysics === true) target.simulatePhysics = true;
+  const physics = validatePhysics(entry.physics, label);
+  if (physics) target.physics = physics;
   if (typeof entry.groupId === "string") target.groupId = entry.groupId;
   if (typeof entry.nodeId === "string") target.nodeId = entry.nodeId;
   if (typeof entry.parentId === "string") target.parentId = entry.parentId;

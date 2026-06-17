@@ -37,6 +37,7 @@ import {
   type LayoutLightActor,
   type LayoutMetadata,
   type LayoutPlacement,
+  type LayoutPhysics,
   type LayoutWorldSettings,
   type RoomLayout,
   type Vec3,
@@ -338,6 +339,7 @@ function colliderComponent(
     collision?: boolean;
     sensor?: boolean;
     simulatePhysics?: boolean;
+    physics?: LayoutPhysics;
   },
   isStatic: boolean,
   resolveBox: ColliderBoxResolver | undefined,
@@ -357,11 +359,22 @@ function colliderComponent(
   };
   if (box && !isZeroVec3(box.center)) component.center = box.center;
   if (simulatePhysics) component.simulatePhysics = true;
+  copyPhysicsSettings(component, source.physics);
   return component;
 }
 
 function isZeroVec3(vec: Vec3): boolean {
   return vec[0] === 0 && vec[1] === 0 && vec[2] === 0;
+}
+
+function copyPhysicsSettings(component: ColliderComponent, physics: LayoutPhysics | undefined): void {
+  if (!physics) return;
+  if (physics.massKg !== undefined) component.massKg = physics.massKg;
+  if (physics.linearDamping !== undefined) component.linearDamping = physics.linearDamping;
+  if (physics.angularDamping !== undefined) component.angularDamping = physics.angularDamping;
+  if (physics.enableGravity !== undefined) component.enableGravity = physics.enableGravity;
+  if (physics.lockPosition !== undefined) component.lockPosition = [...physics.lockPosition];
+  if (physics.lockRotation !== undefined) component.lockRotation = [...physics.lockRotation];
 }
 
 function audioComponent(audio: LayoutAudio | undefined): AudioComponent | null {

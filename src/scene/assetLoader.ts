@@ -108,6 +108,14 @@ export class AssetLoader {
     return models;
   }
 
+  async loadModels(ids: readonly string[]): Promise<Map<string, GLTF>> {
+    const uniqueIds = [...new Set(ids)];
+    const entries = await Promise.all(
+      uniqueIds.map(async (id) => [id, await this.loadModel(id)] as const),
+    );
+    return new Map(entries);
+  }
+
   async loadModel(id: string): Promise<GLTF> {
     const manifest = await this.loadManifest();
     const record = assetRecordById(manifest, id);
