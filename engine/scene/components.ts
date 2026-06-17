@@ -78,6 +78,10 @@ export interface ColliderComponent {
   primitives?: ColliderPrimitive[];
   isStatic: boolean;
   isSensor: boolean;
+  /** Surface friction (Rapier). Absent uses the backend default. */
+  friction?: number;
+  /** Surface restitution / bounciness (Rapier). Absent uses the backend default. */
+  restitution?: number;
   simulatePhysics?: boolean;
   massKg?: number;
   linearDamping?: number;
@@ -205,6 +209,8 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
   if (center) component.center = center;
   const primitives = readColliderPrimitives(data.primitives);
   if (primitives) component.primitives = primitives;
+  if (typeof data.friction === "number") component.friction = data.friction;
+  if (typeof data.restitution === "number") component.restitution = data.restitution;
   if (typeof data.simulatePhysics === "boolean") component.simulatePhysics = data.simulatePhysics;
   if (typeof data.massKg === "number") component.massKg = data.massKg;
   if (typeof data.linearDamping === "number") component.linearDamping = data.linearDamping;

@@ -44,6 +44,7 @@ import {
 } from "./layout";
 import {
   resolveCollisionProfile,
+  resolvePhysicalMaterial,
   type AssetCollisionDef,
   type CollisionPresetId,
   type CollisionPrimitive,
@@ -407,6 +408,11 @@ function colliderComponent(
     if (box && !isZeroVec3(box.center)) component.center = box.center;
   }
   if (simulatePhysics) component.simulatePhysics = true;
+  if (collisionDef?.physicalMaterialId) {
+    const material = resolvePhysicalMaterial(collisionDef.physicalMaterialId);
+    component.friction = material.friction;
+    component.restitution = material.restitution;
+  }
   copyPhysicsSettings(component, source.physics);
   return component;
 }

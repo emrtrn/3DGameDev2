@@ -128,6 +128,7 @@ import {
   DEFAULT_COLLISION_PRESET,
   defaultAssetCollisionDef,
   resolveCollisionProfile,
+  resolvePhysicalMaterial,
   type AssetCollisionDef,
 } from "../engine/scene/collision";
 import type { LightObjectRecord } from "../engine/render-three/lights";
@@ -2960,6 +2961,37 @@ check("adapter bakes authored collision primitives into a compound collider", ()
   // Top-level box is the encompassing AABB (y spans 0.0..1.2 -> size 1.2, center 0.6).
   assert.ok(Math.abs(collider!.size[1] - 1.2) < 1e-9, `size.y=${collider!.size[1]}`);
   assert.ok(Math.abs((collider!.center?.[1] ?? 0) - 0.6) < 1e-9, `center.y=${collider!.center?.[1]}`);
+});
+
+check("physical material id sets collider friction/restitution", () => {
+  assert.deepEqual(resolvePhysicalMaterial("rubber"), { friction: 0.9, restitution: 0.7 });
+  assert.deepEqual(resolvePhysicalMaterial(undefined), { friction: 0.8, restitution: 0 });
+  assert.deepEqual(resolvePhysicalMaterial("nonexistent"), { friction: 0.8, restitution: 0 });
+
+  const matLayout: RoomLayout = {
+    schema: 1,
+    name: "material-fixture",
+    loadGroups: [],
+    instances: [{ assetId: "ball", placements: [{ position: [0, 0, 0] }] }],
+    characters: [],
+    lights: [],
+  };
+  const defs = new Map<string, AssetCollisionDef>([
+    [
+      "ball",
+      {
+        primitives: [{ shape: "box", size: [1, 1, 1] }],
+        complexity: "projectDefault",
+        preset: "blockAll",
+        physicalMaterialId: "rubber",
+      },
+    ],
+  ]);
+  const doc = roomLayoutToSceneDocument(matLayout, { collisionDefs: defs });
+  const entity = doc.entities.find((e) => e.id === instanceEntityId("ball", 0));
+  const collider = entity ? readColliderComponent(entity) : undefined;
+  assert.ok(Math.abs((collider?.friction ?? -1) - 0.9) < 1e-9, `friction=${collider?.friction}`);
+  assert.ok(Math.abs((collider?.restitution ?? -1) - 0.7) < 1e-9, `restitution=${collider?.restitution}`);
 });
 
 check("collisionWireboxes draws authored primitives over the auto bounding box", () => {

@@ -11,6 +11,9 @@ import type { PhysicsAabb, PhysicsContact, PhysicsQuery } from "../behavior/beha
 import type { Vec3 } from "../scene/layout";
 
 export const PHYSICS_SUBSYSTEM_ID = "physics";
+/** Collider surface defaults when no physical material is assigned. */
+const DEFAULT_FRICTION = 0.8;
+const DEFAULT_RESTITUTION = 0;
 export type PhysicsBackend = "placeholder" | "rapier";
 export type PhysicsTransformSink = (entityId: EntityId, transform: TransformComponent) => void;
 
@@ -344,6 +347,8 @@ function cloneCollider(collider: ColliderComponent): ColliderComponent {
   };
   if (collider.center) clone.center = [...collider.center];
   if (collider.primitives) clone.primitives = collider.primitives.map(clonePrimitive);
+  if (collider.friction !== undefined) clone.friction = collider.friction;
+  if (collider.restitution !== undefined) clone.restitution = collider.restitution;
   if (collider.simulatePhysics !== undefined) clone.simulatePhysics = collider.simulatePhysics;
   if (collider.massKg !== undefined) clone.massKg = collider.massKg;
   if (collider.linearDamping !== undefined) clone.linearDamping = collider.linearDamping;
@@ -369,12 +374,14 @@ function clonePrimitive(primitive: ColliderPrimitive): ColliderPrimitive {
 function colliderDescsForBody(RAPIER: RapierModule, body: PhysicsBody) {
   const primitives = body.collider.primitives;
   if (!primitives || primitives.length === 0) return [colliderDescForBody(RAPIER, body)];
+  const friction = body.collider.friction ?? DEFAULT_FRICTION;
+  const restitution = body.collider.restitution ?? DEFAULT_RESTITUTION;
   return primitives.map((primitive) => {
     const center = primitive.center ?? [0, 0, 0];
     const desc = colliderShapeDesc(RAPIER, primitive.shape, primitive.size)
       .setTranslation(center[0] ?? 0, center[1] ?? 0, center[2] ?? 0)
-      .setFriction(0.8)
-      .setRestitution(0);
+      .setFriction(friction)
+      .setRestitution(restitution);
     if (primitive.rotation) desc.setRotation(quaternionFromEulerDegrees(primitive.rotation));
     return desc;
   });
@@ -388,8 +395,8 @@ function colliderDescForBody(RAPIER: RapierModule, body: PhysicsBody) {
   const desc = colliderShapeDesc(RAPIER, body.collider.shape, size);
   const colliderDesc = desc
     .setTranslation(center[0] ?? 0, center[1] ?? 0, center[2] ?? 0)
-    .setFriction(0.8)
-    .setRestitution(0);
+    .setFriction(body.collider.friction ?? DEFAULT_FRICTION)
+    .setRestitution(body.collider.restitution ?? DEFAULT_RESTITUTION);
   if (body.collider.simulatePhysics && body.collider.massKg !== undefined) {
     return colliderDesc.setMass(body.collider.massKg);
   }

@@ -166,6 +166,34 @@ export interface AssetCollisionDef {
 export const DEFAULT_COLLISION_PRESET: CollisionPresetId = "blockAll";
 export const DEFAULT_COLLISION_COMPLEXITY: CollisionComplexity = "projectDefault";
 
+/** Surface response of a physical material: Rapier friction + restitution. */
+export interface PhysicalMaterialDef {
+  friction: number;
+  restitution: number;
+}
+
+export const DEFAULT_PHYSICAL_MATERIAL: PhysicalMaterialDef = { friction: 0.8, restitution: 0 };
+
+/** Built-in physical materials referenced by `AssetCollisionDef.physicalMaterialId`. */
+export const PHYSICAL_MATERIALS: Record<string, PhysicalMaterialDef> = {
+  default: DEFAULT_PHYSICAL_MATERIAL,
+  slippery: { friction: 0.05, restitution: 0 },
+  rubber: { friction: 0.9, restitution: 0.7 },
+  metal: { friction: 0.4, restitution: 0.1 },
+  wood: { friction: 0.6, restitution: 0 },
+  stone: { friction: 0.7, restitution: 0.05 },
+};
+
+export const PHYSICAL_MATERIAL_IDS: readonly string[] = Object.keys(PHYSICAL_MATERIALS);
+
+/** Resolves a physical-material id to its surface response, defaulting safely. */
+export function resolvePhysicalMaterial(id: string | undefined): PhysicalMaterialDef {
+  if (id && Object.prototype.hasOwnProperty.call(PHYSICAL_MATERIALS, id)) {
+    return PHYSICAL_MATERIALS[id]!;
+  }
+  return DEFAULT_PHYSICAL_MATERIAL;
+}
+
 /** A fresh, empty asset collision definition (block-all, no shapes yet). */
 export function defaultAssetCollisionDef(): AssetCollisionDef {
   return {

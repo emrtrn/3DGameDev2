@@ -40,6 +40,7 @@ import { TransformControls } from "three/examples/jsm/controls/TransformControls
 import {
   COLLISION_COMPLEXITY_VALUES,
   COLLISION_PRESET_IDS,
+  PHYSICAL_MATERIAL_IDS,
   defaultAssetCollisionDef,
   type AssetCollisionDef,
   type CollisionComplexity,
@@ -687,6 +688,15 @@ export class StaticMeshEditor {
       (id) =>
         `<option value="${id}" ${id === this.collision.complexity ? "selected" : ""}>${COMPLEXITY_LABELS[id]}</option>`,
     ).join("");
+    const currentMaterial = this.collision.physicalMaterialId ?? "";
+    const physMaterialOptions = [`<option value="" ${currentMaterial ? "" : "selected"}>None</option>`]
+      .concat(
+        PHYSICAL_MATERIAL_IDS.map(
+          (id) =>
+            `<option value="${id}" ${id === currentMaterial ? "selected" : ""}>${capitalize(id)}</option>`,
+        ),
+      )
+      .join("");
     const primitiveRows = this.collision.primitives.length
       ? this.collision.primitives
           .map(
@@ -718,8 +728,7 @@ export class StaticMeshEditor {
         </label>
         <label class="sm-row">
           <span>Simple Collision Physical Material</span>
-          <input type="text" data-sm-field="physicalMaterialId"
-            value="${escapeAttr(this.collision.physicalMaterialId ?? "")}" placeholder="None" />
+          <select data-sm-field="physicalMaterialId">${physMaterialOptions}</select>
         </label>
       </div>
       <div class="sm-section">
@@ -747,9 +756,9 @@ export class StaticMeshEditor {
         this.markDirty();
       });
     this.detailsHost
-      .querySelector<HTMLInputElement>('[data-sm-field="physicalMaterialId"]')
+      .querySelector<HTMLSelectElement>('[data-sm-field="physicalMaterialId"]')
       ?.addEventListener("change", (event) => {
-        const value = (event.target as HTMLInputElement).value.trim();
+        const value = (event.target as HTMLSelectElement).value;
         if (value) this.collision.physicalMaterialId = value;
         else delete this.collision.physicalMaterialId;
         this.markDirty();
@@ -896,8 +905,8 @@ function degToRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
 
-function escapeAttr(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+function capitalize(value: string): string {
+  return value.length > 0 ? value[0]!.toUpperCase() + value.slice(1) : value;
 }
 
 function describeError(error: unknown): string {
