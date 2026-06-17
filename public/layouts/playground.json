@@ -232,6 +232,15 @@
           ],
           "rotationYDeg": 0,
           "scale": 1
+        },
+        {
+          "position": [
+            -1.31,
+            0.05,
+            0.55
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
         }
       ]
     },
@@ -270,11 +279,12 @@
       "placements": [
         {
           "position": [
-            0.04,
+            -2.12,
             0.25,
-            1.02
+            -0.86
           ],
           "name": "Cylinder",
+          "collisionPreset": "noCollision",
           "simulatePhysics": true,
           "scale": 1
         }
