@@ -42,6 +42,7 @@ import {
   type RoomLayout,
   type Vec3,
 } from "./layout";
+import { resolveCollisionProfile, type CollisionPresetId } from "./collision";
 import { readRotation, readScale } from "./transform";
 import type { Entity, EntityComponentData, EntityComponentMap, SceneJsonValue } from "./entity";
 import {
@@ -337,6 +338,7 @@ function colliderComponent(
   assetId: string,
   source: ColliderTransformSource & {
     collision?: boolean;
+    collisionPreset?: CollisionPresetId;
     sensor?: boolean;
     simulatePhysics?: boolean;
     physics?: LayoutPhysics;
@@ -346,6 +348,15 @@ function colliderComponent(
 ): ColliderComponent | null {
   const simulatePhysics = source.simulatePhysics === true;
   if (source.collision === false && !simulatePhysics) return null;
+  // A per-placement collision preset maps onto the runtime collider: a
+  // collision-disabled preset drops the collider (unless it's a simulated
+  // body), and a query-only preset becomes a non-blocking sensor. Physics
+  // presets stay solid blockers.
+  const profile = source.collisionPreset
+    ? resolveCollisionProfile(source.collisionPreset)
+    : null;
+  if (profile?.collisionEnabled === "none" && !simulatePhysics) return null;
+  const presetSensor = profile?.collisionEnabled === "query";
   // World-aligned footprint from the model's bounds when the host can supply
   // them; otherwise a scaled unit box. Rotation intentionally does not resize
   // the collider; placement scale is baked into `size`, since the physics layer
@@ -355,7 +366,7 @@ function colliderComponent(
     shape: "box",
     size: box?.size ?? readScale(source),
     isStatic: isStatic && !simulatePhysics,
-    isSensor: source.sensor === true,
+    isSensor: source.sensor === true || presetSensor,
   };
   if (box && !isZeroVec3(box.center)) component.center = box.center;
   if (simulatePhysics) component.simulatePhysics = true;

@@ -276,13 +276,13 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 
 ### Faz 7 — Runtime Bağlama (Rapier)
 
-- [ ] Asset/placement collision tanımını Rapier collider'larına derle (çok-primitifli)
-- [ ] `collisionEnabled` → sensor/solid + query/physics eşlemesi
+- [x] Placement `collisionPreset` → runtime collider eşlemesi (`legacyRoomLayoutAdapter`): `none`=collider yok, `query`=sensor, `physics/queryAndPhysics`=solid
+- [ ] Asset-düzeyi collision primitiflerini runtime'a yükle (async sidecar plumbing — sonraki adım)
+- [ ] Çok-primitifli collider derleme (şu an tek box)
 - [ ] Kanal yanıtları → Rapier **collision groups** (membership/filter bitmask)
 - [ ] Convex hull (Rapier `convexHull`) ve (ertele) trimesh complex collision
 - [ ] Phys material → collider friction/restitution/density (sabit 0.8/0 yerine)
 - [ ] Overlap/Hit event bayraklarını mevcut contact/intersection akışına bağla
-- [ ] Karakter hareketi blocker mantığını yeni model ile uyumla (`staticBlockerAabbs` / query)
 
 ### Faz 8 — Persistans & Save Validator
 

@@ -2839,6 +2839,33 @@ check("layout sensor flag maps to a non-blocking sensor collider", () => {
   assert.equal(solid ? readColliderComponent(solid)?.isSensor : undefined, false);
 });
 
+check("collisionPreset maps to runtime collider: trigger=sensor, noCollision=none", () => {
+  const fixture: RoomLayout = {
+    schema: 1,
+    name: "preset-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "zone",
+        placements: [
+          { position: [0, 0, 0], collisionPreset: "trigger" },
+          { position: [1, 0, 0], collisionPreset: "noCollision" },
+          { position: [2, 0, 0], collisionPreset: "blockAll" },
+        ],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+  const doc = roomLayoutToSceneDocument(fixture);
+  const triggerEntity = doc.entities.find((e) => e.id === instanceEntityId("zone", 0));
+  const noneEntity = doc.entities.find((e) => e.id === instanceEntityId("zone", 1));
+  const blockEntity = doc.entities.find((e) => e.id === instanceEntityId("zone", 2));
+  assert.equal(triggerEntity ? readColliderComponent(triggerEntity)?.isSensor : undefined, true);
+  assert.equal(noneEntity ? readColliderComponent(noneEntity) : "missing", undefined);
+  assert.equal(blockEntity ? readColliderComponent(blockEntity)?.isSensor : undefined, false);
+});
+
 check("save validator allowlist keeps a placement sensor flag", () => {
   const layout = validateLayout({
     schema: 1,
