@@ -291,6 +291,41 @@ export function resolveCollisionProfile(
   };
 }
 
+/** Bit per object channel for Rapier interaction-group membership/filter masks. */
+export const COLLISION_OBJECT_CHANNEL_BITS: Record<CollisionObjectChannel, number> = {
+  worldStatic: 1 << 0,
+  worldDynamic: 1 << 1,
+  pawn: 1 << 2,
+  physicsBody: 1 << 3,
+  trigger: 1 << 4,
+};
+
+/**
+ * Packs a resolved profile into a Rapier interaction-groups value: the high 16
+ * bits are membership (the body's own object channel), the low 16 are the
+ * filter (object channels it does NOT ignore). Two colliders interact only when
+ * each one's membership intersects the other's filter — so `Ignore` on a channel
+ * filters that pair out entirely.
+ */
+export function collisionInteractionGroups(profile: CollisionProfile): number {
+  const memberships = COLLISION_OBJECT_CHANNEL_BITS[profile.objectType];
+  let filter = 0;
+  for (const channel of COLLISION_OBJECT_CHANNELS) {
+    if (profile.responses[channel] !== "ignore") filter |= COLLISION_OBJECT_CHANNEL_BITS[channel];
+  }
+  return ((memberships & 0xffff) << 16) | (filter & 0xffff);
+}
+
+/** Whether two packed interaction-group values interact (undefined = interact with all). */
+export function interactionGroupsInteract(a: number | undefined, b: number | undefined): boolean {
+  if (a === undefined || b === undefined) return true;
+  const aMem = a >>> 16;
+  const aFilter = a & 0xffff;
+  const bMem = b >>> 16;
+  const bFilter = b & 0xffff;
+  return (aMem & bFilter) !== 0 && (bMem & aFilter) !== 0;
+}
+
 export function isCollisionEnabled(value: unknown): value is CollisionEnabled {
   return typeof value === "string" && COLLISION_ENABLED_VALUES.includes(value as CollisionEnabled);
 }

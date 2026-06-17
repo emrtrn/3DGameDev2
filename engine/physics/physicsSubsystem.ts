@@ -6,6 +6,7 @@ import {
   type ColliderPrimitive,
   type TransformComponent,
 } from "../scene/components";
+import { interactionGroupsInteract } from "../scene/collision";
 import type { Entity, EntityId } from "../scene/entity";
 import type { PhysicsAabb, PhysicsContact, PhysicsQuery } from "../behavior/behaviorSubsystem";
 import type { Vec3 } from "../scene/layout";
@@ -184,6 +185,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         const b = this.bodies[j];
         if (!a || !b) continue;
         if (a.collider.isStatic && b.collider.isStatic) continue;
+        if (!interactionGroupsInteract(a.collider.collisionGroups, b.collider.collisionGroups)) {
+          continue;
+        }
         if (!aabbOverlaps(bodyAabb(a), bodyAabb(b))) continue;
         contacts.push({
           a: a.id,
@@ -379,6 +383,7 @@ function cloneCollider(collider: ColliderComponent): ColliderComponent {
   if (collider.simulationGeneratesHitEvents !== undefined) {
     clone.simulationGeneratesHitEvents = collider.simulationGeneratesHitEvents;
   }
+  if (collider.collisionGroups !== undefined) clone.collisionGroups = collider.collisionGroups;
   if (collider.simulatePhysics !== undefined) clone.simulatePhysics = collider.simulatePhysics;
   if (collider.massKg !== undefined) clone.massKg = collider.massKg;
   if (collider.linearDamping !== undefined) clone.linearDamping = collider.linearDamping;
@@ -406,6 +411,7 @@ function colliderDescsForBody(RAPIER: RapierModule, body: PhysicsBody) {
   if (!primitives || primitives.length === 0) return [colliderDescForBody(RAPIER, body)];
   const friction = body.collider.friction ?? DEFAULT_FRICTION;
   const restitution = body.collider.restitution ?? DEFAULT_RESTITUTION;
+  const groups = body.collider.collisionGroups;
   return primitives.map((primitive) => {
     const center = primitive.center ?? [0, 0, 0];
     const desc = colliderShapeDesc(RAPIER, primitive.shape, primitive.size)
@@ -413,6 +419,7 @@ function colliderDescsForBody(RAPIER: RapierModule, body: PhysicsBody) {
       .setFriction(friction)
       .setRestitution(restitution);
     if (primitive.rotation) desc.setRotation(quaternionFromEulerDegrees(primitive.rotation));
+    if (groups !== undefined) desc.setCollisionGroups(groups);
     return desc;
   });
 }
@@ -427,6 +434,9 @@ function colliderDescForBody(RAPIER: RapierModule, body: PhysicsBody) {
     .setTranslation(center[0] ?? 0, center[1] ?? 0, center[2] ?? 0)
     .setFriction(body.collider.friction ?? DEFAULT_FRICTION)
     .setRestitution(body.collider.restitution ?? DEFAULT_RESTITUTION);
+  if (body.collider.collisionGroups !== undefined) {
+    colliderDesc.setCollisionGroups(body.collider.collisionGroups);
+  }
   if (body.collider.simulatePhysics && body.collider.massKg !== undefined) {
     return colliderDesc.setMass(body.collider.massKg);
   }

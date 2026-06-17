@@ -124,9 +124,12 @@ import { colliderBoxFromBounds } from "../engine/render-three/transforms";
 import { collisionWireboxes } from "../engine/render-three/collisionView";
 import {
   COLLISION_CHANNELS,
+  COLLISION_OBJECT_CHANNEL_BITS,
   DEFAULT_COLLISION_COMPLEXITY,
   DEFAULT_COLLISION_PRESET,
+  collisionInteractionGroups,
   defaultAssetCollisionDef,
+  interactionGroupsInteract,
   resolveCollisionProfile,
   resolvePhysicalMaterial,
   type AssetCollisionDef,
@@ -3383,6 +3386,51 @@ check("custom preset honours object type and response overrides", () => {
   // Unset channels fall back to the custom base (block).
   assert.equal(profile.responses.worldStatic, "block");
 });
+check("collision groups pack membership/filter and gate ignored channels", () => {
+  const blockAll = collisionInteractionGroups(resolveCollisionProfile("blockAll"));
+  assert.equal(blockAll >>> 16, COLLISION_OBJECT_CHANNEL_BITS.worldStatic);
+  assert.equal(blockAll & 0xffff, 0b11111); // blocks every object channel
+
+  const ignoresPawn = collisionInteractionGroups(
+    resolveCollisionProfile("custom", { objectType: "pawn", responses: { pawn: "ignore" } }),
+  );
+  const pawn = collisionInteractionGroups(resolveCollisionProfile("pawn"));
+  // The custom object filters out the pawn channel, so it skips a pawn object…
+  assert.equal(interactionGroupsInteract(ignoresPawn, pawn), false);
+  // …but still interacts with a world-static block-all object, and an unset
+  // (undefined) groups value interacts with everything.
+  assert.equal(interactionGroupsInteract(ignoresPawn, blockAll), true);
+  assert.equal(interactionGroupsInteract(undefined, ignoresPawn), true);
+});
+
+check("collision groups suppress placeholder contacts across filtered channels", () => {
+  const physics = new PhysicsSubsystem();
+  const wallGroups = collisionInteractionGroups(
+    resolveCollisionProfile("custom", { objectType: "worldStatic", responses: { pawn: "ignore" } }),
+  );
+  const pawnGroups = collisionInteractionGroups(resolveCollisionProfile("pawn"));
+  physics.setEntities([
+    {
+      id: "wall",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: false, collisionGroups: wallGroups },
+      },
+    },
+    {
+      id: "pawn",
+      components: {
+        Transform: { position: [0.3, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false, collisionGroups: pawnGroups },
+      },
+    },
+  ]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.update(0.016);
+  assert.deepEqual(physics.contactsForEntity("pawn"), []);
+});
+
 check("default asset collision def is empty block-all", () => {
   const def = defaultAssetCollisionDef();
   assert.deepEqual(def.primitives, []);

@@ -43,6 +43,7 @@ import {
   type Vec3,
 } from "./layout";
 import {
+  collisionInteractionGroups,
   resolveCollisionProfile,
   resolvePhysicalMaterial,
   type AssetCollisionDef,
@@ -374,8 +375,15 @@ function colliderComponent(
   // collision-disabled preset drops the collider (unless it's a simulated
   // body), and a query-only preset becomes a non-blocking sensor. Physics
   // presets stay solid blockers.
-  const profile = source.collisionPreset
-    ? resolveCollisionProfile(source.collisionPreset)
+  // Effective preset: a placement override wins over the asset default.
+  const effectivePreset = source.collisionPreset ?? collisionDef?.preset;
+  const profile = effectivePreset
+    ? resolveCollisionProfile(
+        effectivePreset,
+        effectivePreset === "custom" && collisionDef?.responses
+          ? { responses: collisionDef.responses }
+          : undefined,
+      )
     : null;
   if (profile?.collisionEnabled === "none" && !simulatePhysics) return null;
   const isSensor = source.sensor === true || profile?.collisionEnabled === "query";
@@ -418,6 +426,9 @@ function colliderComponent(
   if (collisionDef?.simulationGeneratesHitEvents === false) {
     component.simulationGeneratesHitEvents = false;
   }
+  // Channel filtering: establish membership/filter so an Ignore response drops
+  // the pair. Objects without a preset stay unset (interact with everything).
+  if (profile) component.collisionGroups = collisionInteractionGroups(profile);
   copyPhysicsSettings(component, source.physics);
   return component;
 }
