@@ -280,8 +280,9 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 ### Faz 7 — Runtime Bağlama (Rapier)
 
 - [x] Placement `collisionPreset` → runtime collider eşlemesi (`legacyRoomLayoutAdapter`): `none`=collider yok, `query`=sensor, `physics/queryAndPhysics`=solid
-- [x] Asset sidecar'larını async yükle (SceneApp `refreshCollisionDefs`) — şimdilik **overlay görselleştirme** için (Show>Collision)
-- [ ] Asset primitiflerini runtime **fizik** collider'ına derle (Rapier, çok-primitifli — şu an fizik hâlâ tek box)
+- [x] Asset sidecar'larını async yükle (SceneApp `refreshCollisionDefs` + RuntimeSceneApp `loadCollisionDefs`, manifest dosya yolundan)
+- [x] Asset primitiflerini runtime **fizik** collider'ına derle: `ColliderComponent.primitives[]`, adapter scale-baked + AABB, Rapier **compound** (primitif başına collider). Editör (SceneApp) ve oyun (RuntimeSceneApp) ikisinde de bağlı
+- [ ] `convex` primitif şu an bounding-box ile yaklaşık (gerçek convex hull sonra)
 - [ ] Kanal yanıtları → Rapier **collision groups** (membership/filter bitmask)
 - [ ] Convex hull (Rapier `convexHull`) ve (ertele) trimesh complex collision
 - [ ] Phys material → collider friction/restitution/density (sabit 0.8/0 yerine)
