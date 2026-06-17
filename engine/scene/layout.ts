@@ -1,3 +1,5 @@
+import type { CollisionPresetId } from "./collision";
+
 export type Vec3 = [number, number, number];
 export type LayoutLightType = "directional" | "point" | "spot";
 
@@ -71,6 +73,8 @@ export interface LayoutPlacement {
   castShadow?: boolean;
   /** Runtime hint: object participates in collision. Absent means true (default on). */
   collision?: boolean;
+  /** Per-placement collision preset override; absent means inherit the asset default. */
+  collisionPreset?: CollisionPresetId;
   /** Runtime hint: collider is a non-blocking sensor (trigger zone). Absent means false. */
   sensor?: boolean;
   /** Runtime hint: this object is a dynamic rigid body in Play mode. Absent means false. */
@@ -119,6 +123,8 @@ export interface LayoutCharacter {
   castShadow?: boolean;
   /** Runtime hint: object participates in collision. Absent means true (default on). */
   collision?: boolean;
+  /** Per-placement collision preset override; absent means inherit the asset default. */
+  collisionPreset?: CollisionPresetId;
   /** Runtime hint: collider is a non-blocking sensor (trigger zone). Absent means false. */
   sensor?: boolean;
   /** Runtime hint: this object is a dynamic rigid body in Play mode. Absent means false. */

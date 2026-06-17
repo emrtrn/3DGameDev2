@@ -200,6 +200,12 @@ export function applyTransformFields(
   if (entry.scaleLocked === true) target.scaleLocked = true;
   if (entry.castShadow === false) target.castShadow = false;
   if (entry.collision === false) target.collision = false;
+  if (entry.collisionPreset !== undefined) {
+    if (!isCollisionPresetId(entry.collisionPreset)) {
+      throw new Error(`invalid ${label} collisionPreset`);
+    }
+    target.collisionPreset = entry.collisionPreset;
+  }
   if (entry.sensor === true) target.sensor = true;
   if (entry.simulatePhysics === true) target.simulatePhysics = true;
   const physics = validatePhysics(entry.physics, label);

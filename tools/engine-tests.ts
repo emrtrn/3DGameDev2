@@ -3139,6 +3139,16 @@ check("asset collision validator rejects unknown shape and preset", () => {
     validateAssetCollisionDef({ primitives: [], complexity: "projectDefault", preset: "nope" }),
   );
 });
+check("placement validator keeps a valid collisionPreset and rejects bad ones", () => {
+  const placement = validatePlacement({
+    position: [0, 0, 0],
+    collisionPreset: "trigger",
+  });
+  assert.equal(placement.collisionPreset, "trigger");
+  assert.throws(() => validatePlacement({ position: [0, 0, 0], collisionPreset: "nope" }));
+  // Absent override stays absent (inherits asset default).
+  assert.equal(validatePlacement({ position: [0, 0, 0] }).collisionPreset, undefined);
+});
 check("collision save payload requires a .collision.json path", () => {
   const payload = validateSaveCollisionPayload({
     path: "assets/props/chair.collision.json",

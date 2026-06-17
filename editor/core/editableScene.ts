@@ -1,4 +1,5 @@
 import type { LayoutLightActor, LayoutMetadata, LayoutPhysics, Vec3 } from "@engine/scene/layout";
+import type { CollisionPresetId } from "@engine/scene/collision";
 import type { Selection } from "./selection";
 
 export interface EditableTransform {
@@ -27,6 +28,8 @@ export interface EditableSelection {
   castShadow: boolean;
   /** Resolved collision flag (absent in data means true). */
   collision: boolean;
+  /** Per-placement collision preset override; absent means inherit asset default. */
+  collisionPreset?: CollisionPresetId;
   /** Dynamic rigid-body simulation in Play mode. */
   simulatePhysics: boolean;
   /** Runtime physics settings for the selected object. */

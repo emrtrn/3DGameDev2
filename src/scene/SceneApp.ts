@@ -114,6 +114,7 @@ import type {
   RoomLayout,
   Vec3,
 } from "@engine/scene/layout";
+import type { CollisionPresetId } from "@engine/scene/collision";
 import {
   lightEntity,
   roomLayoutToSceneDocument,
@@ -1692,6 +1693,11 @@ export class SceneApp {
   /** Details "Simulate Physics" toggle for the active selection (default off). */
   setSelectionSimulatePhysics(value: boolean): void {
     this.editorSceneController.setSelectionSimulatePhysics(value);
+  }
+
+  /** Details "Collision" section preset override (undefined inherits asset default). */
+  setSelectionCollisionPreset(value: CollisionPresetId | undefined): void {
+    this.editorSceneController.setSelectionCollisionPreset(value);
   }
 
   /** Details Physics section settings for the active selection. */

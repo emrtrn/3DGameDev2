@@ -265,14 +265,14 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 
 ### Faz 6 — Sahne Objesi Details (Collision başlığı alt kümesi)
 
-- [ ] Seçili objenin Details'ında `Collision` başlığı (mevcut tek toggle'ı bölüme yükselt)
-- [ ] **Collision Presets** (Default = asset'ten miras / Custom override)
-- [ ] **Collision Enabled** durumu (none/query/physics/queryAndPhysics)
-- [ ] **Generate Overlap Events** (bool)
-- [ ] **Simulation Generates Hit Events** (bool)
-- [ ] **Phys Material Override** (referans)
-- [ ] Custom seçilince per-kanal yanıt matrisi (Block/Overlap/Ignore)
-- [ ] Override yokken asset default'unu gösteren "inherited" durumu
+- [x] Seçili objenin Details'ında `Collision` başlığı (toggle bölüme yükseltildi)
+- [x] **Collision Presets** override dropdown (Inherit = asset default / preset id)
+- [x] Override yokken "Inherit (asset default)" gösterimi; undo/redo destekli
+- [x] Placement-düzeyi `collisionPreset` alanı + save validator allowlist
+- [ ] **Collision Enabled** durumu (none/query/physics/queryAndPhysics) — sonra
+- [ ] **Generate Overlap Events** / **Simulation Generates Hit Events** (bool) — sonra
+- [ ] **Phys Material Override** (referans) — sonra
+- [ ] Custom seçilince per-kanal yanıt matrisi (Block/Overlap/Ignore) — sonra
 
 ### Faz 7 — Runtime Bağlama (Rapier)
 

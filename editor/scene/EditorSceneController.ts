@@ -44,6 +44,7 @@ import type {
   RoomLayout,
 } from "@engine/scene/layout";
 import { metadataValuesEqual } from "@engine/scene/metadataSchema";
+import type { CollisionPresetId } from "@engine/scene/collision";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
@@ -57,6 +58,7 @@ type MutableHierarchyTransform = {
   scaleLocked?: boolean;
   castShadow?: boolean;
   collision?: boolean;
+  collisionPreset?: CollisionPresetId;
   simulatePhysics?: boolean;
   physics?: LayoutPhysics;
   metadata?: LayoutMetadata;
@@ -614,6 +616,34 @@ export class EditorSceneController {
     if (!this.selection || !this.host.hasSelection(this.selection)) return;
     if (this.selection.kind === "light") return;
     this.setSelectionFlag(this.selection, "simulatePhysics", value);
+  }
+
+  /** Sets (or clears, when `undefined`) the per-placement collision preset override. */
+  setSelectionCollisionPreset(value: CollisionPresetId | undefined): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    if (this.selection.kind === "light") return;
+    const target = this.host.getMutableTransform(this.selection);
+    if (!target) return;
+    const previous = target.collisionPreset;
+    if (previous === value) return;
+    const commandSelection = cloneSelection(this.selection);
+    this.executeCommand({
+      label: "Set collision preset",
+      redo: () => this.applyCollisionPreset(commandSelection, value),
+      undo: () => this.applyCollisionPreset(commandSelection, previous),
+    });
+  }
+
+  private applyCollisionPreset(
+    selection: Selection,
+    value: CollisionPresetId | undefined,
+  ): void {
+    if (selection.kind === "light") return;
+    const target = this.host.getMutableTransform(selection);
+    if (!target) return;
+    if (value === undefined) delete target.collisionPreset;
+    else target.collisionPreset = value;
+    this.host.emitSelectionChanged();
   }
 
   setSelectionPhysics(patch: Partial<LayoutPhysics>): void {

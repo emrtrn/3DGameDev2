@@ -31,6 +31,7 @@ import {
 } from "@/project/ProjectAssetTree";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { GAME_MODE_OPTIONS } from "@/game/gameModes/catalog";
+import { COLLISION_PRESET_IDS, type CollisionPresetId } from "@engine/scene/collision";
 import {
   nextTransformTool,
   type EditorTool,
@@ -42,6 +43,18 @@ type InspectorTab = "details" | "world";
 const DEFAULT_LINEAR_DAMPING = 0.12;
 const DEFAULT_ANGULAR_DAMPING = 0.45;
 const PHYSICS_AXIS_LABELS = ["X", "Y", "Z"] as const;
+
+const COLLISION_PRESET_LABELS: Record<CollisionPresetId, string> = {
+  noCollision: "No Collision",
+  blockAll: "Block All",
+  overlapAll: "Overlap All",
+  blockAllDynamic: "Block All Dynamic",
+  overlapAllDynamic: "Overlap All Dynamic",
+  pawn: "Pawn",
+  physicsActor: "Physics Actor",
+  trigger: "Trigger",
+  custom: "Custom",
+};
 
 const TOOL_LABELS: Record<EditorTool, string> = {
   select: "Select",
@@ -1269,13 +1282,8 @@ export class EditorUi {
           <span>Lock Movement</span>
         </label>
         ${castShadowToggle}
-        <label class="detail-toggle">
-          <input type="checkbox" data-detail-toggle="collision" ${
-            selection.collision ? "checked" : ""
-          } />
-          <span>Collision</span>
-        </label>
       </div>
+      ${this.renderCollisionSection(selection)}
       ${this.renderPhysicsSection(selection, selection.locked)}
       ${this.renderMetadataSections(selection)}
     `;
@@ -1351,8 +1359,50 @@ export class EditorUi {
         );
       });
 
+    this.detailsBody
+      .querySelector<HTMLSelectElement>("[data-collision-preset]")
+      ?.addEventListener("change", (event) => {
+        const value = (event.target as HTMLSelectElement).value;
+        this.app.setSelectionCollisionPreset(value ? (value as CollisionPresetId) : undefined);
+      });
+
     this.bindPhysicsInputs();
     this.bindMetadataInputs();
+  }
+
+  /**
+   * Per-object Collision section. Mirrors Unreal's component-level collision:
+   * the Collision toggle plus a preset override that defaults to the asset's
+   * collision definition ("inherit") until the user picks one.
+   */
+  private renderCollisionSection(selection: EditableSelection): string {
+    const presetOptions = [
+      `<option value="" ${selection.collisionPreset ? "" : "selected"}>Inherit (asset default)</option>`,
+    ]
+      .concat(
+        COLLISION_PRESET_IDS.map(
+          (id) =>
+            `<option value="${id}" ${
+              selection.collisionPreset === id ? "selected" : ""
+            }>${COLLISION_PRESET_LABELS[id]}</option>`,
+        ),
+      )
+      .join("");
+    return `
+      <div class="detail-section">
+        <div class="detail-section-title">Collision</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-detail-toggle="collision" ${
+            selection.collision ? "checked" : ""
+          } />
+          <span>Collision</span>
+        </label>
+        <label class="detail-row">
+          <span>Collision Presets</span>
+          <select data-collision-preset>${presetOptions}</select>
+        </label>
+      </div>
+    `;
   }
 
   private renderPhysicsSection(selection: EditableSelection, locked: boolean): string {
