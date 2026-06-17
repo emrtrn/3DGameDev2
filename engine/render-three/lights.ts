@@ -123,6 +123,28 @@ export function configureShadowCastingLight(
   }
 }
 
+/**
+ * Apply an item's transform to a light record: root position/rotation/visibility
+ * plus the directional/spot target placement (a directional light is lit by the
+ * vector from its world position to its target, so the target must be positioned
+ * or the light contributes no direction at all). Shared by `createLightObject`
+ * and `syncLightObject` so a light is correctly aimed the moment it is built —
+ * the runtime shell never calls `syncLightObject`, so creation must stand alone.
+ */
+function applyLightTransform(record: LightObjectRecord, item: LightRenderItem): void {
+  record.root.position.set(...item.position);
+  applyEulerDegrees(record.root, item.rotation);
+  record.root.visible = !item.hidden;
+  if (record.target) {
+    const [rx, ry, rz] = item.rotation.map(degreesToRadians) as [number, number, number];
+    const direction = new Vector3(0, 0, -1)
+      .applyEuler(new Euler(rx, ry, rz))
+      .normalize();
+    record.target.position.copy(record.root.position).add(direction);
+    record.target.updateMatrixWorld();
+  }
+}
+
 export function createLightObject(
   item: LightRenderItem,
   defaultColor: ColorRepresentation,
@@ -157,7 +179,11 @@ export function createLightObject(
   root.add(light);
   const gizmo = buildLightGizmo(item, color);
   root.add(gizmo);
-  return target ? { root, light, target, gizmo } : { root, light, gizmo };
+  const record: LightObjectRecord = target
+    ? { root, light, target, gizmo }
+    : { root, light, gizmo };
+  applyLightTransform(record, item);
+  return record;
 }
 
 export function syncLightObject(
@@ -166,9 +192,7 @@ export function syncLightObject(
   options: { defaultColor: ColorRepresentation; selected: boolean },
 ): void {
   record.root.name = item.name;
-  record.root.position.set(...item.position);
-  applyEulerDegrees(record.root, item.rotation);
-  record.root.visible = !item.hidden;
+  applyLightTransform(record, item);
 
   const color = new Color(item.color ?? options.defaultColor);
   record.light.color.copy(color);
@@ -181,19 +205,6 @@ export function syncLightObject(
   if (record.light instanceof SpotLight) {
     record.light.angle = degreesToRadians(item.angle ?? 30);
     record.light.penumbra = item.penumbra ?? 0.35;
-  }
-
-  if (record.target) {
-    const [rx, ry, rz] = item.rotation.map(degreesToRadians) as [
-      number,
-      number,
-      number,
-    ];
-    const direction = new Vector3(0, 0, -1)
-      .applyEuler(new Euler(rx, ry, rz))
-      .normalize();
-    record.target.position.copy(record.root.position).add(direction);
-    record.target.updateMatrixWorld();
   }
 
   // Rebuild the wireframe so cone angle / sphere radius / color track the light.

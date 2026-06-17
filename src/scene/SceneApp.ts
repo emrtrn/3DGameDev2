@@ -79,6 +79,7 @@ import {
   fitDirectionalShadowToBounds,
   isSceneSunLight,
   readSceneRuntimeStats,
+  registerSceneShapeModels,
   resolveSceneWorldSettings,
   resizeSceneRuntimeViewport,
   SCENE_CAMERA_TARGET,
@@ -1388,9 +1389,7 @@ export class SceneApp {
 
   /** Register synthetic models for any `shape:<type>` instances in the layout. */
   private registerShapeModelsFromLayout(): void {
-    for (const instance of this.layout?.instances ?? []) {
-      this.ensureShapeModel(instance.assetId);
-    }
+    registerSceneShapeModels(this.layout, this.models, this.localBounds);
   }
 
   /** Lazily build + register the procedural model and bounds for a shape asset. */

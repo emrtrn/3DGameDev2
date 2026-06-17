@@ -1389,30 +1389,39 @@ type RuntimeSessionControls = {
 ```md
 # Playing & Simulating Checklist
 
-- [ ] Forge'da resmi kavram olarak `PlaySession` tanımla.
+- [x] Forge'da resmi kavram olarak `PlaySession` tanımla.
+      (gerçeklendi: `GameModeSession` + runtime-only `PlayerState`/`GameState`,
+      `src/game/gameModes/types.ts`)
   - Kaynak: saved layout
   - Çalıştırıcı: RuntimeSceneApp
   - State: geçici runtime state
 
-- [ ] Play akışını koru:
+- [x] Play akışını koru:
   - Editor current layout'u kaydeder.
   - Game route `/` açılır.
   - RuntimeSceneApp aynı layout'u yükler.
   - Editor code Game Mode'a import edilmez.
 
-- [ ] Play sırasında oluşan runtime değişiklikleri layout'a otomatik yazma.
+- [x] Play sırasında oluşan runtime değişiklikleri layout'a otomatik yazma.
+      (guardrail korundu: session'lar layout'a yazmaz; `types.ts` sözleşmesi
+      bunu açıkça not eder; save-validator runtime alanlarını düşürür)
   - Physics sonuçları
   - Spawn edilen actor'lar
   - Mission/save progress
   - Particle/audio runtime state
 
 - [ ] `Keep Runtime Changes` özelliğini ileride ayrı ve bilinçli komut olarak tasarla.
+      (YAPILMADI — bilinçli ertelendi, Backlog B4. Guardrail yerinde: runtime
+      state hiç yazılmıyor, ama "seçerek geri aktarma" komutu yok.)
   - Sadece authored actor'lar.
   - Sadece allowlisted component/property alanları.
   - Runtime spawned actor'lar otomatik alınmaz.
   - Undo/redo command üzerinden uygulanır.
 
 - [ ] `PlaySessionConfig` modeli düşün:
+      (YAPILMADI — kısmi örtüşme var: `defaultPawn` + `playerController`
+      sözleşmeleri mevcut; ama `openMode`/`saveBeforePlay`/`startLocation`/
+      `debugOverlay`/`playFromHere` modellenmedi. `?debug` overlay ayrı mekanizma.)
   - `openMode`: `newTab | sameTab | popup`
   - `saveBeforePlay`
   - `startLocation`: `defaultPlayerStart | editorCamera | custom`
@@ -1420,30 +1429,40 @@ type RuntimeSessionControls = {
   - `playFromHere?`
 
 - [ ] `Play From Here` özelliğini planla.
+      (YAPILMADI — bilinçli ertelendi, Backlog B4. `playOverride` yalnızca
+      dokümanda; viewport sağ-tık / session override kodu yok.)
   - Viewport sağ tık noktasından başlat.
   - Layout'a yazma.
   - Sadece geçici session override kullan.
 
 - [ ] Runtime debug kontrolleri eklemeyi planla:
+      (YAPILMADI — Backlog B4. `RuntimeSessionControls` (pause/resume/stepFrame/
+      restart/stop) kodda yok; `GameModeSession` lifecycle bu hook'lara hazır zemin.)
   - Pause
   - Resume
   - Step Frame
   - Restart
   - Stop
 
-- [ ] `Simulate Mode` kavramını şimdilik ertele ama mimari olarak hazır tut.
+- [x] `Simulate Mode` kavramını şimdilik ertele ama mimari olarak hazır tut.
+      (bilinçli ertelendi — "Preview / Simulate / Game ayrımı yapılmayacak"
+      kararı; mimari hazır: `GameModeSession` lifecycle + runtime-only state
+      yüzeyleri Simulate'i ileride yutabilir.)
   - Editor viewport içinde runtime systems çalışır.
   - Editor araçları açık kalır.
   - Authoring state ve simulation state ayrılır.
 
-- [ ] Possess / Eject kavramlarını TPS/FPS aşaması için not et.
-  - Possess: player controller'a bağlan.
-  - Eject: player'dan çık, debug/editor camera ile gözlemle.
+- [~] Possess / Eject kavramlarını TPS/FPS aşaması için not et.
+      (KISMİ — Possess yalnızca not edilmedi, **uygulandı**: `GameModeSession.possess`
+      + `PlayerControllerDefinition.possess` sözleşmesi. Eject henüz yok.)
+  - [x] Possess: player controller'a bağlan.  (uygulandı)
+  - [ ] Eject: player'dan çık, debug/editor camera ile gözlemle.  (yok)
 
-- [ ] Multiplayer/network Play ayarlarını şimdilik kapsam dışı tut.
-- [ ] Game Mode ve Editor Mode sınırını testlerle koru.
-  - `npm run build:verify`
-  - dist içinde editor UI/authoring middleware bulunmamalı.
+- [x] Multiplayer/network Play ayarlarını şimdilik kapsam dışı tut.
+      (eklenmedi — kapsam dışı korundu)
+- [x] Game Mode ve Editor Mode sınırını testlerle koru.
+  - `npm run build:verify`  (geçiyor — 112 check)
+  - dist içinde editor UI/authoring middleware bulunmamalı.  (strict dist scan PASS)
 ```
 
 ---

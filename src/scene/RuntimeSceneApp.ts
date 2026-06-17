@@ -37,6 +37,7 @@ import {
   fitDirectionalShadowToBounds,
   isSceneSunLight,
   readSceneRuntimeStats,
+  registerSceneShapeModels,
   resolveSceneWorldSettings,
   resizeSceneRuntimeViewport,
   startSceneRuntime,
@@ -208,6 +209,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
     const convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);
     this.localBounds = computeModelLocalBounds(this.models);
+    // Shape actors persist as `shape:<type>` instances whose synthetic models are
+    // not in any loadGroup; register them before the scene is built, or the
+    // instanced-model builder throws and aborts scene construction (the editor
+    // does the same via registerShapeModelsFromLayout).
+    registerSceneShapeModels(this.layout, this.models, this.localBounds);
 
     buildSceneEntities(this.layout, {
       addInstance: (assetId, placements) =>

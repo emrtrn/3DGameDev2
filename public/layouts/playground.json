@@ -489,6 +489,7 @@
             1.54
           ],
           "name": "Cube 2",
+          "simulatePhysics": true,
           "scale": 1
         }
       ]
@@ -503,6 +504,7 @@
             1.56
           ],
           "name": "Sphere",
+          "simulatePhysics": true,
           "scale": 1
         }
       ]
@@ -517,6 +519,7 @@
             1.02
           ],
           "name": "Cylinder",
+          "simulatePhysics": true,
           "scale": 1
         }
       ]
@@ -531,6 +534,7 @@
             0.87
           ],
           "name": "Cone",
+          "simulatePhysics": true,
           "scale": 1
         }
       ]
@@ -568,7 +572,8 @@
   "worldSettings": {
     "staticObjectsCastShadow": true,
     "backgroundColor": "#404040",
-    "ambientIntensity": 1
+    "ambientIntensity": 1,
+    "gameMode": "forge.tpsCharacter"
   },
   "lights": [
     {
@@ -588,6 +593,28 @@
       "color": "#ffffff",
       "intensity": 2,
       "castShadow": true
+    },
+    {
+      "id": "spot-light-mqhnwndi-2rv",
+      "type": "spot",
+      "position": [
+        0.16,
+        0.94,
+        0.13
+      ],
+      "name": "Spot Light",
+      "rotation": [
+        -55,
+        35,
+        0
+      ],
+      "color": "#ffffff",
+      "intensity": 5,
+      "castShadow": true,
+      "distance": 30,
+      "angle": 30,
+      "penumbra": 0.35,
+      "decay": 2
     }
   ]
 }

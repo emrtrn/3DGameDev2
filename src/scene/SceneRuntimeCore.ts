@@ -34,6 +34,8 @@ import {
   instanceEntitiesForAsset,
   lightEntity,
 } from "@engine/scene/legacyRoomLayoutAdapter";
+import { parseShapeAssetId } from "@engine/scene/shapes";
+import { createShapePrimitiveGltf } from "./shapePrimitives";
 import type {
   LayoutCharacter,
   LayoutLightActor,
@@ -316,6 +318,33 @@ export function computeModelLocalBounds(
     localBounds.set(assetId, new Box3().setFromObject(gltf.scene));
   }
   return localBounds;
+}
+
+/**
+ * Register synthetic procedural models for every `shape:<type>` instance in the
+ * layout, mutating `models` + `localBounds` in place. Shape actors persist as
+ * ordinary instances under a synthetic `shape:<type>` asset id that no loadGroup
+ * provides, so both shells must build the primitive GLTF (and its bounds) before
+ * the scene is constructed — otherwise the instanced-model builder throws on the
+ * missing asset, aborting the rest of scene construction (lights, characters,
+ * world settings included). Already-registered or non-shape ids are skipped.
+ */
+export function registerSceneShapeModels(
+  layout: RoomLayout | null,
+  models: Map<string, GLTF>,
+  localBounds: Map<string, Box3>,
+): void {
+  for (const instance of layout?.instances ?? []) {
+    const assetId = instance.assetId;
+    if (models.has(assetId)) continue;
+    const type = parseShapeAssetId(assetId);
+    if (!type) continue;
+    const gltf = createShapePrimitiveGltf(type);
+    models.set(assetId, gltf);
+    for (const [id, box] of computeModelLocalBounds(new Map([[assetId, gltf]]))) {
+      localBounds.set(id, box);
+    }
+  }
 }
 
 /**
