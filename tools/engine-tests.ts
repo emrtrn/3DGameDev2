@@ -120,6 +120,13 @@ import {
 import type { LayoutCharacter, LayoutLightActor, RoomLayout } from "../engine/scene/layout";
 import { colliderBoxFromBounds } from "../engine/render-three/transforms";
 import { collisionWireboxes } from "../engine/render-three/collisionView";
+import {
+  COLLISION_CHANNELS,
+  DEFAULT_COLLISION_COMPLEXITY,
+  DEFAULT_COLLISION_PRESET,
+  defaultAssetCollisionDef,
+  resolveCollisionProfile,
+} from "../engine/scene/collision";
 import type { LightObjectRecord } from "../engine/render-three/lights";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
@@ -3062,6 +3069,50 @@ check("tps mode prefers a metadata-tagged player over input-move order", () => {
   const session = tpsCharacterGameMode.createSession(context);
   session.spawnDefaultPawn();
   assert.equal(session.playerState.pawnEntityId, characterEntityId(1));
+});
+
+// Collision model: preset resolution + defaults.
+check("blockAll preset blocks every channel with query+physics", () => {
+  const profile = resolveCollisionProfile("blockAll");
+  assert.equal(profile.collisionEnabled, "queryAndPhysics");
+  assert.equal(profile.objectType, "worldStatic");
+  for (const channel of COLLISION_CHANNELS) {
+    assert.equal(profile.responses[channel], "block", `channel ${channel}`);
+  }
+});
+check("noCollision preset ignores everything with collision disabled", () => {
+  const profile = resolveCollisionProfile("noCollision");
+  assert.equal(profile.collisionEnabled, "none");
+  for (const channel of COLLISION_CHANNELS) {
+    assert.equal(profile.responses[channel], "ignore", `channel ${channel}`);
+  }
+});
+check("trigger preset overlaps objects but ignores trace channels", () => {
+  const profile = resolveCollisionProfile("trigger");
+  assert.equal(profile.collisionEnabled, "query");
+  assert.equal(profile.objectType, "trigger");
+  assert.equal(profile.responses.pawn, "overlap");
+  assert.equal(profile.responses.visibility, "ignore");
+  assert.equal(profile.responses.camera, "ignore");
+});
+check("custom preset honours object type and response overrides", () => {
+  const profile = resolveCollisionProfile("custom", {
+    collisionEnabled: "query",
+    objectType: "pawn",
+    responses: { pawn: "overlap", visibility: "ignore" },
+  });
+  assert.equal(profile.collisionEnabled, "query");
+  assert.equal(profile.objectType, "pawn");
+  assert.equal(profile.responses.pawn, "overlap");
+  assert.equal(profile.responses.visibility, "ignore");
+  // Unset channels fall back to the custom base (block).
+  assert.equal(profile.responses.worldStatic, "block");
+});
+check("default asset collision def is empty block-all", () => {
+  const def = defaultAssetCollisionDef();
+  assert.deepEqual(def.primitives, []);
+  assert.equal(def.preset, DEFAULT_COLLISION_PRESET);
+  assert.equal(def.complexity, DEFAULT_COLLISION_COMPLEXITY);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);
