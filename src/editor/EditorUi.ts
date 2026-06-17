@@ -746,6 +746,12 @@ export class EditorUi {
       }
       this.app.beginAssetPlacement(item.editable.id);
     });
+    if (item.type === "model") {
+      card.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        void this.openStaticMeshEditor(item);
+      });
+    }
     const thumb = card.querySelector<HTMLElement>("[data-asset-thumb]");
     if (thumb && item.type === "model") void this.renderAssetThumbnail(item, thumb);
     return card;
@@ -765,6 +771,27 @@ export class EditorUi {
       thumb.append(image);
     } catch {
       if (thumb.isConnected) thumb.textContent = item.ext.toUpperCase();
+    }
+  }
+
+  /**
+   * Opens the Static Mesh editor for a model asset (Content Browser
+   * double-click). Dynamically imported so its Three.js geometry helpers stay
+   * out of the editor entry until a model is actually opened.
+   */
+  private async openStaticMeshEditor(item: BrowserAssetItem): Promise<void> {
+    try {
+      const { StaticMeshEditor } = await import("@/editor/StaticMeshEditor");
+      StaticMeshEditor.open({
+        modelPath: item.path,
+        label: item.label,
+        onStatus: (message, tone) => this.setStatus(message, tone),
+      });
+    } catch (error) {
+      this.setStatus(
+        `Could not open Static Mesh editor: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
     }
   }
 

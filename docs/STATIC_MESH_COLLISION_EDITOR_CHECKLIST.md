@@ -225,42 +225,43 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [ ] `LayoutPlacement` override alanları: `collisionPreset?`, `collisionEnabled?`, `objectType?`, `responses?` (mevcut `collision`/`sensor`/`simulatePhysics` korunur)
 - [ ] `readColliderComponent` / okuyucuları yeni alanlara genişlet + birim testleri (`tools/engine-tests.ts`)
 
-### Faz 2 — Static Mesh Editor Kabuğu (sekme + viewport)
+### Faz 2 — Static Mesh Editor Kabuğu (overlay + viewport)
 
-- [ ] Editöre hafif "document host" / sekme şeridi ekle (Level + asset sekmeleri)
-- [ ] Content Browser asset kartına `dblclick` ekle → model asset ise SM Editor sekmesi aç (`createAssetCard`, `EditorUi.ts`)
-- [ ] SM Editor viewport: grid + ışık + arkaplan (ThumbnailRenderer kurulumunu pay et)
-- [ ] Orbit/pan/dolly kamera (EditorCameraController mantığını yeniden kullan)
-- [ ] Seçili asset modelini GLTF ile yükle ve ortala/çerçevele
-- [ ] Sekme başlığı = asset adı, kapatılabilir; aynı asset için tek sekme
+- [~] Editöre overlay doküman ekle (`src/editor/StaticMeshEditor.ts`); gerçek sekme şeridi sonraki faz
+- [x] Content Browser asset kartına `dblclick` ekle → model asset ise SM Editor aç (`createAssetCard` → `openStaticMeshEditor`)
+- [x] SM Editor viewport: grid + ışık + arkaplan
+- [x] Orbit/pan/dolly kamera (minimal inline controller)
+- [x] Seçili asset modelini GLTF ile yükle ve ortala/çerçevele
+- [x] Başlık = asset adı, kapatılabilir (Esc); aynı anda tek editör
+- [x] Dinamik import ile lazy yükleme (editor entry'yi şişirmez); production'da DEV-gate ile elenir
 
 ### Faz 3 — Collision Toolbar (üst bar "Collision" menüsü)
 
-- [ ] Üst barda `Collision` açılır menüsü
-- [ ] Add **Sphere** / **Capsule** / **Box** Simplified Collision (model bounds'tan otomatik boyut)
-- [ ] Seçili collision primitifi: **Delete / Duplicate / Copy / Paste**
-- [ ] **Remove Collision** (hepsini temizle)
-- [ ] (3b, ertelenebilir) **K-DOP**: 10DOP-X/Y/Z, 18DOP, 26DOP convex hull üretimi
+- [x] Üst barda `Collision` açılır menüsü
+- [x] Add **Sphere** / **Capsule** / **Box** Simplified Collision (model bounds'tan otomatik boyut)
+- [x] Seçili collision primitifi: **Delete / Duplicate** (Copy/Paste sonra)
+- [x] **Remove Collision** (hepsini temizle)
+- [ ] (3b, ertelenebilir) **K-DOP**: 10DOP-X/Y/Z, 18DOP, 26DOP convex hull üretimi (menüde grey placeholder var)
 - [ ] (3b, ertelenebilir) **Convert Boxes to Convex**, **Auto Convex Collision** (V-HACD parametreleri)
 - [ ] (opsiyonel) **Copy Collision from Selected Static Mesh**
 
 ### Faz 4 — Viewport'ta Collision Düzenleme & Görselleştirme
 
-- [ ] Eklenen collision primitiflerini wireframe overlay olarak çiz
-- [ ] Primitif seçimi (tıkla) + transform gizmo ile taşı/ölçekle (mevcut gizmo altyapısını pay et)
+- [x] Eklenen collision primitiflerini wireframe overlay olarak çiz
+- [~] Primitif seçimi (details listesinden) + seçili vurgusu; viewport gizmo ile taşı/ölçekle sonra
 - [ ] "Show Simple/Complex Collision" görünürlük toggle'ı
 - [ ] Sahne viewport'unda da collider görselleştirme tutarlılığı (mevcut `getShowCollision` ile uyum)
 
 ### Faz 5 — SM Editor Details Paneli (Collision başlığı)
 
-- [ ] Collision bölümü: **Collision Presets** (dropdown)
-- [ ] **Collision Complexity** (dropdown)
-- [ ] **Customized Collision** (bool)
-- [ ] **Simple Collision Physical Material** (referans/seç)
+- [x] Collision bölümü: **Collision Presets** (dropdown)
+- [x] **Collision Complexity** (dropdown)
+- [ ] **Customized Collision** (bool) — preset=custom ile örtüşüyor; ayrı toggle sonra
+- [x] **Simple Collision Physical Material** (text referans)
 - [ ] **Complex Collision Mesh** (referans, complex fazında aktif)
-- [ ] **Double Sided Geometry** (bool, complex fazında)
-- [ ] **Primitives** listesi (eklenen simple collider'lar; sayı + tip)
-- [ ] Değişiklikleri asset-düzeyi collision tanımına yaz (autosave/explicit save)
+- [x] **Double Sided Geometry** (bool)
+- [x] **Primitives** listesi (eklenen simple collider'lar; sayı + tip + sil)
+- [x] Değişiklikleri asset-düzeyi collision tanımına yaz (explicit Save / Ctrl+S)
 
 ### Faz 6 — Sahne Objesi Details (Collision başlığı alt kümesi)
 
@@ -285,11 +286,11 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 
 ### Faz 8 — Persistans & Save Validator
 
-- [ ] Asset-düzeyi collision tanımı için saklama formatı (sidecar/catalog) + yazma yolu
-- [ ] `applyTransformFields`'e yeni placement override alanlarını ekle (`tools/saveValidator.ts`)
-- [ ] Asset collision tanımı için validator/normalizer
-- [ ] Geriye dönük uyum: eski layout'larda eksik alanlar güvenli default'a düşsün
-- [ ] CLAUDE.md "save-validator allowlist gotcha" notunu yeni alanlarla güncelle
+- [x] Asset-düzeyi collision tanımı için saklama formatı (`*.collision.json` sidecar) + `/__save-collision` yazma yolu (`vite.config.ts`)
+- [ ] `applyTransformFields`'e yeni placement override alanlarını ekle (`tools/saveValidator.ts`) — Faz 6 ile
+- [x] Asset collision tanımı için validator (`validateAssetCollisionDef`) + normalizer (`normalizeAssetCollisionDef`)
+- [x] Geriye dönük uyum: eksik/bozuk sidecar güvenli default'a düşer (`loadAssetCollision`)
+- [ ] CLAUDE.md "save-validator allowlist gotcha" notunu yeni alanlarla güncelle — Faz 6 ile
 
 ### Faz 9 — Test & Doküman
 
