@@ -188,6 +188,77 @@ function validateAudio(value: unknown, label: string): Record<string, unknown> |
   return audio;
 }
 
+const PARTICLE_MATERIAL_MODES = new Set(["additive", "alpha"]);
+
+/** Validates an optional particle emitter (`{ effectId, ...emitter params }`). */
+function validateParticleEmitter(value: unknown, label: string): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} particle must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.effectId !== "string" || input.effectId.length === 0) {
+    throw new Error(`${label} particle.effectId must be a non-empty string`);
+  }
+  const particle: Record<string, unknown> = { effectId: input.effectId };
+  for (const flag of ["loop", "worldSpace", "autoPlay"] as const) {
+    if (input[flag] === undefined) continue;
+    if (typeof input[flag] !== "boolean") throw new Error(`${label} particle.${flag} must be boolean`);
+    particle[flag] = input[flag];
+  }
+  const rate = validateOptionalNumber(input.rate, `${label} particle.rate`, 0, 10000);
+  if (rate !== undefined) particle.rate = rate;
+  const lifetime = validateOptionalNumber(input.lifetime, `${label} particle.lifetime`, 0, 60);
+  if (lifetime !== undefined) particle.lifetime = lifetime;
+  const startSize = validateOptionalNumber(input.startSize, `${label} particle.startSize`, 0, 100);
+  if (startSize !== undefined) particle.startSize = startSize;
+  const endSize = validateOptionalNumber(input.endSize, `${label} particle.endSize`, 0, 100);
+  if (endSize !== undefined) particle.endSize = endSize;
+  const spread = validateOptionalNumber(input.spread, `${label} particle.spread`, 0, 10);
+  if (spread !== undefined) particle.spread = spread;
+  if (input.velocity !== undefined) {
+    if (!isNumberTuple(input.velocity)) {
+      throw new Error(`${label} particle.velocity must be a [x, y, z] number tuple`);
+    }
+    particle.velocity = input.velocity.map((axis) => Number(axis.toFixed(3)));
+  }
+  if (input.materialMode !== undefined) {
+    if (typeof input.materialMode !== "string" || !PARTICLE_MATERIAL_MODES.has(input.materialMode)) {
+      throw new Error(`${label} particle.materialMode must be additive or alpha`);
+    }
+    particle.materialMode = input.materialMode;
+  }
+  return particle;
+}
+
+/** Validates an optional interaction marker (`{ action, prompt?, enabled?, requires?, cooldown? }`). */
+function validateInteraction(value: unknown, label: string): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} interaction must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.action !== "string" || input.action.length === 0) {
+    throw new Error(`${label} interaction.action must be a non-empty string`);
+  }
+  const interaction: Record<string, unknown> = { action: input.action };
+  if (input.prompt !== undefined) {
+    if (typeof input.prompt !== "string") throw new Error(`${label} interaction.prompt must be a string`);
+    interaction.prompt = input.prompt;
+  }
+  if (input.enabled !== undefined) {
+    if (typeof input.enabled !== "boolean") throw new Error(`${label} interaction.enabled must be boolean`);
+    interaction.enabled = input.enabled;
+  }
+  if (input.requires !== undefined) {
+    if (typeof input.requires !== "string") throw new Error(`${label} interaction.requires must be a string`);
+    interaction.requires = input.requires;
+  }
+  const cooldown = validateOptionalNumber(input.cooldown, `${label} interaction.cooldown`, 0, 3600);
+  if (cooldown !== undefined) interaction.cooldown = cooldown;
+  return interaction;
+}
+
 /** Copies the optional transform/authoring fields onto `target`, validating each. */
 export function applyTransformFields(
   entry: Record<string, unknown>,
@@ -219,6 +290,10 @@ export function applyTransformFields(
   if (behavior) target.behavior = behavior;
   const audio = validateAudio(entry.audio, label);
   if (audio) target.audio = audio;
+  const particle = validateParticleEmitter(entry.particle, label);
+  if (particle) target.particle = particle;
+  const interaction = validateInteraction(entry.interaction, label);
+  if (interaction) target.interaction = interaction;
 
   if (entry.rotationYDeg !== undefined) {
     target.rotationYDeg = validateRotationDeg(entry.rotationYDeg, `${label} rotationYDeg`);

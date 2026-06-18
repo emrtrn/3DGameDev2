@@ -10,8 +10,13 @@
  * Pure: no Three.js or DOM. Value imports use relative paths because the
  * engine-test bundler (tools/run-engine-tests.mjs) resolves no path aliases.
  */
-import { readAudioComponent, readBehaviorComponent, readTransformComponent } from "../scene/components";
-import type { AudioComponent, TransformComponent } from "../scene/components";
+import {
+  readAudioComponent,
+  readBehaviorComponent,
+  readInteractionComponent,
+  readTransformComponent,
+} from "../scene/components";
+import type { AudioComponent, InteractionComponent, TransformComponent } from "../scene/components";
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import type { Entity, EntityId, SceneJsonValue } from "../scene/entity";
 import type { ActionMap } from "../input/actionMap";
@@ -28,6 +33,8 @@ export interface BehaviorContext {
   readonly physics?: PhysicsQuery;
   readonly audio?: AudioBus;
   readonly audioComponent?: AudioComponent;
+  /** This entity's authored interaction marker, when it carries one. */
+  readonly interactionComponent?: InteractionComponent;
   readonly params: Record<string, SceneJsonValue>;
   /** This entity's transform; behaviors mutate it in place. */
   readonly transform: TransformComponent;
@@ -69,6 +76,7 @@ interface BehaviorInstance {
   params: Record<string, SceneJsonValue>;
   transform: TransformComponent;
   audioComponent: AudioComponent | undefined;
+  interactionComponent: InteractionComponent | undefined;
 }
 
 export class BehaviorSubsystem implements Subsystem {
@@ -105,6 +113,7 @@ export class BehaviorSubsystem implements Subsystem {
         params: behavior.params ?? {},
         transform: cloneTransform(transform),
         audioComponent: readAudioComponent(entity),
+        interactionComponent: readInteractionComponent(entity),
       });
     }
     this.instances = instances;
@@ -142,6 +151,10 @@ export class BehaviorSubsystem implements Subsystem {
       if (instance.audioComponent) {
         (context as BehaviorContext & { audioComponent: AudioComponent }).audioComponent =
           instance.audioComponent;
+      }
+      if (instance.interactionComponent) {
+        (context as BehaviorContext & { interactionComponent: InteractionComponent }).interactionComponent =
+          instance.interactionComponent;
       }
       instance.update(context);
       this.sink(instance.id, instance.transform);

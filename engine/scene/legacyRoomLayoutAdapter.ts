@@ -34,8 +34,10 @@ import {
   type LayoutBehavior,
   type LayoutAudio,
   type LayoutCharacter,
+  type LayoutInteraction,
   type LayoutLightActor,
   type LayoutMetadata,
+  type LayoutParticleEmitter,
   type LayoutPlacement,
   type LayoutPhysics,
   type LayoutWorldSettings,
@@ -56,18 +58,22 @@ import {
   BEHAVIOR_COMPONENT,
   AUDIO_COMPONENT,
   COLLIDER_COMPONENT,
+  INTERACTION_COMPONENT,
   LIGHT_COMPONENT,
   MESH_RENDERER_COMPONENT,
   METADATA_COMPONENT,
+  PARTICLE_EMITTER_COMPONENT,
   TRANSFORM_COMPONENT,
   type AudioComponent,
   type BehaviorComponent,
   type ColliderComponent,
   type ColliderPrimitive,
   type ColliderShape,
+  type InteractionComponent,
   type LightComponent,
   type MeshRendererComponent,
   type MetadataComponent,
+  type ParticleEmitterComponent,
   type TransformComponent,
 } from "./components";
 import {
@@ -282,6 +288,10 @@ function instanceComponents(
   if (behavior) components[BEHAVIOR_COMPONENT] = toData(behavior);
   const audio = audioComponent(placement.audio);
   if (audio) components[AUDIO_COMPONENT] = toData(audio);
+  const particle = particleEmitterComponent(placement.particle);
+  if (particle) components[PARTICLE_EMITTER_COMPONENT] = toData(particle);
+  const interaction = interactionComponent(placement.interaction);
+  if (interaction) components[INTERACTION_COMPONENT] = toData(interaction);
   return components;
 }
 
@@ -302,6 +312,10 @@ function characterComponents(
   if (behavior) components[BEHAVIOR_COMPONENT] = toData(behavior);
   const audio = audioComponent(character.audio);
   if (audio) components[AUDIO_COMPONENT] = toData(audio);
+  const particle = particleEmitterComponent(character.particle);
+  if (particle) components[PARTICLE_EMITTER_COMPONENT] = toData(particle);
+  const interaction = interactionComponent(character.interaction);
+  if (interaction) components[INTERACTION_COMPONENT] = toData(interaction);
   return components;
 }
 
@@ -547,6 +561,36 @@ function audioComponent(audio: LayoutAudio | undefined): AudioComponent | null {
   };
 }
 
+function particleEmitterComponent(
+  particle: LayoutParticleEmitter | undefined,
+): ParticleEmitterComponent | null {
+  if (!particle) return null;
+  const component: ParticleEmitterComponent = { effectId: particle.effectId };
+  if (particle.loop !== undefined) component.loop = particle.loop;
+  if (particle.rate !== undefined) component.rate = particle.rate;
+  if (particle.lifetime !== undefined) component.lifetime = particle.lifetime;
+  if (particle.startSize !== undefined) component.startSize = particle.startSize;
+  if (particle.endSize !== undefined) component.endSize = particle.endSize;
+  if (particle.velocity) component.velocity = [...particle.velocity];
+  if (particle.spread !== undefined) component.spread = particle.spread;
+  if (particle.materialMode !== undefined) component.materialMode = particle.materialMode;
+  if (particle.worldSpace !== undefined) component.worldSpace = particle.worldSpace;
+  if (particle.autoPlay !== undefined) component.autoPlay = particle.autoPlay;
+  return component;
+}
+
+function interactionComponent(
+  interaction: LayoutInteraction | undefined,
+): InteractionComponent | null {
+  if (!interaction) return null;
+  const component: InteractionComponent = { action: interaction.action };
+  if (interaction.prompt !== undefined) component.prompt = interaction.prompt;
+  if (interaction.enabled !== undefined) component.enabled = interaction.enabled;
+  if (interaction.requires !== undefined) component.requires = interaction.requires;
+  if (interaction.cooldown !== undefined) component.cooldown = interaction.cooldown;
+  return component;
+}
+
 function metadataComponent(metadata: LayoutMetadata | undefined): MetadataComponent | null {
   if (!metadata) return null;
   const entries = Object.entries(metadata);
@@ -593,7 +637,9 @@ function toData(
     | MetadataComponent
     | BehaviorComponent
     | ColliderComponent
-    | AudioComponent,
+    | AudioComponent
+    | ParticleEmitterComponent
+    | InteractionComponent,
 ): EntityComponentData {
   return component as unknown as EntityComponentData;
 }

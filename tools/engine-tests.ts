@@ -23,10 +23,14 @@ import {
   readAudioComponent,
   readBehaviorComponent,
   readColliderComponent,
+  readInteractionComponent,
   readLightComponent,
   readMeshRendererComponent,
   readMetadataComponent,
+  readParticleEmitterComponent,
   readTransformComponent,
+  INTERACTION_COMPONENT,
+  PARTICLE_EMITTER_COMPONENT,
 } from "../engine/scene/components";
 import { readRotation, readScale } from "../engine/scene/transform";
 import { EngineApp } from "../engine/core/EngineApp";
@@ -58,6 +62,7 @@ import {
   selectLocomotionClip,
   type LocomotionInput,
 } from "../src/game/locomotionAnimation";
+import { initialInteractionState, stepInteractionTrigger } from "../src/game/interaction";
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
 import {
   DEFAULT_GAME_MODE_ID,
@@ -135,6 +140,7 @@ import {
   assetByteSize,
   assetLoadGroup,
   assetPath,
+  assetType,
   validateAssetManifest,
   type AssetRecord,
   type AssetManifest,
@@ -249,9 +255,15 @@ check("asset manifest validates against the public assets tree", () => {
 check("asset manifest helpers expose canonical path, load group, and byte size", () => {
   const sofa = assetManifest.assets.find((asset) => asset.id === "lounge-sofa");
   assert.ok(sofa);
+  assert.equal(assetType(sofa), "staticMesh");
   assert.equal(assetPath(sofa), "assets/models/furniture-seating/loungeSofa.glb");
   assert.equal(assetLoadGroup(sofa), "furniture-seating");
   assert.equal(assetByteSize(sofa), 4588);
+});
+check("asset manifest classifies authored characters as skeletal meshes", () => {
+  const character = assetManifest.assets.find((asset) => asset.id === "character-a");
+  assert.ok(character);
+  assert.equal(assetType(character), "skeletalMesh");
 });
 check("asset manifest helpers tolerate the legacy file/loadGroup/bytes shape", () => {
   const legacy = {
@@ -262,6 +274,7 @@ check("asset manifest helpers tolerate the legacy file/loadGroup/bytes shape", (
     loadGroup: "legacy",
     bytes: 123,
   } as unknown as AssetRecord;
+  assert.equal(assetType(legacy), "staticMesh");
   assert.equal(assetPath(legacy), "assets/models/chair.glb");
   assert.equal(assetLoadGroup(legacy), "legacy");
   assert.equal(assetByteSize(legacy), 123);
@@ -1194,6 +1207,135 @@ check("layout audio maps to a readable audio component", () => {
     volume: 0.4,
     loop: false,
     spatial: true,
+  });
+});
+
+// 3 Actors & Components: the official component list now includes
+// ParticleEmitter and Interaction. They have no adapter authoring path yet
+// (next slice), so these check the reader validation directly off a hand-built
+// entity, mirroring how the runtime systems will read them.
+check("particle emitter reader parses a full authored emitter", () => {
+  const entity: Entity = {
+    id: "fx",
+    components: {
+      [PARTICLE_EMITTER_COMPONENT]: {
+        effectId: "fx.smoke_soft_01",
+        loop: true,
+        rate: 12,
+        lifetime: 2.5,
+        startSize: 0.4,
+        endSize: 1.2,
+        velocity: [0, 1.2, 0],
+        spread: 0.35,
+        materialMode: "additive",
+        worldSpace: true,
+        autoPlay: true,
+      },
+    },
+  };
+  assert.deepEqual(readParticleEmitterComponent(entity), {
+    effectId: "fx.smoke_soft_01",
+    loop: true,
+    rate: 12,
+    lifetime: 2.5,
+    startSize: 0.4,
+    endSize: 1.2,
+    velocity: [0, 1.2, 0],
+    spread: 0.35,
+    materialMode: "additive",
+    worldSpace: true,
+    autoPlay: true,
+  });
+});
+
+check("particle emitter reader rejects empty effectId and drops invalid fields", () => {
+  const missing: Entity = { id: "a", components: { [PARTICLE_EMITTER_COMPONENT]: { effectId: "" } } };
+  assert.equal(readParticleEmitterComponent(missing), undefined);
+  // A minimal emitter keeps only effectId; an out-of-set materialMode and a
+  // malformed velocity are dropped rather than passed through.
+  const minimal: Entity = {
+    id: "b",
+    components: {
+      [PARTICLE_EMITTER_COMPONENT]: {
+        effectId: "fx.spark",
+        materialMode: "neon",
+        velocity: [0, 1],
+      },
+    },
+  };
+  assert.deepEqual(readParticleEmitterComponent(minimal), { effectId: "fx.spark" });
+});
+
+check("interaction reader parses a full marker and rejects an empty action", () => {
+  const entity: Entity = {
+    id: "door",
+    components: {
+      [INTERACTION_COMPONENT]: {
+        action: "open-door",
+        prompt: "Open",
+        enabled: false,
+        requires: "key.brass",
+        cooldown: 1.5,
+      },
+    },
+  };
+  assert.deepEqual(readInteractionComponent(entity), {
+    action: "open-door",
+    prompt: "Open",
+    enabled: false,
+    requires: "key.brass",
+    cooldown: 1.5,
+  });
+  const noAction: Entity = { id: "x", components: { [INTERACTION_COMPONENT]: { action: "" } } };
+  assert.equal(readInteractionComponent(noAction), undefined);
+  const minimal: Entity = { id: "y", components: { [INTERACTION_COMPONENT]: { action: "press" } } };
+  assert.deepEqual(readInteractionComponent(minimal), { action: "press" });
+});
+
+check("layout particle + interaction map through the adapter to readable components", () => {
+  const fixture: RoomLayout = {
+    schema: 1,
+    name: "fx-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "campfire",
+        placements: [
+          {
+            position: [0, 0, 0],
+            particle: {
+              effectId: "fx.smoke_soft_01",
+              loop: true,
+              rate: 12,
+              lifetime: 2.5,
+              velocity: [0, 1.2, 0],
+              materialMode: "additive",
+              autoPlay: true,
+            },
+            interaction: { action: "light-fire", prompt: "Light", cooldown: 2 },
+          },
+        ],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+  const entity = roomLayoutToSceneDocument(fixture).entities.find(
+    (candidate) => candidate.id === instanceEntityId("campfire", 0),
+  );
+  assert.deepEqual(entity ? readParticleEmitterComponent(entity) : undefined, {
+    effectId: "fx.smoke_soft_01",
+    loop: true,
+    rate: 12,
+    lifetime: 2.5,
+    velocity: [0, 1.2, 0],
+    materialMode: "additive",
+    autoPlay: true,
+  });
+  assert.deepEqual(entity ? readInteractionComponent(entity) : undefined, {
+    action: "light-fire",
+    prompt: "Light",
+    cooldown: 2,
   });
 });
 
@@ -3464,6 +3606,110 @@ check("goal-reached behavior: fires once on contact, plays its cue, signals the 
   ]);
 });
 
+// §3 Interaction runtime: the pure trigger core decides fire/cooldown; the
+// `interact` behavior drives it from physics sensor contacts + the authored
+// InteractionComponent, reusing the goal-reached sensor pattern.
+check("stepInteractionTrigger: fires on a fresh enter, not while held, re-fires on re-enter", () => {
+  let state = initialInteractionState();
+  let r = stepInteractionTrigger(state, { overlapping: false, enabled: true, cooldown: 0, dt: 0.016 });
+  assert.equal(r.fire, false);
+  state = r.state;
+  // Fresh enter fires.
+  r = stepInteractionTrigger(state, { overlapping: true, enabled: true, cooldown: 0, dt: 0.016 });
+  assert.equal(r.fire, true);
+  state = r.state;
+  // Held overlap does not re-fire.
+  r = stepInteractionTrigger(state, { overlapping: true, enabled: true, cooldown: 0, dt: 0.016 });
+  assert.equal(r.fire, false);
+  state = r.state;
+  // Leave, then re-enter with no cooldown: fires again.
+  state = stepInteractionTrigger(state, { overlapping: false, enabled: true, cooldown: 0, dt: 0.016 }).state;
+  r = stepInteractionTrigger(state, { overlapping: true, enabled: true, cooldown: 0, dt: 0.016 });
+  assert.equal(r.fire, true);
+});
+
+check("stepInteractionTrigger: disabled never fires; cooldown blocks re-fire until it decays", () => {
+  // Disabled: a fresh enter does not fire.
+  assert.equal(
+    stepInteractionTrigger(initialInteractionState(), {
+      overlapping: true,
+      enabled: false,
+      cooldown: 0,
+      dt: 0.016,
+    }).fire,
+    false,
+  );
+
+  // Fire with a 1s cooldown.
+  let r = stepInteractionTrigger(initialInteractionState(), {
+    overlapping: true,
+    enabled: true,
+    cooldown: 1,
+    dt: 0.016,
+  });
+  assert.equal(r.fire, true);
+  assert.ok(r.state.cooldownRemaining > 0);
+  // Leave (cooldown decays partway).
+  let state = stepInteractionTrigger(r.state, { overlapping: false, enabled: true, cooldown: 1, dt: 0.5 }).state;
+  // Re-enter before cooldown elapses: blocked.
+  r = stepInteractionTrigger(state, { overlapping: true, enabled: true, cooldown: 1, dt: 0.1 });
+  assert.equal(r.fire, false);
+  // Leave again and let the rest elapse, then re-enter: fires.
+  state = stepInteractionTrigger(r.state, { overlapping: false, enabled: true, cooldown: 1, dt: 1 }).state;
+  assert.equal(state.cooldownRemaining, 0);
+  assert.equal(
+    stepInteractionTrigger(state, { overlapping: true, enabled: true, cooldown: 1, dt: 0.016 }).fire,
+    true,
+  );
+});
+
+check("interact behavior: fires the action + cue on a sensor enter, not while held", () => {
+  const fired: Array<{ id: string; action: string }> = [];
+  const registry = createBehaviorRegistry({
+    onInteraction: (id, action) => fired.push({ id, action }),
+  });
+  const physics = new PhysicsSubsystem();
+  const audio = new AudioSubsystem();
+  const lever: Entity = {
+    id: "lever:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      Behavior: { scriptId: "interact" },
+      Interaction: { action: "pull-lever", prompt: "Pull" },
+      Audio: { clipId: "collision-chime", volume: 0.5, loop: false, spatial: false },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [5, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([lever, player]);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics, audio);
+  behavior.setEntities([lever, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+  app.registerSubsystem(audio);
+
+  // A sensor never blocks movement, and far apart there is no contact.
+  assert.equal(physics.staticBlockerAabbs().length, 0);
+  app.update(0.016);
+  assert.deepEqual(fired, []);
+
+  // Enter the sensor and tick twice: it fires exactly once.
+  physics.setEntityTransform("player:0", { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
+  app.update(0.016);
+  app.update(0.016);
+  assert.deepEqual(fired, [{ id: "lever:0", action: "pull-lever" }]);
+  assert.deepEqual(audio.playedRequests(), [
+    { clipId: "collision-chime", volume: 0.5, loop: false, spatial: false },
+  ]);
+});
+
 // playground.json is now a free-editing sandbox scene (no pinned content), so it
 // is intentionally not asserted here. Save-validator round-trip coverage lives on
 // the curated render-test-room layout above ("save validator round-trips the
@@ -3981,6 +4227,36 @@ check("placement validator keeps a valid collisionPreset and rejects bad ones", 
   assert.throws(() => validatePlacement({ position: [0, 0, 0], collisionPreset: "nope" }));
   // Absent override stays absent (inherits asset default).
   assert.equal(validatePlacement({ position: [0, 0, 0] }).collisionPreset, undefined);
+});
+check("placement validator allowlists particle + interaction and rejects bad ones", () => {
+  const placement = validatePlacement({
+    position: [0, 0, 0],
+    particle: {
+      effectId: "fx.smoke_soft_01",
+      loop: true,
+      rate: 12,
+      velocity: [0, 1.2, 0],
+      materialMode: "additive",
+    },
+    interaction: { action: "open", prompt: "Open", cooldown: 1.5 },
+  });
+  assert.deepEqual(placement.particle, {
+    effectId: "fx.smoke_soft_01",
+    loop: true,
+    rate: 12,
+    velocity: [0, 1.2, 0],
+    materialMode: "additive",
+  });
+  assert.deepEqual(placement.interaction, { action: "open", prompt: "Open", cooldown: 1.5 });
+  // Empty effectId, out-of-set materialMode, and empty action are rejected.
+  assert.throws(() => validatePlacement({ position: [0, 0, 0], particle: { effectId: "" } }));
+  assert.throws(() =>
+    validatePlacement({ position: [0, 0, 0], particle: { effectId: "fx.x", materialMode: "neon" } }),
+  );
+  assert.throws(() => validatePlacement({ position: [0, 0, 0], interaction: { action: "" } }));
+  // Absent stays absent.
+  assert.equal(validatePlacement({ position: [0, 0, 0] }).particle, undefined);
+  assert.equal(validatePlacement({ position: [0, 0, 0] }).interaction, undefined);
 });
 check("collision save payload requires a .collision.json path", () => {
   const payload = validateSaveCollisionPayload({

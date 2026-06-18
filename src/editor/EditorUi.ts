@@ -1,7 +1,15 @@
 // Editor-only styles. Importing here (rather than statically in index.html)
 // keeps them in the dev-only editor chunk, out of the production game build.
 import "./editorUi.css";
-import { assetPath, type EditableAsset } from "@engine/assets/manifest";
+import {
+  ASSET_TYPES,
+  assetPath,
+  assetType,
+  inferAssetTypeFromPath,
+  isModelAssetType,
+  type AssetType,
+  type EditableAsset,
+} from "@engine/assets/manifest";
 import type {
   EditableSceneObject,
   EditableSelection,
@@ -32,7 +40,6 @@ import {
   fetchProjectDir,
   findProjectDir,
   flattenProjectFiles,
-  isModelFile,
   normalizeProjectPath,
   type ProjectDirNode,
 } from "@/project/ProjectAssetTree";
@@ -76,7 +83,7 @@ interface BrowserAssetItem {
   category: string;
   path: string;
   ext: string;
-  type: "model" | "file";
+  type: AssetType | "file";
   editable?: EditableAsset;
 }
 
@@ -750,9 +757,9 @@ export class EditorUi {
       .filter((item) => this.contentType === CONTENT_FILTER_ALL || item.type === this.contentType)
       .filter((item) => {
         if (!this.contentQuery) return true;
-        return `${item.label} ${item.category} ${item.type} ${item.path}`.toLocaleLowerCase().includes(
-          this.contentQuery,
-        );
+        return `${item.label} ${item.type} ${item.path}`
+          .toLocaleLowerCase()
+          .includes(this.contentQuery);
       });
 
     this.contentPathLabel.textContent = this.selectedFolder || this.assetTreeRoot.path;
@@ -779,7 +786,8 @@ export class EditorUi {
           .filter((file) => this.shouldDisplayAssetFile(file))
           .map((file) => this.toBrowserAssetItem(file))
       : [];
-    const types = [...new Set(allItems.map((item) => item.type))].sort(compareContentTypes);
+    const types: BrowserAssetItem["type"][] = [...ASSET_TYPES];
+    if (allItems.some((item) => item.type === "file")) types.push("file");
 
     this.contentType = this.replaceContentFilterOptions(
       this.contentTypeFilter,
@@ -823,7 +831,7 @@ export class EditorUi {
       category: editable?.catalogCategory ?? file.ext ?? "file",
       path: file.path,
       ext: file.ext ?? "file",
-      type: isModelFile(file) ? "model" : "file",
+      type: editable ? assetType(editable) : (inferAssetTypeFromPath(file.path) ?? "file"),
     } satisfies Omit<BrowserAssetItem, "editable">;
     return editable ? { ...base, editable } : base;
   }
@@ -911,14 +919,16 @@ export class EditorUi {
       // Click only selects; placement is drag-and-drop into the viewport.
       this.setSelectedAsset(item.editable.id);
     });
-    if (item.type === "model") {
+    if (item.type !== "file" && isModelAssetType(item.type)) {
       card.addEventListener("dblclick", (event) => {
         event.preventDefault();
         void this.openStaticMeshEditor(item);
       });
     }
     const thumb = card.querySelector<HTMLElement>("[data-asset-thumb]");
-    if (thumb && item.type === "model") void this.renderAssetThumbnail(item, thumb);
+    if (thumb && item.type !== "file" && isModelAssetType(item.type)) {
+      void this.renderAssetThumbnail(item, thumb);
+    }
     return card;
   }
 
@@ -2283,21 +2293,34 @@ function outlinerKindLabel(kind: EditableSceneObject["kind"]): string {
 }
 
 function isContentTypeFilter(value: string): value is ContentTypeFilter {
-  return value === CONTENT_FILTER_ALL || value === "model" || value === "file";
-}
-
-function compareContentTypes(left: BrowserAssetItem["type"], right: BrowserAssetItem["type"]): number {
-  const order: Record<BrowserAssetItem["type"], number> = { model: 0, file: 1 };
-  return order[left] - order[right];
+  return (
+    value === CONTENT_FILTER_ALL ||
+    value === "staticMesh" ||
+    value === "skeletalMesh" ||
+    value === "texture" ||
+    value === "material" ||
+    value === "sound" ||
+    value === "animation" ||
+    value === "prefab" ||
+    value === "level" ||
+    value === "file"
+  );
 }
 
 function formatContentTypeLabel(value: string): string {
-  if (value === "model") return "Models";
+  if (value === "staticMesh") return "Static Meshes";
+  if (value === "skeletalMesh") return "Skeletal Meshes";
+  if (value === "texture") return "Textures";
+  if (value === "material") return "Materials";
+  if (value === "sound") return "Sounds";
+  if (value === "animation") return "Animations";
+  if (value === "prefab") return "Prefabs";
+  if (value === "level") return "Levels";
   if (value === "file") return "Files";
-  return formatContentFilterLabel(value);
+  return formatAssetTypeFallbackLabel(value);
 }
 
-function formatContentFilterLabel(value: string): string {
+function formatAssetTypeFallbackLabel(value: string): string {
   return value
     .split(/[-_\s]+/)
     .filter(Boolean)

@@ -1,5 +1,7 @@
 import type { Entity, SceneJsonValue } from "./entity";
-import type { LayoutPhysicsAxisLocks, Vec3 } from "./layout";
+import type { LayoutPhysicsAxisLocks, ParticleMaterialMode, Vec3 } from "./layout";
+
+export type { ParticleMaterialMode };
 
 export const TRANSFORM_COMPONENT = "Transform";
 export const MESH_RENDERER_COMPONENT = "MeshRenderer";
@@ -8,6 +10,8 @@ export const METADATA_COMPONENT = "Metadata";
 export const BEHAVIOR_COMPONENT = "Behavior";
 export const COLLIDER_COMPONENT = "Collider";
 export const AUDIO_COMPONENT = "Audio";
+export const PARTICLE_EMITTER_COMPONENT = "ParticleEmitter";
+export const INTERACTION_COMPONENT = "Interaction";
 
 export type SceneLightType = "directional" | "point" | "spot";
 export type ColliderShape = "box" | "sphere" | "capsule" | "cylinder" | "cone" | "convex";
@@ -104,6 +108,44 @@ export interface AudioComponent {
   volume: number;
   loop: boolean;
   spatial: boolean;
+}
+
+/**
+ * Drives a particle/VFX emitter from a manifest `effectId`. Sizes are in world
+ * units, `rate` in particles/second, `lifetime` in seconds; `materialMode` picks
+ * the blend and `worldSpace` keeps spawned particles in world space (vs. local to
+ * the moving emitter). Absent optional fields let the VFX system apply its
+ * defaults. The engine layer only stores the reference; a VFX system (a runtime
+ * concern) resolves `effectId` and simulates, like Behavior resolves `scriptId`.
+ */
+export interface ParticleEmitterComponent {
+  effectId: string;
+  loop?: boolean;
+  rate?: number;
+  lifetime?: number;
+  startSize?: number;
+  endSize?: number;
+  velocity?: Vec3;
+  spread?: number;
+  materialMode?: ParticleMaterialMode;
+  worldSpace?: boolean;
+  autoPlay?: boolean;
+}
+
+/**
+ * Marks an entity as interactable: an `action` id the runtime interprets, an
+ * optional player-facing `prompt`, a default `enabled` flag, an optional
+ * `requires` gate (e.g. an inventory/key id) and an optional `cooldown` in
+ * seconds. Project gameplay rules (runtime) interpret these; the engine only
+ * stores the authored data, like Behavior/Metadata. Typically paired with a
+ * (sensor) {@link ColliderComponent} so an InteractionSystem can detect overlap.
+ */
+export interface InteractionComponent {
+  action: string;
+  prompt?: string;
+  enabled?: boolean;
+  requires?: string;
+  cooldown?: number;
 }
 
 function readVec3(value: SceneJsonValue | undefined): Vec3 | undefined {
@@ -264,6 +306,48 @@ export function readAudioComponent(entity: Entity): AudioComponent | undefined {
     loop: data.loop,
     spatial: data.spatial,
   };
+}
+
+const PARTICLE_MATERIAL_MODES: readonly ParticleMaterialMode[] = ["additive", "alpha"];
+
+/** Reads a typed particle emitter from an entity's serializable component data. */
+export function readParticleEmitterComponent(
+  entity: Entity,
+): ParticleEmitterComponent | undefined {
+  const data = entity.components[PARTICLE_EMITTER_COMPONENT];
+  if (!data) return undefined;
+  if (typeof data.effectId !== "string" || data.effectId.length === 0) return undefined;
+  const component: ParticleEmitterComponent = { effectId: data.effectId };
+  if (typeof data.loop === "boolean") component.loop = data.loop;
+  if (typeof data.rate === "number") component.rate = data.rate;
+  if (typeof data.lifetime === "number") component.lifetime = data.lifetime;
+  if (typeof data.startSize === "number") component.startSize = data.startSize;
+  if (typeof data.endSize === "number") component.endSize = data.endSize;
+  const velocity = readVec3(data.velocity);
+  if (velocity) component.velocity = velocity;
+  if (typeof data.spread === "number") component.spread = data.spread;
+  if (
+    typeof data.materialMode === "string" &&
+    PARTICLE_MATERIAL_MODES.includes(data.materialMode as ParticleMaterialMode)
+  ) {
+    component.materialMode = data.materialMode as ParticleMaterialMode;
+  }
+  if (typeof data.worldSpace === "boolean") component.worldSpace = data.worldSpace;
+  if (typeof data.autoPlay === "boolean") component.autoPlay = data.autoPlay;
+  return component;
+}
+
+/** Reads a typed interaction marker from an entity's serializable component data. */
+export function readInteractionComponent(entity: Entity): InteractionComponent | undefined {
+  const data = entity.components[INTERACTION_COMPONENT];
+  if (!data) return undefined;
+  if (typeof data.action !== "string" || data.action.length === 0) return undefined;
+  const component: InteractionComponent = { action: data.action };
+  if (typeof data.prompt === "string") component.prompt = data.prompt;
+  if (typeof data.enabled === "boolean") component.enabled = data.enabled;
+  if (typeof data.requires === "string") component.requires = data.requires;
+  if (typeof data.cooldown === "number") component.cooldown = data.cooldown;
+  return component;
 }
 
 const LIGHT_TYPES: readonly SceneLightType[] = ["directional", "point", "spot"];

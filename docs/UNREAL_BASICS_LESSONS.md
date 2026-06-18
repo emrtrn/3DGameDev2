@@ -269,6 +269,40 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-18* — **§3 Actors & Components — Track A (veri modeli) tamam +
+  Interaction runtime.** Eksik iki component eklendi → **resmi component
+  listesi (9/9) artık engine'de tanımlı**: `ParticleEmitterComponent` ve
+  `InteractionComponent` (`engine/scene/components.ts`, reader'larla;
+  `ParticleMaterialMode` layout'ta tek kaynak, components import eder → dairesel
+  bağımlılık yok). **Authoring path uçtan uca**: `LayoutPlacement/Character`'a
+  `particle?` + `interaction?` alanları (`engine/scene/layout.ts`), adapter
+  eşlemesi (`legacyRoomLayoutAdapter` → `particleEmitterComponent`/
+  `interactionComponent` helper'ları + `toData` union genişledi), **save-validator
+  allowlist** (`tools/saveValidator.ts`: `validateParticleEmitter`/
+  `validateInteraction` → `applyTransformFields`; CLAUDE.md gotcha'sına uyuldu).
+  **Interaction runtime** (kullanıcı kararı: önce bu, sensor/goal kalıbı yeniden
+  kullanılarak): saf çekirdek `src/game/interaction.ts` (`stepInteractionTrigger`
+  — edge-tetikleme `overlapping && !wasOverlapping` + dt-tabanlı cooldown, held
+  overlap re-fire etmez, disabled hiç fire etmez); `interact` behavior
+  (`src/game/behaviors.ts`) goal-reached'in sensor+contact kalıbını kullanır,
+  `context.interactionComponent` okur, ilk temasta `playAudioCue` + `onInteraction(
+  entityId, action)` tetikler (cooldown sonrası re-enter'da tekrar fire eder).
+  `BehaviorContext`'e `interactionComponent?` eklendi (audioComponent gibi
+  okunur/iliştirilir). `RuntimeSceneApp` `onInteraction`'ı `console.info`'a bağlar
+  — **HUD yok (G6 kararı: ses + log)**. Authoring sözleşmesi (goal-reached gibi):
+  `interaction:{action,...}` + `sensor:true` + `behavior:{script:"interact"}`.
+  Headless testler (tools/engine-tests.ts: 153 → **162 check**): particle/
+  interaction reader (full + reddetme), adapter eşleme round-trip, validator
+  allowlist round-trip, `stepInteractionTrigger` (fresh-enter/held/re-enter +
+  disabled/cooldown), gerçek `interact` behavior entegrasyonu (sensor enter →
+  fire+cue, held re-fire etmez). `npm run build:verify` yeşil (build, 162 check,
+  strict dist scan PASS). **Bilinçli ertelendi (B4):** tam Three.js particle/
+  VFX renderer + `effectId`→manifest fx asset bağlama (fx asset tipi henüz yok;
+  kullanıcı "Burada dur" yerine Interaction runtime'ı seçti). **Checklist:**
+  "component listesini tanımla" + "particle'ı component üzerinden modelle" [x];
+  "effectId manifest'e bağla" ile Track B (Details=component editor, Add/Remove
+  Component, undo/redo) ve Track C (`SceneObjectBase`+`components[]` saved-format
+  göçü) hâlâ [ ]. Sıradaki §3 işi Track B veya kalan particle bağlama.
 - *2026-06-16* — **G6 bitti — Gameplay/Runtime track'i (G1–G6) tamam.** Authored
   oynanabilir örnek sahne: yeni `public/layouts/playground.json` (player start,
   6×6 zemin, yön değiştirten bir duvar + kanepe engel, ve kuzeyde **sensor** goal
@@ -597,7 +631,7 @@ Content Browser şu üç katmanı karıştırmamalı:
    public/assets/textures/wood.webp
 
 2. Asset manifest
-   id, type, path, thumbnail, category, tags, placement rules
+   id, assetType, path, thumbnail, category, tags, placement rules
 
 3. Editor görünümü
    seçili klasör, arama, filtre, thumbnail boyutu, favoriler
@@ -609,7 +643,7 @@ Content Browser şu üç katmanı karıştırmamalı:
 {
   "id": "furniture.sofa_01",
   "name": "Sofa 01",
-  "type": "model",
+  "assetType": "staticMesh",
   "category": "furniture",
   "path": "assets/models/furniture/sofa_01.glb",
   "thumbnail": "assets/thumbnails/furniture/sofa_01.webp",
@@ -690,7 +724,7 @@ Content Browser asset kartında şu uyarılar görünmeli:
 - [x] Asset manifest entry'lerini standartlaştır:
   - `id`
   - `name`
-  - `type`
+  - `assetType`
   - `category`
   - `path`
   - `thumbnail`
@@ -701,9 +735,9 @@ Content Browser asset kartında şu uyarılar görünmeli:
 - [ ] Content Browser UI'ı dört ana parçaya böl:
   - Sources / folder tree
   - Search
-  - Type/category filters
+  - Type filters
   - Asset cards / Asset View
-- [ ] Asset kartlarında thumbnail + type + category + temel metadata göster.
+- [ ] Asset kartlarında thumbnail + assetType + temel metadata göster.
 - [x] Asset drag-drop akışını `assetId -> Actor/LayoutPlacement -> runtime loader` şeklinde kur.
 - [ ] `public/assets/metadata-schema.json` ile Details panel metadata alanlarını Content Browser metadata'sından ayrı ama uyumlu tut.
 - [ ] Basit health-check uyarıları ekle:
@@ -1007,9 +1041,9 @@ metadata            → MetadataComponent
 - [x] Three.js `Object3D` nesnesini Actor modelinin kendisi yapma.
 - [ ] Layout dosyalarının sadece stable ID, transform, component datası ve asset referansı tutmasını sağla.
 - [x] Editor-only state'i Actor/Component datasına karıştırma.
-- [ ] İlk resmi component listesini tanımla:
+- [x] İlk resmi component listesini tanımla:
   - TransformComponent
-  - RenderComponent
+  - RenderComponent (engine: `MeshRenderer`)
   - LightComponent
   - ParticleEmitterComponent
   - ColliderComponent
@@ -1018,8 +1052,10 @@ metadata            → MetadataComponent
   - BehaviorComponent
   - MetadataComponent
 - [x] Light Actor'ları uzun vadede `TransformComponent + LightComponent` olarak temsil et.
-- [ ] Particle efektleri `ParticleEmitterComponent` üzerinden modelle.
+- [x] Particle efektleri `ParticleEmitterComponent` üzerinden modelle. (veri modeli +
+  authoring tamam; runtime VFX renderer B4'e ertelendi)
 - [ ] `ParticleEmitterComponent.effectId` alanını manifest'teki particle/fx asset'e bağla.
+  (ertelendi — fx asset tipi + resolver; bkz. Progress Log 2026-06-18)
 - [x] Outliner Actor/SceneObject listelemeli; Component'ler ana outliner nesnesi gibi davranmamalı.
 - [ ] Details panel Component editor'a dönüşmeli.
 - [ ] Add Component / Remove Component sistemi ekle.

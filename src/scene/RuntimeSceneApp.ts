@@ -176,6 +176,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         onGoalReached: (entityId) => {
           console.info("[runtime] goal reached", entityId);
         },
+        onInteraction: (entityId, action) => {
+          console.info("[runtime] interaction", action, entityId);
+        },
         // The active Game Mode owns possession: only the pawn it possessed
         // (none, under the default camera mode) is driven by player input.
         isPlayerControlled: (entityId) =>

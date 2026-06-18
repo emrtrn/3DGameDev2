@@ -8,7 +8,9 @@ import {
 import {
   assetRecordById,
   assetPath,
+  assetType,
   editableAssetsFromManifest,
+  isModelAssetType,
   recordsForGroup,
   totalBytesForGroups,
 } from "@engine/assets/manifest";
@@ -87,7 +89,9 @@ export class AssetLoader {
 
   async recordsForGroup(loadGroup: string): Promise<AssetRecord[]> {
     const manifest = await this.loadManifest();
-    return recordsForGroup(manifest, loadGroup);
+    return recordsForGroup(manifest, loadGroup).filter((record) =>
+      isModelAssetType(assetType(record)),
+    );
   }
 
   async loadGroup(loadGroup: string): Promise<Map<string, GLTF>> {
@@ -121,6 +125,9 @@ export class AssetLoader {
     const manifest = await this.loadManifest();
     const record = assetRecordById(manifest, id);
     if (!record) throw new Error(`Asset not found in manifest: ${id}`);
+    if (!isModelAssetType(assetType(record))) {
+      throw new Error(`Asset is not a loadable mesh: ${id}`);
+    }
     return this.modelLoader.load(
       id,
       projectPublicFileUrl(this.project, assetPath(record)),

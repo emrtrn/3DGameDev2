@@ -1,4 +1,13 @@
-export type AssetType = "model";
+export type AssetType =
+  | "staticMesh"
+  | "skeletalMesh"
+  | "texture"
+  | "material"
+  | "sound"
+  | "animation"
+  | "prefab"
+  | "level";
+export type LegacyAssetType = "model";
 
 export type PlacementSurface = "floor" | "wall" | "room" | "character";
 
@@ -27,7 +36,7 @@ export interface AssetSourceInfo {
 export interface AssetRecord {
   id: string;
   name: string;
-  type: AssetType;
+  assetType: AssetType;
   category: string;
   /** Public-root-relative asset path. Example: `assets/models/props/chair.glb`. */
   path: string;
@@ -40,6 +49,8 @@ export interface AssetRecord {
   source?: AssetSourceInfo;
   license: string;
   /** Legacy alias accepted while older manifests are phased out. */
+  type?: AssetType | LegacyAssetType;
+  /** Legacy path alias accepted while older manifests are phased out. */
   file?: string;
   /** Legacy top-level load group accepted while older manifests are phased out. */
   loadGroup?: string;
@@ -57,7 +68,9 @@ export interface AssetManifest {
 export interface AssetCatalogRecord {
   id: string;
   name: string;
-  type: AssetType;
+  assetType: AssetType;
+  /** Legacy type alias accepted while older catalogs are phased out. */
+  type?: AssetType | LegacyAssetType;
   category: string;
   model: string;
   preview?: string;
@@ -103,8 +116,52 @@ export interface AssetManifestValidationOptions {
 
 const MODEL_EXTENSIONS = new Set(["glb", "gltf"]);
 const THUMBNAIL_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
-const ASSET_FILE_EXTENSIONS = new Set([...MODEL_EXTENSIONS, ...THUMBNAIL_EXTENSIONS]);
+const SOUND_EXTENSIONS = new Set(["mp3", "ogg", "wav"]);
+const MATERIAL_EXTENSIONS = new Set(["material.json", "mat.json"]);
+const LEVEL_EXTENSIONS = new Set(["level.json", "layout.json"]);
+const ASSET_FILE_EXTENSIONS = new Set([
+  ...MODEL_EXTENSIONS,
+  ...THUMBNAIL_EXTENSIONS,
+  ...SOUND_EXTENSIONS,
+  "json",
+]);
 const PLACEMENT_SURFACES: readonly PlacementSurface[] = ["floor", "wall", "room", "character"];
+export const ASSET_TYPES: readonly AssetType[] = [
+  "staticMesh",
+  "skeletalMesh",
+  "texture",
+  "material",
+  "sound",
+  "animation",
+  "prefab",
+  "level",
+];
+
+export function isAssetType(value: unknown): value is AssetType {
+  return typeof value === "string" && ASSET_TYPES.includes(value as AssetType);
+}
+
+export function isModelAssetType(value: AssetType): boolean {
+  return value === "staticMesh" || value === "skeletalMesh";
+}
+
+export function assetType(asset: AssetRecord): AssetType {
+  if (isAssetType(asset.assetType)) return asset.assetType;
+  if (isAssetType(asset.type)) return asset.type;
+  if (asset.type === "model") return "staticMesh";
+  return inferAssetTypeFromPath(assetPath(asset)) ?? "staticMesh";
+}
+
+export function inferAssetTypeFromPath(path: string): AssetType | null {
+  const lower = normalizePublicPath(path).toLowerCase();
+  const ext = extensionOf(lower);
+  if (MODEL_EXTENSIONS.has(ext)) return "staticMesh";
+  if (THUMBNAIL_EXTENSIONS.has(ext)) return "texture";
+  if (SOUND_EXTENSIONS.has(ext)) return "sound";
+  if (MATERIAL_EXTENSIONS.has(compoundExtensionOf(lower))) return "material";
+  if (LEVEL_EXTENSIONS.has(compoundExtensionOf(lower))) return "level";
+  return null;
+}
 
 export function assetPath(asset: AssetRecord): string {
   return asset.path ?? asset.file ?? "";
@@ -148,11 +205,15 @@ export function editableAssetsFromManifest(
 ): EditableAsset[] {
   const catalogById = new Map(catalog?.assets.map((asset) => [asset.id, asset]));
   return manifest.assets
-    .filter((asset) => asset.type === "model")
     .map((asset) => {
       const catalogAsset = catalogById.get(asset.id);
       return {
         ...asset,
+        assetType: catalogAsset?.assetType
+          ? catalogAsset.assetType
+          : catalogAsset?.type
+            ? (normalizeAssetType(catalogAsset.type) ?? assetType(asset))
+            : assetType(asset),
         displayName: catalogAsset?.name ?? asset.name ?? asset.id,
         catalogCategory: catalogAsset?.category ?? asset.category,
         placement:
@@ -277,12 +338,14 @@ export function validateAssetManifest(
 
     checkString(asset.name, "asset-name", "`name` must be a non-empty string", addIssue, assetId);
     checkString(asset.category, "asset-category", "`category` must be a non-empty string", addIssue, assetId);
-    if (asset.type !== "model") {
+    const normalizedType = normalizeAssetType(asset.assetType ?? asset.type);
+    if (!normalizedType) {
       addIssue({
         level: "error",
         code: "asset-type",
         assetId,
-        message: "`type` must be `model`.",
+        message:
+          "`assetType` must be one of staticMesh, skeletalMesh, texture, material, sound, animation, prefab, or level.",
       });
     }
 
@@ -299,13 +362,13 @@ export function validateAssetManifest(
     } else {
       manifestPaths.add(path);
       validateRelativePath(path, "asset-path", assetId, addIssue);
-      if (asset.type === "model" && !MODEL_EXTENSIONS.has(extensionOf(path))) {
+      if (normalizedType && isModelAssetType(normalizedType) && !MODEL_EXTENSIONS.has(extensionOf(path))) {
         addIssue({
           level: "error",
           code: "asset-path-extension",
           assetId,
           path,
-          message: "Model asset path must end with .glb or .gltf.",
+          message: "Mesh asset path must end with .glb or .gltf.",
         });
       }
       if (publicFiles.size > 0 && !publicFiles.has(path)) {
@@ -526,10 +589,21 @@ function normalizePublicPath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+/, "").replace(/^public\//, "");
 }
 
+function normalizeAssetType(value: unknown): AssetType | null {
+  if (isAssetType(value)) return value;
+  if (value === "model") return "staticMesh";
+  return null;
+}
+
 function extensionOf(path: string): string {
   const file = path.split("/").at(-1) ?? "";
   const index = file.lastIndexOf(".");
   return index === -1 ? "" : file.slice(index + 1).toLowerCase();
+}
+
+function compoundExtensionOf(path: string): string {
+  const parts = path.split("/").at(-1)?.split(".") ?? [];
+  return parts.length < 2 ? "" : parts.slice(1).join(".").toLowerCase();
 }
 
 function finalize(

@@ -6,7 +6,7 @@
     {
       "id": "bed-single",
       "name": "Bed Single",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "beds",
       "path": "assets/models/furniture-beds/bedSingle.glb",
       "tags": [
@@ -40,7 +40,7 @@
     {
       "id": "bookcase-open",
       "name": "Bookcase Open",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "storage",
       "path": "assets/models/furniture-storage/bookcaseOpen.glb",
       "tags": [
@@ -74,7 +74,7 @@
     {
       "id": "chair-modern-cushion",
       "name": "Chair Modern Cushion",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "sofas-chairs",
       "path": "assets/models/furniture-seating/chairModernCushion.glb",
       "tags": [
@@ -109,7 +109,7 @@
     {
       "id": "character-a",
       "name": "Character A",
-      "type": "model",
+      "assetType": "skeletalMesh",
       "category": "customer-character",
       "path": "assets/models/characters/character-a.glb",
       "tags": [
@@ -143,7 +143,7 @@
     {
       "id": "desk",
       "name": "Desk",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "tables-desks",
       "path": "assets/models/furniture-tables/desk.glb",
       "tags": [
@@ -176,7 +176,7 @@
     {
       "id": "doorway",
       "name": "Doorway",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "room-shell",
       "path": "assets/models/core/doorway.glb",
       "tags": [
@@ -209,7 +209,7 @@
     {
       "id": "floor-full",
       "name": "Floor Full",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "room-shell",
       "path": "assets/models/core/floorFull.glb",
       "tags": [
@@ -243,7 +243,7 @@
     {
       "id": "lamp-round-floor",
       "name": "Lamp Round Floor",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "lighting",
       "path": "assets/models/furniture-lighting/lampRoundFloor.glb",
       "tags": [
@@ -278,7 +278,7 @@
     {
       "id": "lounge-sofa",
       "name": "Lounge Sofa",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "sofas-chairs",
       "path": "assets/models/furniture-seating/loungeSofa.glb",
       "tags": [
@@ -312,7 +312,7 @@
     {
       "id": "potted-plant",
       "name": "Potted Plant",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "plants",
       "path": "assets/models/furniture-plants/pottedPlant.glb",
       "tags": [
@@ -346,7 +346,7 @@
     {
       "id": "rug-rectangle",
       "name": "Rug Rectangle",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "rugs",
       "path": "assets/models/furniture-rugs/rugRectangle.glb",
       "tags": [
@@ -380,7 +380,7 @@
     {
       "id": "side-table",
       "name": "Side Table",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "tables-desks",
       "path": "assets/models/furniture-tables/sideTable.glb",
       "tags": [
@@ -414,7 +414,7 @@
     {
       "id": "table-coffee",
       "name": "Table Coffee",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "tables-desks",
       "path": "assets/models/furniture-tables/tableCoffee.glb",
       "tags": [
@@ -448,7 +448,7 @@
     {
       "id": "wall",
       "name": "Wall",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "room-shell",
       "path": "assets/models/core/wall.glb",
       "tags": [
@@ -481,7 +481,7 @@
     {
       "id": "wall-corner",
       "name": "Wall Corner",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "room-shell",
       "path": "assets/models/core/wallCorner.glb",
       "tags": [
@@ -515,7 +515,7 @@
     {
       "id": "wall-window",
       "name": "Wall Window",
-      "type": "model",
+      "assetType": "staticMesh",
       "category": "room-shell",
       "path": "assets/models/core/wallWindow.glb",
       "tags": [

@@ -14,6 +14,11 @@ import { facingYawFromMove, planarMoveStep } from "./playerMovement";
 import { groundedAt, stepVerticalMotion, type VerticalMotionState } from "./verticalMotion";
 import { resolvePlanarMovement, type PlanarDelta } from "./collision";
 import type { LocomotionInput } from "./locomotionAnimation";
+import {
+  initialInteractionState,
+  stepInteractionTrigger,
+  type InteractionTriggerState,
+} from "./interaction";
 
 /** Gravity used when the host does not inject one (e.g. headless tests). */
 const DEFAULT_GRAVITY_Y = -9.81;
@@ -32,6 +37,12 @@ export interface BehaviorRegistryOptions {
    * The runtime shell uses it for feedback (e.g. a log); headless tests spy on it.
    */
   onGoalReached?: (entityId: string) => void;
+  /**
+   * Fired when an `interact` trigger fires (§3 Interaction runtime): the player
+   * entered an interaction-marked sensor and it was enabled + off cooldown. The
+   * project game rules interpret `action`; the shell logs it, tests spy on it.
+   */
+  onInteraction?: (entityId: string, action: string) => void;
   /**
    * Whether the named entity is the player-controlled (possessed) pawn this Play
    * boot. `input-move` only reads input + moves when this is true, so a character
@@ -59,6 +70,17 @@ const spin: BehaviorUpdate = ({ engine, params, transform }) => {
  */
 const collisionAudioPlayed = new Set<string>();
 
+/** Plays the entity's authored audio cue once, immediately (no contact gating). */
+function playAudioCue(context: Parameters<BehaviorUpdate>[0]): void {
+  const { audio, audioComponent } = context;
+  if (!audio || !audioComponent) return;
+  audio.playOneShot(audioComponent.clipId, {
+    volume: audioComponent.volume,
+    loop: audioComponent.loop,
+    spatial: audioComponent.spatial,
+  });
+}
+
 function playCollisionAudioOnce(
   context: Parameters<BehaviorUpdate>[0],
 ): void {
@@ -67,11 +89,7 @@ function playCollisionAudioOnce(
   if ((physics?.contactsForEntity(entityId).length ?? 0) === 0) return;
   if (collisionAudioPlayed.has(entityId)) return;
   collisionAudioPlayed.add(entityId);
-  audio.playOneShot(audioComponent.clipId, {
-    volume: audioComponent.volume,
-    loop: audioComponent.loop,
-    spatial: audioComponent.spatial,
-  });
+  playAudioCue(context);
 }
 
 const collisionChime: BehaviorUpdate = playCollisionAudioOnce;
@@ -109,9 +127,11 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
   const getGravityY = options.getGravityY ?? (() => DEFAULT_GRAVITY_Y);
   const reportLocomotion = options.reportLocomotion;
   const onGoalReached = options.onGoalReached;
+  const onInteraction = options.onInteraction;
   const isPlayerControlled = options.isPlayerControlled ?? (() => true);
   const vertical = new Map<string, PlayerVertical>();
   const reachedGoals = new Set<string>();
+  const interactions = new Map<string, InteractionTriggerState>();
 
   const inputMove: BehaviorUpdate = (context) => {
     // Only the possessed pawn responds to input. An authored `input-move`
@@ -184,11 +204,34 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     onGoalReached?.(context.entityId);
   };
 
+  // Interaction trigger (§3): an interaction-marked sensor entity whose first
+  // contact with the kinematic player fires its action (host-interpreted),
+  // playing the optional audio cue. Re-fires on a fresh re-enter once any
+  // authored cooldown elapses. Reuses the goal-reached sensor + contact pattern,
+  // with the edge/cooldown logic in the pure `stepInteractionTrigger` core.
+  const interact: BehaviorUpdate = (context) => {
+    const interaction = context.interactionComponent;
+    if (!interaction) return;
+    const prev = interactions.get(context.entityId) ?? initialInteractionState();
+    const overlapping = (context.physics?.contactsForEntity(context.entityId).length ?? 0) > 0;
+    const result = stepInteractionTrigger(prev, {
+      overlapping,
+      enabled: interaction.enabled ?? true,
+      cooldown: interaction.cooldown ?? 0,
+      dt: context.engine.deltaSeconds,
+    });
+    interactions.set(context.entityId, result.state);
+    if (!result.fire) return;
+    playAudioCue(context);
+    onInteraction?.(context.entityId, interaction.action);
+  };
+
   const behaviors = new Map<string, BehaviorUpdate>([
     ["spin", spin],
     ["input-move", inputMove],
     ["collision-chime", collisionChime],
     ["goal-reached", goalReached],
+    ["interact", interact],
   ]);
   return { get: (scriptId) => behaviors.get(scriptId) };
 }

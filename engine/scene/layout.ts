@@ -2,6 +2,8 @@ import type { CollisionPresetId } from "./collision";
 
 export type Vec3 = [number, number, number];
 export type LayoutLightType = "directional" | "point" | "spot";
+/** Particle blend mode (authoring + runtime VFX). */
+export type ParticleMaterialMode = "additive" | "alpha";
 
 /**
  * Generic, project-defined gameplay metadata value. The base editor stays
@@ -26,6 +28,38 @@ export interface LayoutAudio {
   volume?: number;
   loop?: boolean;
   spatial?: boolean;
+}
+
+/**
+ * Authoring reference to a particle/VFX emitter: a manifest `effectId` plus
+ * optional emitter params. The runtime VFX system resolves `effectId` and
+ * simulates; the saved layout only stores the reference + overrides.
+ */
+export interface LayoutParticleEmitter {
+  effectId: string;
+  loop?: boolean;
+  rate?: number;
+  lifetime?: number;
+  startSize?: number;
+  endSize?: number;
+  velocity?: Vec3;
+  spread?: number;
+  materialMode?: ParticleMaterialMode;
+  worldSpace?: boolean;
+  autoPlay?: boolean;
+}
+
+/**
+ * Authored interaction marker: an `action` id the runtime interprets, with an
+ * optional player-facing `prompt`, default `enabled` flag, a `requires` gate
+ * and a `cooldown` (seconds). Project game rules interpret these at runtime.
+ */
+export interface LayoutInteraction {
+  action: string;
+  prompt?: string;
+  enabled?: boolean;
+  requires?: string;
+  cooldown?: number;
 }
 
 export type LayoutPhysicsAxisLocks = [boolean, boolean, boolean];
@@ -87,6 +121,10 @@ export interface LayoutPlacement {
   behavior?: LayoutBehavior;
   /** Runtime audio cue attached to this object. */
   audio?: LayoutAudio;
+  /** Runtime particle/VFX emitter attached to this object. */
+  particle?: LayoutParticleEmitter;
+  /** Authored interaction marker (interpreted by runtime game rules). */
+  interaction?: LayoutInteraction;
 }
 
 export interface LayoutModelInstances {
@@ -138,6 +176,10 @@ export interface LayoutCharacter {
   behavior?: LayoutBehavior;
   /** Runtime audio cue attached to this object. */
   audio?: LayoutAudio;
+  /** Runtime particle/VFX emitter attached to this object. */
+  particle?: LayoutParticleEmitter;
+  /** Authored interaction marker (interpreted by runtime game rules). */
+  interaction?: LayoutInteraction;
 }
 
 export interface LayoutWorldSettings {
