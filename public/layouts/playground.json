@@ -44,12 +44,13 @@
             0,
             -0.6
           ],
-          "behavior": {
-            "script": "collision-chime"
-          },
           "audio": {
-            "clipId": "collision-chime",
-            "loop": true
+            "clipId": "starter-snd-music-01",
+            "autoPlay": true
+          },
+          "particle": {
+            "effectId": "starter-fx-dust-hit",
+            "autoPlay": true
           },
           "rotationYDeg": 0,
           "scale": 1
@@ -227,6 +228,10 @@
           ]
         }
       ]
+    },
+    {
+      "assetId": "starter-sm-wall",
+      "placements": []
     }
   ],
   "characters": [],

@@ -109,6 +109,8 @@ export interface AudioComponent {
   volume: number;
   loop: boolean;
   spatial: boolean;
+  /** Play automatically on scene load (ambient). Absent means false. */
+  autoPlay?: boolean;
 }
 
 /**
@@ -302,12 +304,14 @@ export function readAudioComponent(entity: Entity): AudioComponent | undefined {
   if (typeof data.clipId !== "string" || data.clipId.length === 0) return undefined;
   if (typeof data.volume !== "number" || !Number.isFinite(data.volume)) return undefined;
   if (typeof data.loop !== "boolean" || typeof data.spatial !== "boolean") return undefined;
-  return {
+  const component: AudioComponent = {
     clipId: data.clipId,
     volume: data.volume,
     loop: data.loop,
     spatial: data.spatial,
   };
+  if (typeof data.autoPlay === "boolean") component.autoPlay = data.autoPlay;
+  return component;
 }
 
 const PARTICLE_MATERIAL_MODES: readonly ParticleMaterialMode[] = ["additive", "alpha"];

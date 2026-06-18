@@ -29,7 +29,7 @@ import type {
   PawnDefinition,
   RuntimeCharacterRef,
 } from "@/game/gameModes/types";
-import { loadActiveProject, type ActiveProject } from "@/project/ProjectSystem";
+import { loadActiveProject, projectFileUrl, type ActiveProject } from "@/project/ProjectSystem";
 import {
   applySceneBackgroundAndAmbient,
   applyEditorMatchedPlayLook,
@@ -69,9 +69,20 @@ import {
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import { isPlayerStartAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
-import { assetPath } from "@engine/assets/manifest";
+import { assetPath, assetType } from "@engine/assets/manifest";
 import type { AssetCollisionDef } from "@engine/scene/collision";
+import {
+  readAudioComponent,
+  readParticleEmitterComponent,
+  readTransformComponent,
+} from "@engine/scene/components";
 import type { TransformComponent } from "@engine/scene/components";
+import type { SceneDocument } from "@engine/scene/sceneDocument";
+import {
+  ParticleEffect,
+  parseEffectDefinition,
+  type EffectDefinition,
+} from "@engine/render-three/particleEffect";
 
 const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   KeyW: "move-forward",
@@ -101,7 +112,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly inputActions = new ActionMap(DEFAULT_INPUT_BINDINGS);
   private readonly inputSubsystem = new InputSubsystem(this.inputActions);
   private readonly physicsSubsystem = new PhysicsSubsystem({ backend: "rapier" });
-  private readonly audioSubsystem = new AudioSubsystem({ backend: "web-audio" });
+  /** Manifest sound asset id -> fetchable file URL, filled after the manifest loads. */
+  private readonly soundUrlById = new Map<string, string>();
+  /** Manifest effect (`.effect.json`) asset id -> fetchable file URL. */
+  private readonly effectUrlById = new Map<string, string>();
+  /** Parsed effect definitions, cached by effect id. */
+  private readonly effectDefs = new Map<string, EffectDefinition | null>();
+  /** Live particle effects updated each frame; finished one-shots are removed. */
+  private particleEffects: ParticleEffect[] = [];
+  private readonly audioSubsystem = new AudioSubsystem({
+    backend: "web-audio",
+    resolveClipUrl: (clipId) => this.soundUrlById.get(clipId) ?? null,
+  });
   private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
   private readonly pointerLook: PointerLookSource;
   private readonly behaviorSubsystem: BehaviorSubsystem;
@@ -193,6 +215,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.engineApp.registerSubsystem(this.audioSubsystem);
     this.keyboardInput.attach();
     this.pointerLook.attach();
+    this.resumeAudioOnFirstGesture();
 
     void this.loadActiveProjectScene();
     this.handleResize();
@@ -207,6 +230,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.lastTime = now;
       this.engineApp.update(deltaMs / 1000);
       this.gameModeSession?.update(deltaMs / 1000);
+      this.updateParticleEffects(deltaMs / 1000);
       this.renderer.render(this.scene, this.camera);
       this.onFrame?.(deltaMs);
     };
@@ -218,9 +242,27 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     window.removeEventListener("resize", this.handleResize);
     this.keyboardInput.detach();
     this.pointerLook.detach();
+    for (const effect of this.particleEffects) {
+      this.scene.remove(effect.object3D);
+      effect.dispose();
+    }
+    this.particleEffects = [];
     this.gameModeSession?.dispose();
     void this.engineApp.dispose();
     this.renderer.dispose();
+  }
+
+  /** Advances live particle effects and removes finished one-shot effects. */
+  private updateParticleEffects(dt: number): void {
+    for (let i = this.particleEffects.length - 1; i >= 0; i -= 1) {
+      const effect = this.particleEffects[i]!;
+      effect.update(dt);
+      if (effect.isFinished()) {
+        this.scene.remove(effect.object3D);
+        effect.dispose();
+        this.particleEffects.splice(i, 1);
+      }
+    }
   }
 
   getRenderStats(): { drawCalls: number; triangles: number } {
@@ -273,17 +315,98 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     );
 
     await this.loadCollisionDefs();
+    await this.populateAssetUrls();
+    const sceneDocument = roomLayoutToSceneDocument(this.layout, {
+      colliderBox: (assetId, source) => this.colliderBoxFor(assetId, source),
+      collisionDefs: this.collisionDefs,
+    });
     await startSceneRuntime({
-      sceneDocument: roomLayoutToSceneDocument(this.layout, {
-        colliderBox: (assetId, source) => this.colliderBoxFor(assetId, source),
-        collisionDefs: this.collisionDefs,
-      }),
+      sceneDocument,
       physics: this.physicsSubsystem,
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
+    this.playAutoPlayAudio(sceneDocument);
+    void this.playAutoPlayParticles(sceneDocument);
 
     this.startGameMode();
+  }
+
+  /** Maps manifest `sound` + effect (`.effect.json`) asset ids to fetchable file URLs. */
+  private async populateAssetUrls(): Promise<void> {
+    if (!this.assetLoader) return;
+    const manifest = await this.assetLoader.loadManifest();
+    for (const asset of manifest.assets) {
+      const path = assetPath(asset);
+      if (assetType(asset) === "sound") this.soundUrlById.set(asset.id, projectFileUrl(path));
+      if (path.endsWith(".effect.json")) this.effectUrlById.set(asset.id, projectFileUrl(path));
+    }
+  }
+
+  /** Plays every Audio component flagged `autoPlay` once the scene is built (ambient). */
+  private playAutoPlayAudio(document: SceneDocument): void {
+    for (const entity of document.entities) {
+      const audio = readAudioComponent(entity);
+      if (!audio?.autoPlay) continue;
+      this.audioSubsystem.playOneShot(audio.clipId, {
+        volume: audio.volume,
+        loop: audio.loop,
+        spatial: audio.spatial,
+      });
+    }
+  }
+
+  /**
+   * Spawns a live particle effect for every ParticleEmitter flagged `autoPlay`,
+   * at the entity's authored position. Resolves the component's `effectId` to a
+   * manifest `.effect.json`, loads + caches it, then adds the effect to the scene
+   * for the frame loop to advance.
+   */
+  private async playAutoPlayParticles(document: SceneDocument): Promise<void> {
+    for (const entity of document.entities) {
+      const particle = readParticleEmitterComponent(entity);
+      if (!particle?.autoPlay) continue;
+      const transform = readTransformComponent(entity);
+      if (!transform) continue;
+      const url = this.effectUrlById.get(particle.effectId);
+      if (!url) continue;
+      const definition = await this.loadEffect(particle.effectId, url);
+      if (!definition) continue;
+      const effect = new ParticleEffect(definition);
+      effect.setOrigin(transform.position[0], transform.position[1], transform.position[2]);
+      this.scene.add(effect.object3D);
+      this.particleEffects.push(effect);
+    }
+  }
+
+  /** Fetches + parses an effect definition, caching the result (including misses). */
+  private async loadEffect(effectId: string, url: string): Promise<EffectDefinition | null> {
+    const cached = this.effectDefs.get(effectId);
+    if (cached !== undefined) return cached;
+    let definition: EffectDefinition | null = null;
+    try {
+      const response = await fetch(url);
+      definition = parseEffectDefinition((await response.json()) as unknown);
+    } catch {
+      definition = null;
+    }
+    this.effectDefs.set(effectId, definition);
+    return definition;
+  }
+
+  /**
+   * Browser autoplay policies suspend the audio context until a user gesture, so
+   * resume it on the first pointer/key input — then ambient cues auto-played at
+   * scene load begin sounding. One-shot: removes itself after the first gesture.
+   */
+  private resumeAudioOnFirstGesture(): void {
+    const resume = (): void => {
+      this.audioSubsystem.resumeContext();
+      window.removeEventListener("pointerdown", resume);
+      window.removeEventListener("keydown", resume);
+    };
+    window.addEventListener("pointerdown", resume);
+    window.addEventListener("keydown", resume);
   }
 
   /**

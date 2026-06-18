@@ -1755,16 +1755,36 @@ export class EditorUi {
   }
 
   private renderAudioFields(audio: LayoutAudio): string {
+    const sounds = this.editableAssets.filter((asset) => assetType(asset) === "sound");
+    const inList = sounds.some((asset) => asset.id === audio.clipId);
+    // Preserve the current clip as an option even if it is not a manifest sound
+    // asset (e.g. a built-in tone like "collision-chime") so it is not lost.
+    const preserved = inList
+      ? ""
+      : `<option value="${escapeHtml(audio.clipId)}" selected>${escapeHtml(audio.clipId)}</option>`;
+    const options =
+      preserved +
+      sounds
+        .map(
+          (asset) =>
+            `<option value="${escapeHtml(asset.id)}" ${
+              asset.id === audio.clipId ? "selected" : ""
+            }>${escapeHtml(asset.displayName)}</option>`,
+        )
+        .join("");
     return `
       <label class="detail-row">
-        <span>Clip Id</span>
-        <input type="text" data-audio="clipId" value="${escapeHtml(audio.clipId)}"
-          placeholder="${DEFAULT_AUDIO_CLIP}" />
+        <span>Clip</span>
+        <select data-audio="clipId">${options}</select>
       </label>
       <label class="detail-row">
         <span>Volume</span>
         <input type="number" data-audio="volume" min="0" max="1" step="0.05"
           value="${audio.volume ?? ""}" placeholder="1" />
+      </label>
+      <label class="detail-toggle">
+        <input type="checkbox" data-audio="autoPlay" ${audio.autoPlay ? "checked" : ""} />
+        <span>Auto Play</span>
       </label>
       <label class="detail-toggle">
         <input type="checkbox" data-audio="loop" ${audio.loop ? "checked" : ""} />
@@ -1791,74 +1811,41 @@ export class EditorUi {
       ${paramsHint}`;
   }
 
+  /**
+   * Particle component editor: a reference to a pre-authored effect asset
+   * (`.effect.json`) chosen from a dropdown, plus Auto Play. Emitter settings
+   * (rate/lifetime/size/velocity/material/color) live in the effect asset, not
+   * inline on the component — adding the component references an effect, it does
+   * not author a new particle system.
+   */
   private renderParticleFields(particle: LayoutParticleEmitter): string {
-    const mode = particle.materialMode ?? "";
-    const option = (value: string, label: string): string =>
-      `<option value="${value}" ${mode === value ? "selected" : ""}>${label}</option>`;
-    const velocity = particle.velocity;
-    const velocityFields = AXES.map(
-      (axis, index) => `
-        <label class="axis-field axis-${axis.toLowerCase()}">
-          <span class="axis-tag">${axis}</span>
-          <input data-particle-velocity="${index}" type="number" step="0.1"
-            value="${velocity ? velocity[index] : ""}" placeholder="0" />
-        </label>`,
-    ).join("");
-    const velocityRow = `
-      <div class="detail-vector">
-        <span class="detail-vector-label">Velocity</span>
-        <div class="vector-fields">${velocityFields}</div>
-      </div>`;
+    const effects = this.editableAssets.filter((asset) => assetPath(asset).endsWith(".effect.json"));
+    const inList = effects.some((asset) => asset.id === particle.effectId);
+    // Preserve the current effect id as an option even if it is not (yet) a
+    // known effect asset, so the reference is never silently lost.
+    const preserved = inList
+      ? ""
+      : `<option value="${escapeHtml(particle.effectId)}" selected>${escapeHtml(particle.effectId)}</option>`;
+    const options =
+      preserved +
+      effects
+        .map(
+          (asset) =>
+            `<option value="${escapeHtml(asset.id)}" ${
+              asset.id === particle.effectId ? "selected" : ""
+            }>${escapeHtml(asset.displayName)}</option>`,
+        )
+        .join("");
     return `
       <label class="detail-row">
-        <span>Effect Id</span>
-        <input type="text" data-particle="effectId" value="${escapeHtml(particle.effectId)}"
-          placeholder="${DEFAULT_PARTICLE_EFFECT}" />
-      </label>
-      <label class="detail-row">
-        <span>Material</span>
-        <select data-particle="materialMode">
-          ${option("", "Default")}${option("additive", "Additive")}${option("alpha", "Alpha")}
-        </select>
-      </label>
-      <label class="detail-row">
-        <span>Rate</span>
-        <input type="number" data-particle="rate" min="0" max="10000" step="1"
-          value="${particle.rate ?? ""}" placeholder="0" />
-      </label>
-      <label class="detail-row">
-        <span>Lifetime (s)</span>
-        <input type="number" data-particle="lifetime" min="0" max="60" step="0.1"
-          value="${particle.lifetime ?? ""}" placeholder="0" />
-      </label>
-      <label class="detail-row">
-        <span>Start Size</span>
-        <input type="number" data-particle="startSize" min="0" max="100" step="0.05"
-          value="${particle.startSize ?? ""}" placeholder="" />
-      </label>
-      <label class="detail-row">
-        <span>End Size</span>
-        <input type="number" data-particle="endSize" min="0" max="100" step="0.05"
-          value="${particle.endSize ?? ""}" placeholder="" />
-      </label>
-      <label class="detail-row">
-        <span>Spread</span>
-        <input type="number" data-particle="spread" min="0" max="10" step="0.01"
-          value="${particle.spread ?? ""}" placeholder="0" />
-      </label>
-      <label class="detail-toggle">
-        <input type="checkbox" data-particle="loop" ${particle.loop ? "checked" : ""} />
-        <span>Loop</span>
+        <span>Effect</span>
+        <select data-particle="effectId">${options}</select>
       </label>
       <label class="detail-toggle">
         <input type="checkbox" data-particle="autoPlay" ${particle.autoPlay ? "checked" : ""} />
         <span>Auto Play</span>
       </label>
-      <label class="detail-toggle">
-        <input type="checkbox" data-particle="worldSpace" ${particle.worldSpace ? "checked" : ""} />
-        <span>World Space</span>
-      </label>
-      ${velocityRow}`;
+      <div class="detail-hint">Emitter settings live in the effect asset (.effect.json).</div>`;
   }
 
   private renderInteractionFields(interaction: LayoutInteraction): string {
@@ -1910,19 +1897,27 @@ export class EditorUi {
       .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-particle]")
       .forEach((input) => input.addEventListener("change", () => this.commitParticleInput()));
     this.detailsBody
-      .querySelectorAll<HTMLInputElement>("[data-particle-velocity]")
-      .forEach((input) => input.addEventListener("change", () => this.commitParticleInput()));
-    this.detailsBody
       .querySelectorAll<HTMLInputElement>("[data-interaction]")
       .forEach((input) => input.addEventListener("change", () => this.commitInteractionInput()));
   }
 
   /** Adds a component with sensible defaults (a single undo/redo command). */
   private addComponent(kind: AddableComponent): void {
-    if (kind === "audio") this.app.setSelectionAudio({ clipId: DEFAULT_AUDIO_CLIP });
-    else if (kind === "behavior") this.app.setSelectionBehavior({ script: DEFAULT_BEHAVIOR_SCRIPT });
-    else if (kind === "particle") this.app.setSelectionParticle({ effectId: DEFAULT_PARTICLE_EFFECT });
-    else this.app.setSelectionInteraction({ action: "interact" });
+    if (kind === "audio") {
+      // Seed with the first manifest sound (if any) so it is audible on Play.
+      const firstSound = this.editableAssets.find((asset) => assetType(asset) === "sound");
+      this.app.setSelectionAudio({ clipId: firstSound?.id ?? DEFAULT_AUDIO_CLIP, autoPlay: true });
+    } else if (kind === "behavior") this.app.setSelectionBehavior({ script: DEFAULT_BEHAVIOR_SCRIPT });
+    else if (kind === "particle") {
+      // Seed with the first effect asset (if any) + autoPlay so it is visible on Play.
+      const firstEffect = this.editableAssets.find((asset) =>
+        assetPath(asset).endsWith(".effect.json"),
+      );
+      this.app.setSelectionParticle({
+        effectId: firstEffect?.id ?? DEFAULT_PARTICLE_EFFECT,
+        autoPlay: true,
+      });
+    } else this.app.setSelectionInteraction({ action: "interact" });
   }
 
   private removeComponent(kind: AddableComponent): void {
@@ -1933,15 +1928,21 @@ export class EditorUi {
   }
 
   private commitAudioInput(): void {
-    const clip = this.detailsBody.querySelector<HTMLInputElement>('[data-audio="clipId"]');
-    if (!clip) return;
-    const audio: LayoutAudio = { clipId: clip.value.trim() || DEFAULT_AUDIO_CLIP };
+    const clip = this.detailsBody.querySelector<HTMLSelectElement | HTMLInputElement>(
+      '[data-audio="clipId"]',
+    );
+    const clipId = clip?.value.trim();
+    if (!clipId) return;
+    const audio: LayoutAudio = { clipId };
     const volumeRaw = this.detailsBody
       .querySelector<HTMLInputElement>('[data-audio="volume"]')
       ?.value.trim();
     if (volumeRaw) {
       const volume = Number(volumeRaw);
       if (Number.isFinite(volume) && volume >= 0 && volume <= 1) audio.volume = volume;
+    }
+    if (this.detailsBody.querySelector<HTMLInputElement>('[data-audio="autoPlay"]')?.checked) {
+      audio.autoPlay = true;
     }
     if (this.detailsBody.querySelector<HTMLInputElement>('[data-audio="loop"]')?.checked) {
       audio.loop = true;
@@ -1961,46 +1962,23 @@ export class EditorUi {
     this.app.setSelectionBehavior(behavior);
   }
 
-  /** Rebuilds the Particle component from inputs, preserving authored velocity. */
+  /**
+   * Commits the Particle component as a reference to an effect asset + Auto Play.
+   * Any previously-authored inline emitter fields are preserved (spread) but no
+   * longer edited here — the effect asset is the source of truth.
+   */
   private commitParticleInput(): void {
-    const effectInput = this.detailsBody.querySelector<HTMLInputElement>('[data-particle="effectId"]');
-    if (!effectInput) return;
-    const base: LayoutParticleEmitter = {
-      ...(this.selected?.particle ?? { effectId: DEFAULT_PARTICLE_EFFECT }),
-    };
-    base.effectId = effectInput.value.trim() || base.effectId || DEFAULT_PARTICLE_EFFECT;
-    for (const key of ["rate", "lifetime", "startSize", "endSize", "spread"] as const) {
-      const raw = this.detailsBody
-        .querySelector<HTMLInputElement>(`[data-particle="${key}"]`)
-        ?.value.trim();
-      const value = raw ? Number(raw) : NaN;
-      if (raw && Number.isFinite(value)) base[key] = value;
-      else delete base[key];
-    }
-    for (const key of ["loop", "autoPlay", "worldSpace"] as const) {
-      if (this.detailsBody.querySelector<HTMLInputElement>(`[data-particle="${key}"]`)?.checked) {
-        base[key] = true;
-      } else {
-        delete base[key];
-      }
-    }
-    const mode = this.detailsBody.querySelector<HTMLSelectElement>('[data-particle="materialMode"]')?.value;
-    if (mode === "additive" || mode === "alpha") base.materialMode = mode;
-    else delete base.materialMode;
-    // Velocity: blank on all three axes clears it; otherwise blanks read as 0.
-    const axisRaw = (index: number): string =>
-      this.detailsBody
-        .querySelector<HTMLInputElement>(`[data-particle-velocity="${index}"]`)
-        ?.value.trim() ?? "";
-    const raw = [axisRaw(0), axisRaw(1), axisRaw(2)];
-    if (raw.every((value) => value === "")) {
-      delete base.velocity;
+    const effect = this.detailsBody.querySelector<HTMLSelectElement | HTMLInputElement>(
+      '[data-particle="effectId"]',
+    );
+    const effectId = effect?.value.trim();
+    if (!effectId) return;
+    const base: LayoutParticleEmitter = { ...(this.selected?.particle ?? { effectId }) };
+    base.effectId = effectId;
+    if (this.detailsBody.querySelector<HTMLInputElement>('[data-particle="autoPlay"]')?.checked) {
+      base.autoPlay = true;
     } else {
-      const axis = (value: string): number => {
-        const parsed = Number(value);
-        return value !== "" && Number.isFinite(parsed) ? parsed : 0;
-      };
-      base.velocity = [axis(raw[0]!), axis(raw[1]!), axis(raw[2]!)];
+      delete base.autoPlay;
     }
     this.app.setSelectionParticle(base);
   }

@@ -560,12 +560,14 @@ function copyPhysicsSettings(component: ColliderComponent, physics: LayoutPhysic
 
 function audioComponent(audio: LayoutAudio | undefined): AudioComponent | null {
   if (!audio) return null;
-  return {
+  const component: AudioComponent = {
     clipId: audio.clipId,
     volume: audio.volume ?? 1,
     loop: audio.loop ?? false,
     spatial: audio.spatial ?? false,
   };
+  if (audio.autoPlay !== undefined) component.autoPlay = audio.autoPlay;
+  return component;
 }
 
 function particleEmitterComponent(

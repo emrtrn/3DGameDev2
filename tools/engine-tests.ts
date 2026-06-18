@@ -63,6 +63,7 @@ import {
   type LocomotionInput,
 } from "../src/game/locomotionAnimation";
 import { initialInteractionState, stepInteractionTrigger } from "../src/game/interaction";
+import { parseEffectDefinition } from "../engine/render-three/particleEffect";
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
 import {
   DEFAULT_GAME_MODE_ID,
@@ -1196,7 +1197,7 @@ check("layout audio maps to a readable audio component", () => {
         placements: [
           {
             position: [0, 0, 0],
-            audio: { clipId: "collision-chime", volume: 0.4, loop: false, spatial: true },
+            audio: { clipId: "collision-chime", volume: 0.4, loop: false, spatial: true, autoPlay: true },
           },
         ],
       },
@@ -1213,6 +1214,7 @@ check("layout audio maps to a readable audio component", () => {
     volume: 0.4,
     loop: false,
     spatial: true,
+    autoPlay: true,
   });
 });
 
@@ -4327,6 +4329,63 @@ check("placement validator allowlists particle + interaction and rejects bad one
   // Absent stays absent.
   assert.equal(validatePlacement({ position: [0, 0, 0] }).particle, undefined);
   assert.equal(validatePlacement({ position: [0, 0, 0] }).interaction, undefined);
+});
+check("placement validator allowlists audio.autoPlay and rejects a non-boolean", () => {
+  const placement = validatePlacement({
+    position: [0, 0, 0],
+    audio: { clipId: "starter-snd-ui-click", autoPlay: true, loop: true },
+  });
+  assert.deepEqual(placement.audio, {
+    clipId: "starter-snd-ui-click",
+    loop: true,
+    autoPlay: true,
+  });
+  assert.throws(() =>
+    validatePlacement({ position: [0, 0, 0], audio: { clipId: "x", autoPlay: "yes" } }),
+  );
+});
+check("parseEffectDefinition reads a schema-1 effect and rejects bad input", () => {
+  assert.deepEqual(
+    parseEffectDefinition({
+      schema: 1,
+      effectId: "starter-fx-smoke-puff",
+      name: "Smoke Puff Effect",
+      loop: false,
+      rate: 18,
+      lifetime: 0.8,
+      startSize: 0.12,
+      endSize: 0.8,
+      velocity: [0, 1, 0],
+      spread: 0.4,
+      materialMode: "alpha",
+      color: "#a7a7a7",
+    }),
+    {
+      effectId: "starter-fx-smoke-puff",
+      name: "Smoke Puff Effect",
+      loop: false,
+      rate: 18,
+      lifetime: 0.8,
+      startSize: 0.12,
+      endSize: 0.8,
+      velocity: [0, 1, 0],
+      spread: 0.4,
+      materialMode: "alpha",
+      color: "#a7a7a7",
+    },
+  );
+  // Wrong schema or empty effectId → null.
+  assert.equal(parseEffectDefinition({ schema: 2, effectId: "x" }), null);
+  assert.equal(parseEffectDefinition({ schema: 1, effectId: "" }), null);
+  // Unknown materialMode falls back to alpha; a malformed color falls back to white.
+  const fallback = parseEffectDefinition({
+    schema: 1,
+    effectId: "fx",
+    materialMode: "neon",
+    color: "red",
+  });
+  assert.equal(fallback?.materialMode, "alpha");
+  assert.equal(fallback?.color, "#ffffff");
 });
 check("collision save payload requires a .collision.json path", () => {
   const payload = validateSaveCollisionPayload({

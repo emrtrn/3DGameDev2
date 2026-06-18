@@ -185,6 +185,10 @@ function validateAudio(value: unknown, label: string): Record<string, unknown> |
     if (typeof input.spatial !== "boolean") throw new Error(`${label} audio.spatial must be boolean`);
     audio.spatial = input.spatial;
   }
+  if (input.autoPlay !== undefined) {
+    if (typeof input.autoPlay !== "boolean") throw new Error(`${label} audio.autoPlay must be boolean`);
+    audio.autoPlay = input.autoPlay;
+  }
   return audio;
 }
 

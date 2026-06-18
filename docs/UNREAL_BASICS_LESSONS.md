@@ -269,6 +269,67 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-19* — **§3 Particle: efekt-asset dropdown + autoPlay + VFX renderer
+  (effectId→manifest fx + ilk renderer).** Kullanıcı doğru itirazı: component
+  eklemek inline bir parçacık sistemi *authorlamak* gibiydi; doğrusu **önceden
+  oluşturulmuş bir efekti seçmek**. Starter content'te 4 hazır efekt zaten var:
+  `public/assets/starter-content/Effects/FX_*.effect.json` (schema-1: rate/
+  lifetime/start+endSize/velocity/spread/materialMode/color/loop), manifest'te
+  `starter-fx-*` id'leriyle. **P1 authoring:** EditorUi Particle kartı artık
+  `effectId` için `.effect.json` asset'lerinin **dropdown'ı** (assetPath suffix
+  ile filtre) + **Auto Play** toggle; inline emitter param alanları (rate/
+  lifetime/size/velocity/material/loop/worldSpace) **kaldırıldı** (asset = tek
+  kaynak); "Add Particle" default'u ilk efekt + autoPlay:true; eski inline alanlar
+  commit'te korunur ama düzenlenmez. (autoPlay/component zaten Track A'da vardı —
+  motor değişmedi.) **P2 renderer:** yeni `engine/render-three/particleEffect.ts`
+  — saf `parseEffectDefinition` (schema-1 doğrula, headless test) + `ParticleEffect`
+  sınıfı: `THREE.Points` + ShaderMaterial (yumuşak yuvarlak nokta, color tint,
+  additive/alpha blend), CPU sim (rate ile spawn, age→lifetime, startSize→endSize,
+  velocity+spread, fade), kapasite ≈ rate*lifetime; loop=false bir lifetime
+  penceresi yayıp biter. `RuntimeSceneApp`: `effectUrlById` (manifest .effect.json
+  → URL), `playAutoPlayParticles(sceneDocument)` autoPlay parçacıkları entity
+  pozisyonunda spawn eder (effectId→URL→fetch+parse, cache), frame loop
+  `updateParticleEffects(dt)` ile ilerletir, biten one-shot'ları sahnedan kaldırıp
+  dispose eder. **Test:** engine-tests 164 → **165** (parseEffectDefinition valid+
+  reddetme+fallback); renderer Three.js'e özgü (headless edilmez, diğer
+  render-three gibi). **Sınır/karar:** texture yok (renkli yumuşak nokta);
+  3B konumsal değil ama parçacıklar zaten entity konumundan dünya-uzayında
+  yayılıyor; gl_PointSize perspektif ölçeği yaklaşık. Starter efektlerin hepsi
+  loop:false (kısa puff) → görmek için loop:true efekt author'lanmalı (.effect.json).
+  **Gate:** particle kodu tip-temiz + engine 165 yeşil; full `build:verify` hâlâ
+  kullanıcının `SceneApp.ts` material-slot WIP'i (9 tsc hatası) yüzünden kırmızı,
+  particle ile ilgisiz. **Kalan:** editör-içi efekt authoring (şu an .effect.json
+  elle); texture'lı parçacık; gerçek 3B spatial.
+- *2026-06-19* — **§3 Audio component: manifest sound dropdown + autoPlay +
+  dosya çalma.** Kullanıcı isteği: Audio component'te `clipId` serbest metin
+  yerine **açılır liste** olsun (manifest'teki `sound` asset'leri), seçilen ses
+  Play'de çalsın. Kararlar: **Play'de otomatik (autoPlay) + global 2B** (3B
+  spatial ertelendi; `spatial` alanı veride duruyor ama global çalınıyor).
+  **Authoring:** `LayoutAudio`/`AudioComponent`'e `autoPlay?` (adapter +
+  save-validator allowlist `validateAudio`); `EditorUi` Audio kartında `clipId`
+  artık `this.editableAssets`'ten `assetType==="sound"` filtreli bir `<select>`
+  (id→displayName; mevcut değer listede yoksa korunur, ör. ton `collision-chime`),
+  bir de "Auto Play" toggle; "Add Audio" default'u **ilk sound asset +
+  autoPlay:true** (eklenince hemen duyulabilir). **Playback:** `AudioSubsystem`
+  artık ton-dışı clipId'leri enjekte edilen `resolveClipUrl(clipId)` ile bir dosya
+  URL'ine çözer → `fetch`+`decodeAudioData` (URL bazlı promise-cache) →
+  `AudioBufferSource` + gain(volume), loop; `resumeContext()` eklendi.
+  `RuntimeSceneApp`:
+  `soundUrlById` (manifest `sound` → `projectFileUrl(assetPath)`) AudioSubsystem'e
+  resolver olarak verilir; sahne kurulunca `playAutoPlayAudio(sceneDocument)` her
+  `autoPlay` audio'yu çalar; tarayıcı autoplay politikası için ilk
+  pointer/keydown'da `resumeContext` (one-shot). **Tarayıcı kısıtı:** ambient ses,
+  autoplay politikası nedeniyle ilk kullanıcı tıklaması/tuşuna kadar başlamayabilir
+  → ilk gesture'da resume edilir. **Test:** engine-tests 163 → **164** (audio
+  autoPlay adapter round-trip + validator allowlist); dosya çalma yolu web-audio'ya
+  özgü, headless test edilmez (ton yolu gibi). **Mevcut clipId="collision-chime"
+  (ton, temasla) bozulmadan çalışır** — resolver önce ton manifestini dener.
+  **Gate durumu:** audio kodu tip-temiz + engine 164 yeşil; ama `npm run
+  build:verify` şu an **kullanıcının paralel material-slot WIP'i** (`SceneApp.ts`
+  `applyMaterialSlot`/`isMaterialAsset` eksik, 9 tsc hatası) yüzünden kırmızı —
+  audio değişiklikleriyle ilgisiz, o iş bitince yeşile döner. **Kalan:** 3B
+  konumsal ses; gerçek ses-dosyası import UI'si (şu an dosyalar manifeste elle/
+  script'le giriyor).
 - *2026-06-18* — **§3 Track B — Slice B-3: headless test kapsamı.** B-1/B-2'yi
   kilitleyen testler (tools/engine-tests.ts: 162 → **163 check**): (1) mevcut
   "EditorSceneController applies Details edits to the multi-selection" testi

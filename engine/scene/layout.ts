@@ -28,6 +28,8 @@ export interface LayoutAudio {
   volume?: number;
   loop?: boolean;
   spatial?: boolean;
+  /** Play this cue automatically when the scene loads (ambient). Absent means false. */
+  autoPlay?: boolean;
 }
 
 /**
