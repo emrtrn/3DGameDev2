@@ -880,6 +880,7 @@ export class EditorUi {
     card.type = "button";
     card.className = "asset-card";
     card.classList.toggle("is-unregistered", !item.editable);
+    card.classList.toggle("is-not-placeable", Boolean(item.editable && !canPlace));
     card.classList.toggle(
       "is-selected",
       Boolean(item.editable && item.editable.id === this.selectedAssetId),
@@ -887,10 +888,15 @@ export class EditorUi {
     card.draggable = canPlace;
     card.dataset.assetPath = item.path;
     if (item.editable) card.dataset.assetId = item.editable.id;
+    const status = contentAssetStatus(item, canPlace);
     card.innerHTML = `
       <span class="asset-thumb" data-asset-thumb>${escapeHtml(item.ext.toUpperCase())}</span>
       <span class="asset-meta">
         <strong title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</strong>
+        <span class="asset-badges">
+          <span class="asset-type-badge">${escapeHtml(formatContentTypeBadge(item.type))}</span>
+          ${status ? `<span class="asset-state-badge">${escapeHtml(status)}</span>` : ""}
+        </span>
       </span>
     `;
     card.addEventListener("dragstart", (event) => {
@@ -2318,6 +2324,27 @@ function formatContentTypeLabel(value: string): string {
   if (value === "level") return "Levels";
   if (value === "file") return "Files";
   return formatAssetTypeFallbackLabel(value);
+}
+
+function formatContentTypeBadge(value: BrowserAssetItem["type"]): string {
+  if (value === "staticMesh") return "Static Mesh";
+  if (value === "skeletalMesh") return "Skeletal Mesh";
+  if (value === "texture") return "Texture";
+  if (value === "material") return "Material";
+  if (value === "sound") return "Sound";
+  if (value === "animation") return "Animation";
+  if (value === "prefab") return "Prefab";
+  if (value === "level") return "Level";
+  return "File";
+}
+
+function contentAssetStatus(item: BrowserAssetItem, canPlace: boolean): string {
+  if (!item.editable) return "Loose file";
+  if (!canPlace) return "Not placeable";
+  if (!item.editable.thumbnail && item.type !== "file" && isModelAssetType(item.type)) {
+    return "Generated";
+  }
+  return "";
 }
 
 function formatAssetTypeFallbackLabel(value: string): string {

@@ -737,7 +737,7 @@ Content Browser asset kartında şu uyarılar görünmeli:
   - Search
   - Type filters
   - Asset cards / Asset View
-- [ ] Asset kartlarında thumbnail + assetType + temel metadata göster.
+- [x] Asset kartlarında thumbnail + assetType + temel metadata göster.
 - [x] Asset drag-drop akışını `assetId -> Actor/LayoutPlacement -> runtime loader` şeklinde kur.
 - [ ] `public/assets/metadata-schema.json` ile Details panel metadata alanlarını Content Browser metadata'sından ayrı ama uyumlu tut.
 - [ ] Basit health-check uyarıları ekle:

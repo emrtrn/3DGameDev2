@@ -884,7 +884,7 @@ body.editor-mode #debug-stats {
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
-  grid-auto-rows: 142px;
+  grid-auto-rows: 158px;
   gap: 8px;
   overflow: auto;
   align-content: start;
@@ -894,9 +894,9 @@ body.editor-mode #debug-stats {
 .editor-shell .asset-card {
   width: 100%;
   min-width: 0;
-  height: 126px;
+  height: 148px;
   display: grid;
-  grid-template-rows: 1fr 18px;
+  grid-template-rows: minmax(0, 1fr) 42px;
   gap: 6px;
   border-radius: 6px;
   padding: 6px;
@@ -906,6 +906,10 @@ body.editor-mode #debug-stats {
 .editor-shell .asset-card.is-unregistered {
   border-style: dashed;
   opacity: 0.82;
+}
+
+.editor-shell .asset-card.is-not-placeable {
+  opacity: 0.9;
 }
 
 .editor-shell .asset-card.is-selected,
@@ -951,7 +955,9 @@ body.editor-mode #debug-stats {
 
 .asset-meta {
   display: grid;
-  align-items: center;
+  grid-template-rows: 16px 18px;
+  gap: 3px;
+  align-content: start;
   min-width: 0;
 }
 
@@ -960,6 +966,44 @@ body.editor-mode #debug-stats {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
+}
+
+.asset-badges {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.asset-type-badge,
+.asset-state-badge {
+  min-width: 0;
+  max-width: 100%;
+  height: 17px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  padding: 0 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.asset-type-badge {
+  flex: 0 1 auto;
+  color: #dce8ef;
+  border: 1px solid rgba(126, 165, 190, 0.36);
+  background: rgba(56, 82, 99, 0.52);
+}
+
+.asset-state-badge {
+  flex: 0 1 auto;
+  color: #f7d99c;
+  border: 1px solid rgba(245, 158, 44, 0.36);
+  background: rgba(111, 74, 22, 0.42);
 }
 
 .content-drawer-status {
@@ -1050,12 +1094,12 @@ body.editor-mode #debug-stats {
 
   .content-list {
     grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
-    grid-auto-rows: 128px;
+    grid-auto-rows: 146px;
   }
 
   .editor-shell .asset-card {
-    height: 118px;
-    grid-template-rows: 1fr 18px;
+    height: 136px;
+    grid-template-rows: minmax(0, 1fr) 40px;
   }
 
   .outliner-row {
