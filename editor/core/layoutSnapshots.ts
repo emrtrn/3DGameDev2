@@ -1,7 +1,9 @@
 import type {
+  LayoutBehavior,
   LayoutCharacter,
   LayoutLightActor,
   LayoutMetadata,
+  LayoutParticleEmitter,
   LayoutPlacement,
   LayoutPhysics,
   MetadataValue,
@@ -31,6 +33,18 @@ export function cloneMetadataValue(
 
 export function cloneScale(scale: number | Vec3): number | Vec3 {
   return Array.isArray(scale) ? [scale[0], scale[1], scale[2]] : scale;
+}
+
+export function cloneBehavior(behavior: LayoutBehavior): LayoutBehavior {
+  const clone: LayoutBehavior = { script: behavior.script };
+  if (behavior.params) clone.params = cloneMetadata(behavior.params);
+  return clone;
+}
+
+export function cloneParticle(particle: LayoutParticleEmitter): LayoutParticleEmitter {
+  const clone: LayoutParticleEmitter = { ...particle };
+  if (particle.velocity) clone.velocity = [...particle.velocity];
+  return clone;
 }
 
 export function clonePhysics(physics: LayoutPhysics | undefined): LayoutPhysics | undefined {
@@ -67,6 +81,9 @@ export function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
   }
   if (placement.metadata !== undefined) clone.metadata = cloneMetadata(placement.metadata);
   if (placement.audio !== undefined) clone.audio = { ...placement.audio };
+  if (placement.behavior !== undefined) clone.behavior = cloneBehavior(placement.behavior);
+  if (placement.particle !== undefined) clone.particle = cloneParticle(placement.particle);
+  if (placement.interaction !== undefined) clone.interaction = { ...placement.interaction };
   if (placement.nodeId !== undefined) clone.nodeId = placement.nodeId;
   if (placement.parentId !== undefined) clone.parentId = placement.parentId;
   return clone;
@@ -101,6 +118,9 @@ export function cloneCharacter(character: LayoutCharacter): LayoutCharacter {
   }
   if (character.metadata !== undefined) clone.metadata = cloneMetadata(character.metadata);
   if (character.audio !== undefined) clone.audio = { ...character.audio };
+  if (character.behavior !== undefined) clone.behavior = cloneBehavior(character.behavior);
+  if (character.particle !== undefined) clone.particle = cloneParticle(character.particle);
+  if (character.interaction !== undefined) clone.interaction = { ...character.interaction };
   if (character.nodeId !== undefined) clone.nodeId = character.nodeId;
   if (character.parentId !== undefined) clone.parentId = character.parentId;
   if (character.animation !== undefined) clone.animation = character.animation;

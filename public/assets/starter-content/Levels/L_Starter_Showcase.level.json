@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "Starter Showcase Level",
+  "loadGroups": [
+    "starter-static-meshes"
+  ],
+  "instances": [],
+  "characters": [],
+  "lights": [],
+  "worldSettings": {
+    "gameMode": "default-camera"
+  }
+}

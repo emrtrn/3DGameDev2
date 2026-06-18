@@ -1,7 +1,10 @@
 import type {
+  LayoutAudio,
+  LayoutBehavior,
   LayoutInteraction,
   LayoutLightActor,
   LayoutMetadata,
+  LayoutParticleEmitter,
   LayoutPhysics,
   Vec3,
 } from "@engine/scene/layout";
@@ -42,6 +45,12 @@ export interface EditableSelection {
   physics: LayoutPhysics;
   /** Project-defined gameplay metadata (schema-driven); empty when none set. */
   metadata: LayoutMetadata;
+  /** Authored audio cue; absent when the object has no Audio component. */
+  audio?: LayoutAudio;
+  /** Authored runtime behavior reference; absent when the object has no Behavior component. */
+  behavior?: LayoutBehavior;
+  /** Authored particle emitter; absent when the object has no Particle component. */
+  particle?: LayoutParticleEmitter;
   /** Authored interaction marker; absent when the object has no Interaction component. */
   interaction?: LayoutInteraction;
   lightType?: LayoutLightActor["type"];

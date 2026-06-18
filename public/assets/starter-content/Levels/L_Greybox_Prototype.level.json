@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "Greybox Prototype Level",
+  "loadGroups": [
+    "starter-static-meshes"
+  ],
+  "instances": [],
+  "characters": [],
+  "lights": [],
+  "worldSettings": {
+    "gameMode": "default-camera"
+  }
+}

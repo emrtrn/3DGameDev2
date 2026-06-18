@@ -112,9 +112,12 @@ import {
   readScale,
 } from "@engine/scene/transform";
 import type {
+  LayoutAudio,
+  LayoutBehavior,
   LayoutCharacter,
   LayoutInteraction,
   LayoutLightActor,
+  LayoutParticleEmitter,
   LayoutPlacement,
   LayoutPhysics,
   LayoutWorldSettings,
@@ -2056,6 +2059,21 @@ export class SceneApp {
   /** Sets (or clears, when `undefined`) the selection's Interaction component with undo/redo. */
   setSelectionInteraction(value: LayoutInteraction | undefined): void {
     this.editorSceneController.setSelectionInteraction(value);
+  }
+
+  /** Sets (or clears, when `undefined`) the selection's Audio component with undo/redo. */
+  setSelectionAudio(value: LayoutAudio | undefined): void {
+    this.editorSceneController.setSelectionAudio(value);
+  }
+
+  /** Sets (or clears, when `undefined`) the selection's Behavior component with undo/redo. */
+  setSelectionBehavior(value: LayoutBehavior | undefined): void {
+    this.editorSceneController.setSelectionBehavior(value);
+  }
+
+  /** Sets (or clears, when `undefined`) the selection's Particle Emitter component with undo/redo. */
+  setSelectionParticle(value: LayoutParticleEmitter | undefined): void {
+    this.editorSceneController.setSelectionParticle(value);
   }
 
   /** Active project's gameplay metadata schema, or null when none is declared. */

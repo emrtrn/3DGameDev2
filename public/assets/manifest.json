@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-06-12",
+  "generated": "2026-06-18",
   "ktx2": false,
   "assets": [
     {
@@ -545,6 +545,1086 @@
         "url": "https://kenney.nl/assets/furniture-kit"
       },
       "license": "CC0-1.0"
+    },
+    {
+      "id": "starter-sm-cube",
+      "name": "Starter Cube",
+      "assetType": "staticMesh",
+      "category": "starter-shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/SM_Starter_Cube.glb",
+      "tags": [
+        "starter",
+        "shape",
+        "cube"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "starter-static-meshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2024
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-sm-sphere",
+      "name": "Starter Sphere",
+      "assetType": "staticMesh",
+      "category": "starter-shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/SM_Starter_Sphere.glb",
+      "tags": [
+        "starter",
+        "shape",
+        "sphere"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "starter-static-meshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 24928
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-sm-cylinder",
+      "name": "Starter Cylinder",
+      "assetType": "staticMesh",
+      "category": "starter-shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/SM_Starter_Cylinder.glb",
+      "tags": [
+        "starter",
+        "shape",
+        "cylinder"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "starter-static-meshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 8240
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-sm-cone",
+      "name": "Starter Cone",
+      "assetType": "staticMesh",
+      "category": "starter-shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/SM_Starter_Cone.glb",
+      "tags": [
+        "starter",
+        "shape",
+        "cone"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "starter-static-meshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 5856
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-sm-plane",
+      "name": "Starter Plane",
+      "assetType": "staticMesh",
+      "category": "starter-shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/SM_Starter_Plane.glb",
+      "tags": [
+        "starter",
+        "shape",
+        "plane"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "starter-static-meshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 1296
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-sm-ramp",
+      "name": "Prototype Ramp",
+      "assetType": "staticMesh",
+      "category": "starter-prototype",
+      "path": "assets/starter-content/StaticMeshes/Prototype/SM_Prototype_Ramp.glb",
+      "tags": [
+        "starter",
+        "prototype",
+        "ramp"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "starter-static-meshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 1236
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-sm-wall",
+      "name": "Prototype Wall",
+      "assetType": "staticMesh",
+      "category": "starter-prototype",
+      "path": "assets/starter-content/StaticMeshes/Prototype/SM_Prototype_Wall.glb",
+      "tags": [
+        "starter",
+        "prototype",
+        "wall"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "starter-static-meshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2056
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-sm-platform",
+      "name": "Prototype Platform",
+      "assetType": "staticMesh",
+      "category": "starter-prototype",
+      "path": "assets/starter-content/StaticMeshes/Prototype/SM_Prototype_Platform.glb",
+      "tags": [
+        "starter",
+        "prototype",
+        "platform"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "starter-static-meshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2024
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-sm-pillar",
+      "name": "Prototype Pillar",
+      "assetType": "staticMesh",
+      "category": "starter-prototype",
+      "path": "assets/starter-content/StaticMeshes/Prototype/SM_Prototype_Pillar.glb",
+      "tags": [
+        "starter",
+        "prototype",
+        "pillar"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "starter-static-meshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6572
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-sm-crate",
+      "name": "Prototype Crate",
+      "assetType": "staticMesh",
+      "category": "starter-props",
+      "path": "assets/starter-content/StaticMeshes/Props/SM_Prototype_Crate.glb",
+      "tags": [
+        "starter",
+        "prop",
+        "crate"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "starter-static-meshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2024
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-grid",
+      "name": "Prototype Grid Texture",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Prototype_Grid.png",
+      "tags": [
+        "starter",
+        "texture",
+        "grid"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 477
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-checker",
+      "name": "Neutral Checker Texture",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Checker_Neutral.png",
+      "tags": [
+        "starter",
+        "texture",
+        "checker"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 484
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-concrete",
+      "name": "Concrete Noise Texture",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Concrete_Noise.png",
+      "tags": [
+        "starter",
+        "texture",
+        "concrete"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 19888
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-grass",
+      "name": "Grass Noise Texture",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Grass_Noise.png",
+      "tags": [
+        "starter",
+        "texture",
+        "grass"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 30690
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-flat-normal",
+      "name": "Flat Normal Texture",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Flat_Normal.png",
+      "tags": [
+        "starter",
+        "texture",
+        "normal"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 357
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-roughness-mid",
+      "name": "Mid Roughness Texture",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Roughness_Mid.png",
+      "tags": [
+        "starter",
+        "texture",
+        "roughness"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 357
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-mat-prototype-grid",
+      "name": "Prototype Grid Material",
+      "assetType": "material",
+      "category": "starter-materials",
+      "path": "assets/starter-content/Materials/M_Prototype_Grid.material.json",
+      "tags": [
+        "starter",
+        "material"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 304
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-mat-concrete",
+      "name": "Concrete Material",
+      "assetType": "material",
+      "category": "starter-materials",
+      "path": "assets/starter-content/Materials/M_Concrete.material.json",
+      "tags": [
+        "starter",
+        "material"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 303
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-mat-grass",
+      "name": "Grass Material",
+      "assetType": "material",
+      "category": "starter-materials",
+      "path": "assets/starter-content/Materials/M_Grass.material.json",
+      "tags": [
+        "starter",
+        "material"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 297
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-mat-metal",
+      "name": "Metal Material",
+      "assetType": "material",
+      "category": "starter-materials",
+      "path": "assets/starter-content/Materials/M_Metal.material.json",
+      "tags": [
+        "starter",
+        "material"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 305
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-mat-glass",
+      "name": "Glass Material",
+      "assetType": "material",
+      "category": "starter-materials",
+      "path": "assets/starter-content/Materials/M_Glass.material.json",
+      "tags": [
+        "starter",
+        "material"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 239
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-mat-emissive",
+      "name": "Emissive Material",
+      "assetType": "material",
+      "category": "starter-materials",
+      "path": "assets/starter-content/Materials/M_Emissive.material.json",
+      "tags": [
+        "starter",
+        "material"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 240
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-ui-click",
+      "name": "UI Click",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/S_UI_Click.wav",
+      "tags": [
+        "starter",
+        "sound",
+        "ui"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 7982
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-ui-confirm",
+      "name": "UI Confirm",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/S_UI_Confirm.wav",
+      "tags": [
+        "starter",
+        "sound",
+        "ui"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 14156
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-footstep-stone",
+      "name": "Footstep Stone",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/S_Footstep_Stone.wav",
+      "tags": [
+        "starter",
+        "sound",
+        "footstep"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 12392
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-impact-light",
+      "name": "Light Impact",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/S_Impact_Light.wav",
+      "tags": [
+        "starter",
+        "sound",
+        "impact"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 15920
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-door-open",
+      "name": "Door Open Placeholder",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/S_Door_Open.wav",
+      "tags": [
+        "starter",
+        "sound",
+        "door"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 28268
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-ambient-room",
+      "name": "Room Ambience Placeholder",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/S_Ambient_Room.wav",
+      "tags": [
+        "starter",
+        "sound",
+        "ambient"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 88244
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-fx-smoke-puff",
+      "name": "Smoke Puff Effect",
+      "assetType": "prefab",
+      "category": "starter-effects",
+      "path": "assets/starter-content/Effects/FX_Smoke_Puff.effect.json",
+      "tags": [
+        "starter",
+        "effect",
+        "vfx"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-effects",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 284
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-fx-spark-burst",
+      "name": "Spark Burst Effect",
+      "assetType": "prefab",
+      "category": "starter-effects",
+      "path": "assets/starter-content/Effects/FX_Spark_Burst.effect.json",
+      "tags": [
+        "starter",
+        "effect",
+        "vfx"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-effects",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 289
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-fx-dust-hit",
+      "name": "Dust Hit Effect",
+      "assetType": "prefab",
+      "category": "starter-effects",
+      "path": "assets/starter-content/Effects/FX_Dust_Hit.effect.json",
+      "tags": [
+        "starter",
+        "effect",
+        "vfx"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-effects",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 280
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-fx-interaction-glow",
+      "name": "Interaction Glow Effect",
+      "assetType": "prefab",
+      "category": "starter-effects",
+      "path": "assets/starter-content/Effects/FX_Interaction_Glow.effect.json",
+      "tags": [
+        "starter",
+        "effect",
+        "vfx"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-effects",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 299
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-level-showcase",
+      "name": "Starter Showcase Level",
+      "assetType": "level",
+      "category": "starter-levels",
+      "path": "assets/starter-content/Levels/L_Starter_Showcase.level.json",
+      "tags": [
+        "starter",
+        "level"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-levels",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 219
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-level-greybox",
+      "name": "Greybox Prototype Level",
+      "assetType": "level",
+      "category": "starter-levels",
+      "path": "assets/starter-content/Levels/L_Greybox_Prototype.level.json",
+      "tags": [
+        "starter",
+        "level"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-levels",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 220
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
     }
   ]
 }

@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "materialType": "standard",
+  "name": "Emissive Material",
+  "baseColor": "#46b5ff",
+  "baseColorTexture": null,
+  "roughness": 0.4,
+  "metalness": 0,
+  "opacity": 1,
+  "emissive": "#46b5ff",
+  "emissiveIntensity": 1.8
+}

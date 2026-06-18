@@ -2,9 +2,11 @@ import type { EditorCommand, EditorCommandPhase, EditorHistoryState } from "@edi
 import { EditorCommandStore } from "@editor/core/history";
 import { uniqueEditorId } from "@editor/core/ids";
 import {
+  cloneBehavior,
   cloneCharacter,
   cloneLightActor,
   cloneMetadataValue,
+  cloneParticle,
   clonePhysics,
   clonePlacement,
   cloneUngroupedCharacter,
@@ -34,10 +36,13 @@ import {
 import { SelectionStore } from "@editor/core/selectionStore";
 import { uniqueActorName } from "@engine/scene/lights";
 import type {
+  LayoutAudio,
+  LayoutBehavior,
   LayoutCharacter,
   LayoutInteraction,
   LayoutLightActor,
   LayoutMetadata,
+  LayoutParticleEmitter,
   LayoutPlacement,
   LayoutPhysics,
   MetadataValue,
@@ -62,6 +67,9 @@ type MutableHierarchyTransform = {
   simulatePhysics?: boolean;
   physics?: LayoutPhysics;
   metadata?: LayoutMetadata;
+  audio?: LayoutAudio;
+  behavior?: LayoutBehavior;
+  particle?: LayoutParticleEmitter;
   interaction?: LayoutInteraction;
   nodeId?: string;
   parentId?: string;
@@ -132,12 +140,6 @@ function physicsSettingsEqual(
   return JSON.stringify(left ?? {}) === JSON.stringify(right ?? {});
 }
 
-function cloneInteraction(
-  value: LayoutInteraction | undefined,
-): LayoutInteraction | undefined {
-  return value ? { ...value } : undefined;
-}
-
 function interactionsEqual(
   left: LayoutInteraction | undefined,
   right: LayoutInteraction | undefined,
@@ -151,6 +153,41 @@ function interactionsEqual(
     left.requires === right.requires &&
     left.cooldown === right.cooldown
   );
+}
+
+function audiosEqual(
+  left: LayoutAudio | undefined,
+  right: LayoutAudio | undefined,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return (
+    left.clipId === right.clipId &&
+    left.volume === right.volume &&
+    left.loop === right.loop &&
+    left.spatial === right.spatial
+  );
+}
+
+function behaviorsEqual(
+  left: LayoutBehavior | undefined,
+  right: LayoutBehavior | undefined,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return (
+    left.script === right.script &&
+    JSON.stringify(left.params ?? {}) === JSON.stringify(right.params ?? {})
+  );
+}
+
+function particlesEqual(
+  left: LayoutParticleEmitter | undefined,
+  right: LayoutParticleEmitter | undefined,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 /**
@@ -774,45 +811,119 @@ export class EditorSceneController {
 
   /** Sets (or clears, when `undefined`) the per-object Interaction component. */
   setSelectionInteraction(value: LayoutInteraction | undefined): void {
+    this.setSelectionOptionalComponent(
+      {
+        read: (target) => target.interaction,
+        write: (target, next) => {
+          if (next === undefined) delete target.interaction;
+          else target.interaction = next;
+        },
+        clone: (component) => ({ ...component }),
+        equals: interactionsEqual,
+        label: value ? "Set interaction" : "Remove interaction",
+      },
+      value,
+    );
+  }
+
+  /** Sets (or clears, when `undefined`) the per-object Audio component. */
+  setSelectionAudio(value: LayoutAudio | undefined): void {
+    this.setSelectionOptionalComponent(
+      {
+        read: (target) => target.audio,
+        write: (target, next) => {
+          if (next === undefined) delete target.audio;
+          else target.audio = next;
+        },
+        clone: (component) => ({ ...component }),
+        equals: audiosEqual,
+        label: value ? "Set audio" : "Remove audio",
+      },
+      value,
+    );
+  }
+
+  /** Sets (or clears, when `undefined`) the per-object Behavior component. */
+  setSelectionBehavior(value: LayoutBehavior | undefined): void {
+    this.setSelectionOptionalComponent(
+      {
+        read: (target) => target.behavior,
+        write: (target, next) => {
+          if (next === undefined) delete target.behavior;
+          else target.behavior = next;
+        },
+        clone: cloneBehavior,
+        equals: behaviorsEqual,
+        label: value ? "Set behavior" : "Remove behavior",
+      },
+      value,
+    );
+  }
+
+  /** Sets (or clears, when `undefined`) the per-object Particle Emitter component. */
+  setSelectionParticle(value: LayoutParticleEmitter | undefined): void {
+    this.setSelectionOptionalComponent(
+      {
+        read: (target) => target.particle,
+        write: (target, next) => {
+          if (next === undefined) delete target.particle;
+          else target.particle = next;
+        },
+        clone: cloneParticle,
+        equals: particlesEqual,
+        label: value ? "Set particle" : "Remove particle",
+      },
+      value,
+    );
+  }
+
+  /**
+   * Generic set/clear of an optional component field on the selected objects, as
+   * one undo/redo command. `read`/`write` isolate the typed field; `clone`
+   * snapshots it (for undo + to avoid shared references across multi-select);
+   * `equals` skips no-op edits. Mirrors the per-field commands above.
+   */
+  private setSelectionOptionalComponent<T>(
+    config: {
+      read: (target: MutableHierarchyTransform) => T | undefined;
+      write: (target: MutableHierarchyTransform, next: T | undefined) => void;
+      clone: (component: T) => T;
+      equals: (a: T | undefined, b: T | undefined) => boolean;
+      label: string;
+    },
+    value: T | undefined,
+  ): void {
     if (!this.selection || !this.host.hasSelection(this.selection)) return;
     if (this.selection.kind === "light") return;
     const entries = this.getSelectedSelectionsWithTargets((selection) => selection.kind !== "light")
       .flatMap((selection) => {
         const target = this.host.getMutableTransform(selection);
-        if (!target || interactionsEqual(target.interaction, value)) return [];
-        return [{ selection: cloneSelection(selection), previous: cloneInteraction(target.interaction) }];
+        if (!target || config.equals(config.read(target), value)) return [];
+        const previous = config.read(target);
+        return [
+          {
+            selection: cloneSelection(selection),
+            previous: previous === undefined ? undefined : config.clone(previous),
+          },
+        ];
       });
     if (entries.length === 0) return;
 
     const applyEntries = (mode: EditorCommandPhase): void => {
       for (const entry of entries) {
-        this.applyInteraction(
-          entry.selection,
-          mode === "redo" ? value : entry.previous,
-          { notify: false },
-        );
+        const target = this.host.getMutableTransform(entry.selection);
+        if (!target) continue;
+        const next = mode === "redo" ? value : entry.previous;
+        config.write(target, next === undefined ? undefined : config.clone(next));
       }
       this.host.emitSelectionChanged();
     };
 
     this.executeCommand({
-      label: value ? "Set interaction" : "Remove interaction",
+      label: config.label,
       redo: () => applyEntries("redo"),
       undo: () => applyEntries("undo"),
     });
-  }
-
-  private applyInteraction(
-    selection: Selection,
-    value: LayoutInteraction | undefined,
-    options: { notify?: boolean } = {},
-  ): void {
-    if (selection.kind === "light") return;
-    const target = this.host.getMutableTransform(selection);
-    if (!target) return;
-    if (value === undefined) delete target.interaction;
-    else target.interaction = { ...value };
-    if (options.notify !== false) this.host.emitSelectionChanged();
   }
 
   private duplicateSelection(selection: Selection): Selection | null {

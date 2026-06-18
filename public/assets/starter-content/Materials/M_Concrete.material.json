@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "materialType": "standard",
+  "name": "Concrete Material",
+  "baseColor": "#8b8e8d",
+  "baseColorTexture": "starter-tex-concrete",
+  "normalTexture": "starter-tex-flat-normal",
+  "roughness": 0.92,
+  "metalness": 0,
+  "opacity": 1,
+  "emissive": "#000000",
+  "emissiveIntensity": 0
+}

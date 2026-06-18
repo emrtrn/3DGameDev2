@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "materialType": "standard",
+  "name": "Glass Material",
+  "baseColor": "#bfe9ff",
+  "baseColorTexture": null,
+  "roughness": 0.05,
+  "metalness": 0,
+  "opacity": 0.36,
+  "emissive": "#000000",
+  "emissiveIntensity": 0
+}

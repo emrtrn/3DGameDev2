@@ -27,7 +27,14 @@ import {
   type MetadataFieldDef,
   type MetadataSchema,
 } from "@engine/scene/metadataSchema";
-import type { LayoutInteraction, LayoutPhysics, MetadataValue } from "@engine/scene/layout";
+import type {
+  LayoutAudio,
+  LayoutBehavior,
+  LayoutInteraction,
+  LayoutParticleEmitter,
+  LayoutPhysics,
+  MetadataValue,
+} from "@engine/scene/layout";
 import {
   isShapePrimitiveType,
   PLAYER_START_ASSET_ID,
@@ -57,6 +64,22 @@ type InspectorTab = "details" | "world";
 const DEFAULT_LINEAR_DAMPING = 0.12;
 const DEFAULT_ANGULAR_DAMPING = 0.45;
 const PHYSICS_AXIS_LABELS = ["X", "Y", "Z"] as const;
+
+/** Optional components the Details panel can add/remove (Transform is required). */
+const ADDABLE_COMPONENTS = ["audio", "behavior", "particle", "interaction"] as const;
+type AddableComponent = (typeof ADDABLE_COMPONENTS)[number];
+const COMPONENT_LABELS: Record<AddableComponent, string> = {
+  audio: "Audio",
+  behavior: "Behavior",
+  particle: "Particle",
+  interaction: "Interaction",
+};
+/** Default audio clip seeded when adding an Audio component (a known clip id). */
+const DEFAULT_AUDIO_CLIP = "collision-chime";
+/** Default effect id seeded when adding a Particle component. */
+const DEFAULT_PARTICLE_EFFECT = "fx.smoke_soft_01";
+/** Default script seeded when adding a Behavior component. */
+const DEFAULT_BEHAVIOR_SCRIPT = "spin";
 
 const COLLISION_PRESET_LABELS: Record<CollisionPresetId, string> = {
   noCollision: "No Collision",
@@ -979,6 +1002,8 @@ export class EditorUi {
     const thumb = card.querySelector<HTMLElement>("[data-asset-thumb]");
     if (thumb && item.type !== "file" && isModelAssetType(item.type)) {
       void this.renderAssetThumbnail(item, thumb);
+    } else if (thumb && item.type === "texture") {
+      this.renderTextureThumbnail(item, thumb);
     }
     return card;
   }
@@ -987,6 +1012,14 @@ export class EditorUi {
     const prefix = `${item.label} · ${formatContentTypeBadge(item.type)}`;
     this.contentStatus.textContent =
       issues.length > 0 ? `${prefix} · ${contentAssetIssueTooltip(issues)}` : `${prefix} · No issues`;
+  }
+
+  private renderTextureThumbnail(item: BrowserAssetItem, thumb: HTMLElement): void {
+    thumb.replaceChildren();
+    const image = document.createElement("img");
+    image.alt = "";
+    image.src = projectFileUrl(item.path);
+    thumb.append(image);
   }
 
   private async renderAssetThumbnail(
@@ -1504,7 +1537,7 @@ export class EditorUi {
       </div>
       ${this.renderCollisionSection(selection)}
       ${this.renderPhysicsSection(selection, selection.locked)}
-      ${this.renderInteractionSection(selection)}
+      ${this.renderComponentsSection(selection)}
       ${this.renderMetadataSections(selection)}
     `;
 
@@ -1587,7 +1620,7 @@ export class EditorUi {
       });
 
     this.bindPhysicsInputs();
-    this.bindInteractionInputs();
+    this.bindComponentsInputs();
     this.bindMetadataInputs();
   }
 
@@ -1673,66 +1706,274 @@ export class EditorUi {
   }
 
   /**
-   * Per-object Interaction component (§3). Absent → an "Add Interaction" button;
-   * present → editable fields (action/prompt/enabled/cooldown) plus Remove. Each
-   * change routes through `setSelectionInteraction`, so add/remove/edit are
-   * single undo/redo commands. The required Transform component has no remove.
+   * Optional-component editor (§3): each present component (Audio/Behavior/
+   * Particle/Interaction) renders as a card with editable fields + Remove, and a
+   * single "Add Component" menu lists the absent ones. Add/Remove/edit each route
+   * through a `setSelection*` command, so all are single undo/redo steps. The
+   * required Transform component is not listed here (it cannot be removed).
    */
-  private renderInteractionSection(selection: EditableSelection): string {
-    const interaction = selection.interaction;
-    if (!interaction) {
-      return `
-      <div class="detail-section">
-        <div class="detail-section-title">Interaction</div>
-        <div class="detail-actions-row">
-          <button type="button" data-interaction-add
-            title="Add an Interaction component">Add Interaction</button>
-        </div>
-      </div>`;
+  private renderComponentsSection(selection: EditableSelection): string {
+    const cards: string[] = [];
+    if (selection.audio) cards.push(this.componentCard("audio", this.renderAudioFields(selection.audio)));
+    if (selection.behavior) {
+      cards.push(this.componentCard("behavior", this.renderBehaviorFields(selection.behavior)));
     }
+    if (selection.particle) {
+      cards.push(this.componentCard("particle", this.renderParticleFields(selection.particle)));
+    }
+    if (selection.interaction) {
+      cards.push(this.componentCard("interaction", this.renderInteractionFields(selection.interaction)));
+    }
+
+    const absent = ADDABLE_COMPONENTS.filter((kind) => !selection[kind]);
+    const addMenu =
+      absent.length === 0
+        ? ""
+        : `
+      <div class="detail-section">
+        <label class="detail-row">
+          <span>Add Component</span>
+          <select data-add-component>
+            <option value="">Add…</option>
+            ${absent.map((kind) => `<option value="${kind}">${COMPONENT_LABELS[kind]}</option>`).join("")}
+          </select>
+        </label>
+      </div>`;
+    return cards.join("") + addMenu;
+  }
+
+  private componentCard(kind: AddableComponent, fields: string): string {
     return `
       <div class="detail-section">
         <div class="detail-section-title detail-component-title">
-          <span>Interaction</span>
-          <button type="button" data-interaction-remove
-            title="Remove the Interaction component">Remove</button>
+          <span>${COMPONENT_LABELS[kind]}</span>
+          <button type="button" data-remove-component="${kind}"
+            title="Remove the ${COMPONENT_LABELS[kind]} component">Remove</button>
         </div>
-        <label class="detail-row">
-          <span>Action</span>
-          <input type="text" data-interaction="action"
-            value="${escapeHtml(interaction.action)}" placeholder="interact" />
-        </label>
-        <label class="detail-row">
-          <span>Prompt</span>
-          <input type="text" data-interaction="prompt"
-            value="${escapeHtml(interaction.prompt ?? "")}" placeholder="(none)" />
-        </label>
-        <label class="detail-toggle">
-          <input type="checkbox" data-interaction="enabled" ${
-            interaction.enabled !== false ? "checked" : ""
-          } />
-          <span>Enabled</span>
-        </label>
-        <label class="detail-row">
-          <span>Cooldown (s)</span>
-          <input type="number" data-interaction="cooldown" min="0" max="3600" step="0.1"
-            value="${interaction.cooldown ?? ""}" placeholder="0" />
-        </label>
+        ${fields}
       </div>`;
   }
 
-  private bindInteractionInputs(): void {
+  private renderAudioFields(audio: LayoutAudio): string {
+    return `
+      <label class="detail-row">
+        <span>Clip Id</span>
+        <input type="text" data-audio="clipId" value="${escapeHtml(audio.clipId)}"
+          placeholder="${DEFAULT_AUDIO_CLIP}" />
+      </label>
+      <label class="detail-row">
+        <span>Volume</span>
+        <input type="number" data-audio="volume" min="0" max="1" step="0.05"
+          value="${audio.volume ?? ""}" placeholder="1" />
+      </label>
+      <label class="detail-toggle">
+        <input type="checkbox" data-audio="loop" ${audio.loop ? "checked" : ""} />
+        <span>Loop</span>
+      </label>
+      <label class="detail-toggle">
+        <input type="checkbox" data-audio="spatial" ${audio.spatial ? "checked" : ""} />
+        <span>Spatial</span>
+      </label>`;
+  }
+
+  private renderBehaviorFields(behavior: LayoutBehavior): string {
+    const paramCount = behavior.params ? Object.keys(behavior.params).length : 0;
+    const paramsHint =
+      paramCount > 0
+        ? `<div class="detail-hint">params authored (${paramCount}); edit in layout JSON</div>`
+        : "";
+    return `
+      <label class="detail-row">
+        <span>Script</span>
+        <input type="text" data-behavior="script" value="${escapeHtml(behavior.script)}"
+          placeholder="${DEFAULT_BEHAVIOR_SCRIPT}" />
+      </label>
+      ${paramsHint}`;
+  }
+
+  private renderParticleFields(particle: LayoutParticleEmitter): string {
+    const mode = particle.materialMode ?? "";
+    const option = (value: string, label: string): string =>
+      `<option value="${value}" ${mode === value ? "selected" : ""}>${label}</option>`;
+    const velocityHint = particle.velocity
+      ? `<div class="detail-hint">velocity authored; edit in layout JSON</div>`
+      : "";
+    return `
+      <label class="detail-row">
+        <span>Effect Id</span>
+        <input type="text" data-particle="effectId" value="${escapeHtml(particle.effectId)}"
+          placeholder="${DEFAULT_PARTICLE_EFFECT}" />
+      </label>
+      <label class="detail-row">
+        <span>Material</span>
+        <select data-particle="materialMode">
+          ${option("", "Default")}${option("additive", "Additive")}${option("alpha", "Alpha")}
+        </select>
+      </label>
+      <label class="detail-row">
+        <span>Rate</span>
+        <input type="number" data-particle="rate" min="0" max="10000" step="1"
+          value="${particle.rate ?? ""}" placeholder="0" />
+      </label>
+      <label class="detail-row">
+        <span>Lifetime (s)</span>
+        <input type="number" data-particle="lifetime" min="0" max="60" step="0.1"
+          value="${particle.lifetime ?? ""}" placeholder="0" />
+      </label>
+      <label class="detail-row">
+        <span>Start Size</span>
+        <input type="number" data-particle="startSize" min="0" max="100" step="0.05"
+          value="${particle.startSize ?? ""}" placeholder="" />
+      </label>
+      <label class="detail-row">
+        <span>End Size</span>
+        <input type="number" data-particle="endSize" min="0" max="100" step="0.05"
+          value="${particle.endSize ?? ""}" placeholder="" />
+      </label>
+      <label class="detail-row">
+        <span>Spread</span>
+        <input type="number" data-particle="spread" min="0" max="10" step="0.01"
+          value="${particle.spread ?? ""}" placeholder="0" />
+      </label>
+      <label class="detail-toggle">
+        <input type="checkbox" data-particle="loop" ${particle.loop ? "checked" : ""} />
+        <span>Loop</span>
+      </label>
+      <label class="detail-toggle">
+        <input type="checkbox" data-particle="autoPlay" ${particle.autoPlay ? "checked" : ""} />
+        <span>Auto Play</span>
+      </label>
+      <label class="detail-toggle">
+        <input type="checkbox" data-particle="worldSpace" ${particle.worldSpace ? "checked" : ""} />
+        <span>World Space</span>
+      </label>
+      ${velocityHint}`;
+  }
+
+  private renderInteractionFields(interaction: LayoutInteraction): string {
+    return `
+      <label class="detail-row">
+        <span>Action</span>
+        <input type="text" data-interaction="action"
+          value="${escapeHtml(interaction.action)}" placeholder="interact" />
+      </label>
+      <label class="detail-row">
+        <span>Prompt</span>
+        <input type="text" data-interaction="prompt"
+          value="${escapeHtml(interaction.prompt ?? "")}" placeholder="(none)" />
+      </label>
+      <label class="detail-toggle">
+        <input type="checkbox" data-interaction="enabled" ${
+          interaction.enabled !== false ? "checked" : ""
+        } />
+        <span>Enabled</span>
+      </label>
+      <label class="detail-row">
+        <span>Cooldown (s)</span>
+        <input type="number" data-interaction="cooldown" min="0" max="3600" step="0.1"
+          value="${interaction.cooldown ?? ""}" placeholder="0" />
+      </label>`;
+  }
+
+  private bindComponentsInputs(): void {
     this.detailsBody
-      .querySelector<HTMLButtonElement>("[data-interaction-add]")
-      ?.addEventListener("click", () => this.app.setSelectionInteraction({ action: "interact" }));
+      .querySelector<HTMLSelectElement>("[data-add-component]")
+      ?.addEventListener("change", (event) => {
+        const kind = (event.currentTarget as HTMLSelectElement).value;
+        if (kind) this.addComponent(kind as AddableComponent);
+      });
     this.detailsBody
-      .querySelector<HTMLButtonElement>("[data-interaction-remove]")
-      ?.addEventListener("click", () => this.app.setSelectionInteraction(undefined));
+      .querySelectorAll<HTMLButtonElement>("[data-remove-component]")
+      .forEach((button) => {
+        button.addEventListener("click", () =>
+          this.removeComponent(button.dataset.removeComponent as AddableComponent),
+        );
+      });
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>("[data-audio]")
+      .forEach((input) => input.addEventListener("change", () => this.commitAudioInput()));
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>("[data-behavior]")
+      .forEach((input) => input.addEventListener("change", () => this.commitBehaviorInput()));
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-particle]")
+      .forEach((input) => input.addEventListener("change", () => this.commitParticleInput()));
     this.detailsBody
       .querySelectorAll<HTMLInputElement>("[data-interaction]")
-      .forEach((input) => {
-        input.addEventListener("change", () => this.commitInteractionInput());
-      });
+      .forEach((input) => input.addEventListener("change", () => this.commitInteractionInput()));
+  }
+
+  /** Adds a component with sensible defaults (a single undo/redo command). */
+  private addComponent(kind: AddableComponent): void {
+    if (kind === "audio") this.app.setSelectionAudio({ clipId: DEFAULT_AUDIO_CLIP });
+    else if (kind === "behavior") this.app.setSelectionBehavior({ script: DEFAULT_BEHAVIOR_SCRIPT });
+    else if (kind === "particle") this.app.setSelectionParticle({ effectId: DEFAULT_PARTICLE_EFFECT });
+    else this.app.setSelectionInteraction({ action: "interact" });
+  }
+
+  private removeComponent(kind: AddableComponent): void {
+    if (kind === "audio") this.app.setSelectionAudio(undefined);
+    else if (kind === "behavior") this.app.setSelectionBehavior(undefined);
+    else if (kind === "particle") this.app.setSelectionParticle(undefined);
+    else this.app.setSelectionInteraction(undefined);
+  }
+
+  private commitAudioInput(): void {
+    const clip = this.detailsBody.querySelector<HTMLInputElement>('[data-audio="clipId"]');
+    if (!clip) return;
+    const audio: LayoutAudio = { clipId: clip.value.trim() || DEFAULT_AUDIO_CLIP };
+    const volumeRaw = this.detailsBody
+      .querySelector<HTMLInputElement>('[data-audio="volume"]')
+      ?.value.trim();
+    if (volumeRaw) {
+      const volume = Number(volumeRaw);
+      if (Number.isFinite(volume) && volume >= 0 && volume <= 1) audio.volume = volume;
+    }
+    if (this.detailsBody.querySelector<HTMLInputElement>('[data-audio="loop"]')?.checked) {
+      audio.loop = true;
+    }
+    if (this.detailsBody.querySelector<HTMLInputElement>('[data-audio="spatial"]')?.checked) {
+      audio.spatial = true;
+    }
+    this.app.setSelectionAudio(audio);
+  }
+
+  private commitBehaviorInput(): void {
+    const scriptInput = this.detailsBody.querySelector<HTMLInputElement>('[data-behavior="script"]');
+    if (!scriptInput) return;
+    const behavior: LayoutBehavior = { script: scriptInput.value.trim() || DEFAULT_BEHAVIOR_SCRIPT };
+    const params = this.selected?.behavior?.params;
+    if (params && Object.keys(params).length > 0) behavior.params = { ...params };
+    this.app.setSelectionBehavior(behavior);
+  }
+
+  /** Rebuilds the Particle component from inputs, preserving authored velocity. */
+  private commitParticleInput(): void {
+    const effectInput = this.detailsBody.querySelector<HTMLInputElement>('[data-particle="effectId"]');
+    if (!effectInput) return;
+    const base: LayoutParticleEmitter = {
+      ...(this.selected?.particle ?? { effectId: DEFAULT_PARTICLE_EFFECT }),
+    };
+    base.effectId = effectInput.value.trim() || base.effectId || DEFAULT_PARTICLE_EFFECT;
+    for (const key of ["rate", "lifetime", "startSize", "endSize", "spread"] as const) {
+      const raw = this.detailsBody
+        .querySelector<HTMLInputElement>(`[data-particle="${key}"]`)
+        ?.value.trim();
+      const value = raw ? Number(raw) : NaN;
+      if (raw && Number.isFinite(value)) base[key] = value;
+      else delete base[key];
+    }
+    for (const key of ["loop", "autoPlay", "worldSpace"] as const) {
+      if (this.detailsBody.querySelector<HTMLInputElement>(`[data-particle="${key}"]`)?.checked) {
+        base[key] = true;
+      } else {
+        delete base[key];
+      }
+    }
+    const mode = this.detailsBody.querySelector<HTMLSelectElement>('[data-particle="materialMode"]')?.value;
+    if (mode === "additive" || mode === "alpha") base.materialMode = mode;
+    else delete base.materialMode;
+    this.app.setSelectionParticle(base);
   }
 
   /** Rebuilds the Interaction component from the current inputs and commits it. */
@@ -2494,7 +2735,7 @@ function contentAssetIssues(item: BrowserAssetItem): BrowserAssetIssue[] {
   if (typeof item.editable.runtime?.collision !== "boolean") {
     issues.push({ code: "missing-collision-setting", label: "No collision setting" });
   }
-  if (!item.editable.placeable) {
+  if (item.type !== "file" && isModelAssetType(item.type) && !item.editable.placeable) {
     issues.push({ code: "not-placeable", label: "Not placeable" });
   }
   if (item.type === "file") {

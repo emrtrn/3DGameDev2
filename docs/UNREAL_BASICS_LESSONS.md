@@ -269,6 +269,34 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-18* — **§3 Track B — Slice B-2: birleşik "Add Component" menüsü +
+  Audio/Behavior/Particle component'leri.** Details panel artık tam bir
+  optional-component editörü: seçili objede **Audio / Behavior / Particle /
+  Interaction** her biri Remove'lu bir kart, ve absent olanlar tek bir **"Add
+  Component"** menüsünde. **Add/Remove/edit'in hepsi tek undo/redo command.**
+  Controller'da B-1'in tekrarını DRY'lamak için generic
+  `setSelectionOptionalComponent<T>({read,write,clone,equals,label}, value)`
+  eklendi; dört ince public metod (`setSelectionInteraction/Audio/Behavior/
+  Particle`) bunu çağırır (B-1'in `applyInteraction`'ı kaldırıldı). Clone'lar tek
+  kaynağa toplandı: `cloneBehavior`/`cloneParticle` `editor/core/layoutSnapshots`'a
+  eklendi ve **`clonePlacement`/`cloneCharacter` artık behavior/particle/
+  interaction'ı da kopyalıyor** — önceki gap: duplicate/paste bu component'leri
+  düşürüyordu (audio kopyalanıyordu, diğerleri değil). Üç alanı
+  `MutableHierarchyTransform`, `EditableSelection` ve `buildEditableSelection`
+  (instance+character) taşır; `SceneApp` üç delegator; `EditorUi` render+bind+commit
+  (`renderComponentsSection`/`componentCard`/`render*Fields`/`commit*Input`/
+  `addComponent`/`removeComponent`). **Karar/sınır:** Particle UI scalar/bool/
+  select alanları açar; `velocity` (vec3) ve behavior `params` UI'da düzenlenmez
+  ama **korunur** (commit `this.selected`'tan türetir) + "edit in layout JSON"
+  ipucu. Add default'ları: audio=`collision-chime`, behavior=`spin`,
+  particle=`fx.smoke_soft_01`, interaction=`interact` (hepsi save-validator'ı
+  geçen non-empty zorunlu alanlar). `npx tsc --noEmit` temiz, `npm run
+  build:verify` yeşil (build, 162 check, strict dist scan PASS). §3 checklist'te
+  Track B'nin 4 maddesi (Details=component editor, Add/Remove Component,
+  Transform silinemez, undo/redo) [x]. **Sıradaki (opsiyonel):** Collision/
+  Physics/Metadata'yı da kart çatısına almak; particle velocity için vec3 satırı;
+  kalan §3 = Track C (`SceneObjectBase`+`components[]` saved-format göçü, B4) +
+  particle `effectId`→manifest fx.
 - *2026-06-18* — **§3 Track B başladı — Slice B-1: Interaction component'i
   Details panel'de (Add/Remove/edit + undo).** Component-editör UX'inin ilk
   dikey dilimi: seçili obje artık Details'te bir **Interaction** bölümü taşıyor —
@@ -1079,10 +1107,15 @@ metadata            → MetadataComponent
 - [ ] `ParticleEmitterComponent.effectId` alanını manifest'teki particle/fx asset'e bağla.
   (ertelendi — fx asset tipi + resolver; bkz. Progress Log 2026-06-18)
 - [x] Outliner Actor/SceneObject listelemeli; Component'ler ana outliner nesnesi gibi davranmamalı.
-- [ ] Details panel Component editor'a dönüşmeli.
-- [ ] Add Component / Remove Component sistemi ekle.
-- [ ] Zorunlu `TransformComponent` silinemez olsun.
-- [ ] Component değişiklikleri undo/redo command üzerinden çalışsın.
+- [x] Details panel Component editor'a dönüşmeli. (optional component'ler —
+  Audio/Behavior/Particle/Interaction — kart + Add/Remove; Collision/Physics/
+  Metadata hâlâ kendi bölümlerinde, kart çatısına alınması ileri polish)
+- [x] Add Component / Remove Component sistemi ekle. (birleşik "Add Component"
+  menüsü + her kartta Remove; 4 optional component)
+- [x] Zorunlu `TransformComponent` silinemez olsun. (Transform Add/Remove
+  listesinde değil; her objede kalıcı)
+- [x] Component değişiklikleri undo/redo command üzerinden çalışsın. (add/remove/
+  edit tek `setSelection*` command → tek undo/redo adımı)
 - [x] Runtime tarafında component'leri class inheritance yerine sistemler yorumlasın.
 - [x] Mevcut `LayoutPlacement`, `LayoutCharacter`, `LayoutLightActor` tiplerini hemen kırma.
 - [ ] Önce ortak `SceneObjectBase`, sonra optional `components?: ActorComponent[]` ekle.

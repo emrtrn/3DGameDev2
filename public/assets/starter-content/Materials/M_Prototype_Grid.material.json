@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "materialType": "standard",
+  "name": "Prototype Grid Material",
+  "baseColor": "#8aa0b5",
+  "baseColorTexture": "starter-tex-grid",
+  "normalTexture": "starter-tex-flat-normal",
+  "roughness": 0.8,
+  "metalness": 0,
+  "opacity": 1,
+  "emissive": "#000000",
+  "emissiveIntensity": 0
+}

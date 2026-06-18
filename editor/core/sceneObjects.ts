@@ -6,7 +6,7 @@ import {
   type EditableSceneObject,
   type EditableSelection,
 } from "./editableScene";
-import { cloneMetadata, clonePhysics } from "./layoutSnapshots";
+import { cloneBehavior, cloneMetadata, cloneParticle, clonePhysics } from "./layoutSnapshots";
 import { selectionId, type Selection } from "./selection";
 
 const DEFAULT_LIGHT_COLOR = "#ffffff";
@@ -160,6 +160,9 @@ export function buildEditableSelection(
       simulatePhysics: placement.simulatePhysics ?? false,
       physics: clonePhysics(placement.physics) ?? {},
       metadata: cloneMetadata(placement.metadata),
+      ...(placement.audio ? { audio: { ...placement.audio } } : {}),
+      ...(placement.behavior ? { behavior: cloneBehavior(placement.behavior) } : {}),
+      ...(placement.particle ? { particle: cloneParticle(placement.particle) } : {}),
       ...(placement.interaction ? { interaction: { ...placement.interaction } } : {}),
     };
   }
@@ -212,6 +215,9 @@ export function buildEditableSelection(
     simulatePhysics: character.simulatePhysics ?? false,
     physics: clonePhysics(character.physics) ?? {},
     metadata: cloneMetadata(character.metadata),
+    ...(character.audio ? { audio: { ...character.audio } } : {}),
+    ...(character.behavior ? { behavior: cloneBehavior(character.behavior) } : {}),
+    ...(character.particle ? { particle: cloneParticle(character.particle) } : {}),
     ...(character.interaction ? { interaction: { ...character.interaction } } : {}),
   };
 }
