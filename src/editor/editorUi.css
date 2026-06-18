@@ -853,8 +853,20 @@ body.editor-mode #debug-stats {
 }
 
 .folder-caret {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
   color: #8b969d;
   font-size: 10px;
+  line-height: 1;
+}
+
+.editor-shell .folder-row.has-children .folder-caret {
+  font-weight: 800;
+}
+
+.editor-shell .folder-row.active .folder-caret {
+  color: #07120f;
 }
 
 .folder-name {

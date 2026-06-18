@@ -125,6 +125,7 @@ export class EditorUi {
   private editableAssets: EditableAsset[] = [];
   private assetTreeRoot: ProjectDirNode | null = null;
   private selectedFolder = "";
+  private collapsedFolderPaths = new Set<string>();
   /** Content Browser asset card highlighted as selected (orange). */
   private selectedAssetId: string | null = null;
   /** Cached 1x1 transparent image used to suppress the native drag thumbnail. */
@@ -720,27 +721,40 @@ export class EditorUi {
   private createFolderRow(node: ProjectDirNode, depth: number): HTMLElement {
     const wrapper = document.createElement("div");
     wrapper.className = "folder-node";
+    const childDirs = node.children?.filter((child) => child.type === "dir") ?? [];
+    const hasChildDirs = childDirs.length > 0;
+    const isCollapsed = hasChildDirs && this.collapsedFolderPaths.has(node.path);
 
     const button = document.createElement("button");
     button.type = "button";
     button.className = "folder-row";
+    button.classList.toggle("has-children", hasChildDirs);
     button.style.setProperty("--depth", String(depth));
     button.classList.toggle("active", node.path === this.selectedFolder);
     button.title = node.path;
+    if (hasChildDirs) button.setAttribute("aria-expanded", String(!isCollapsed));
     button.innerHTML = `
-      <span class="folder-caret">${node.children?.some((child) => child.type === "dir") ? "v" : ""}</span>
+      <span class="folder-caret">${hasChildDirs ? (isCollapsed ? ">" : "v") : ""}</span>
       <span class="folder-name">${escapeHtml(node.name)}</span>
     `;
     button.addEventListener("click", () => {
       this.selectedFolder = node.path;
+      if (hasChildDirs) {
+        if (isCollapsed) {
+          this.collapsedFolderPaths.delete(node.path);
+        } else {
+          this.collapsedFolderPaths.add(node.path);
+        }
+      }
       this.renderFolderTree();
       this.renderContentAssets();
     });
     wrapper.append(button);
 
-    const childDirs = node.children?.filter((child) => child.type === "dir") ?? [];
-    for (const child of childDirs) {
-      wrapper.append(this.createFolderRow(child, depth + 1));
+    if (!isCollapsed) {
+      for (const child of childDirs) {
+        wrapper.append(this.createFolderRow(child, depth + 1));
+      }
     }
     return wrapper;
   }
