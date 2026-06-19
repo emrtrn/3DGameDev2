@@ -1180,6 +1180,11 @@ export class SceneApp {
     return this.manifest?.assets.find((entry) => entry.id === assetId)?.category ?? "";
   }
 
+  private isMaterialAsset(assetId: string): boolean {
+    const asset = this.manifest?.assets.find((entry) => entry.id === assetId);
+    return Boolean(asset && assetType(asset) === "material");
+  }
+
   captureSelectedTransform(): EditableTransform | null {
     if (!this.selection) return null;
     return this.captureTransform(this.selection);
@@ -1802,17 +1807,82 @@ export class SceneApp {
   private createInstancedModel(assetId: string, placements: LayoutPlacement[]): Group {
     const gltf = this.models.get(assetId);
     if (!gltf) throw new Error(`Render test asset missing: ${assetId}`);
+    const renderedOverrideObjects: Object3D[] = [];
+    const instancedPlacements = placements.map((placement) => {
+      if (placement.materialSlot && this.materialCache.has(placement.materialSlot)) {
+        return { ...placement, hidden: true };
+      }
+      if (placement.materialSlot) this.ensureMaterialLoaded(placement.materialSlot, assetId);
+      return placement;
+    });
 
     const { group, meshes } = buildSceneInstancedModel({
       assetId,
       gltf,
-      placements,
+      placements: instancedPlacements,
       castShadow: this.staticObjectsCastShadow(),
       receiveShadow: this.staticObjectsReceiveShadow(),
     });
+    placements.forEach((placement, placementIndex) => {
+      const material = placement.materialSlot
+        ? this.materialCache.get(placement.materialSlot)
+        : undefined;
+      if (!material || placement.hidden) return;
+      const object = this.createMaterialOverrideObject(assetId, placementIndex, placement, gltf, material);
+      group.add(object);
+      renderedOverrideObjects.push(object);
+    });
     this.instanceGroups.set(assetId, group);
     this.instanceMeshes.set(assetId, meshes);
+    this.instanceOverrideObjects.set(assetId, renderedOverrideObjects);
     return group;
+  }
+
+  private createMaterialOverrideObject(
+    assetId: string,
+    placementIndex: number,
+    placement: LayoutPlacement,
+    gltf: GLTF,
+    material: Material,
+  ): Object3D {
+    const object = gltf.scene.clone(true);
+    object.name = `${assetId}-material-override-${placementIndex}`;
+    object.matrix.copy(composePlacementMatrix(placement));
+    object.matrixAutoUpdate = false;
+    object.visible = !(placement.hidden ?? false);
+    object.userData.assetId = assetId;
+    object.userData.placementIndex = placementIndex;
+    object.traverse((child) => {
+      child.userData.assetId = assetId;
+      child.userData.placementIndex = placementIndex;
+      if (!isRenderableMesh(child)) return;
+      child.material = Array.isArray(child.material)
+        ? child.material.map(() => material)
+        : material;
+      child.castShadow = this.staticObjectsCastShadow();
+      child.receiveShadow = this.staticObjectsReceiveShadow();
+    });
+    return object;
+  }
+
+  private ensureMaterialLoaded(materialId: string, assetIdToRebuild?: string): void {
+    if (this.materialCache.has(materialId) || this.materialLoads.has(materialId) || !this.manifest) return;
+    const load = loadForgeMaterial(this.manifest, materialId, this.textureLoader)
+      .then((material) => {
+        this.materialCache.set(materialId, material);
+        this.materialLoads.delete(materialId);
+        if (assetIdToRebuild) this.rebuildInstanceGroup(assetIdToRebuild);
+        return material;
+      })
+      .catch((error) => {
+        this.materialLoads.delete(materialId);
+        this.onStatus?.(
+          `Material load failed: ${error instanceof Error ? error.message : String(error)}`,
+          "error",
+        );
+        throw error;
+      });
+    this.materialLoads.set(materialId, load);
   }
 
   private rebuildInstanceGroup(assetId: string): void {
@@ -1821,6 +1891,7 @@ export class SceneApp {
     if (previous) this.scene.remove(previous);
     this.instanceGroups.delete(assetId);
     this.instanceMeshes.delete(assetId);
+    this.instanceOverrideObjects.delete(assetId);
 
     const instance = this.layout.instances.find((entry) => entry.assetId === assetId);
     if (!instance) return;
@@ -2244,6 +2315,15 @@ export class SceneApp {
         mesh.receiveShadow = receiveShadow;
       }
     }
+    for (const objects of this.instanceOverrideObjects.values()) {
+      for (const object of objects) {
+        object.traverse((child) => {
+          if (!isRenderableMesh(child)) return;
+          child.castShadow = castShadow;
+          child.receiveShadow = receiveShadow;
+        });
+      }
+    }
   }
 
   private applyGroupId(
@@ -2257,6 +2337,15 @@ export class SceneApp {
     else delete target.groupId;
 
     if (options.notify !== false) this.emitSelectionChanged();
+  }
+
+  private applyMaterialSlot(selection: Selection): void {
+    if (selection.kind !== "instance") return;
+    const placement = this.getMutableTransform(selection) as LayoutPlacement | null;
+    if (placement?.materialSlot) this.ensureMaterialLoaded(placement.materialSlot, selection.assetId);
+    this.rebuildInstanceGroup(selection.assetId);
+    this.updateSelectionBox();
+    this.updateGizmo();
   }
 
   private applyVisibility(selection: Selection): void {
@@ -2329,6 +2418,10 @@ export class SceneApp {
       onAssetDrop: (assetId, clientX, clientY) => {
         this.endAssetDragPreview();
         this.addAssetAt(assetId, clientX, clientY);
+      },
+      onMaterialDrop: (materialId, clientX, clientY) => {
+        this.endAssetDragPreview();
+        this.assignMaterialAt(materialId, clientX, clientY);
       },
       onLightDrop: (type, clientX, clientY) => {
         this.endAssetDragPreview();

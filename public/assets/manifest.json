@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-06-18",
+  "generated": "2026-06-19",
   "ktx2": false,
   "assets": [
     {
@@ -1269,6 +1269,386 @@
       "license": "Project-local placeholder; replace before distribution if needed"
     },
     {
+      "id": "starter-tex-brick-clay-old-d",
+      "name": "Brick Clay Old Diffuse",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Brick_Clay_Old_D.png",
+      "tags": [
+        "starter",
+        "texture",
+        "brick",
+        "clay",
+        "old",
+        "diffuse"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 765058
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-brick-clay-old-n",
+      "name": "Brick Clay Old Normal",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Brick_Clay_Old_N.png",
+      "tags": [
+        "starter",
+        "texture",
+        "brick",
+        "clay",
+        "old",
+        "normal"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 585801
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-brick-cut-stone-d",
+      "name": "Brick Cut Stone Diffuse",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Brick_Cut_Stone_D.png",
+      "tags": [
+        "starter",
+        "texture",
+        "brick",
+        "cut",
+        "stone",
+        "diffuse"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 789757
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-brick-cut-stone-n",
+      "name": "Brick Cut Stone Normal",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Brick_Cut_Stone_N.png",
+      "tags": [
+        "starter",
+        "texture",
+        "brick",
+        "cut",
+        "stone",
+        "normal"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 501643
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-brick-hewn-stone-d",
+      "name": "Brick Hewn Stone Diffuse",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Brick_Hewn_Stone_D.png",
+      "tags": [
+        "starter",
+        "texture",
+        "brick",
+        "hewn",
+        "stone",
+        "diffuse"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 498451
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-brick-hewn-stone-m",
+      "name": "Brick Hewn Stone Mask",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Brick_Hewn_Stone_M.png",
+      "tags": [
+        "starter",
+        "texture",
+        "brick",
+        "hewn",
+        "stone",
+        "mask"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 441912
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-brick-hewn-stone-n",
+      "name": "Brick Hewn Stone Normal",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Brick_Hewn_Stone_N.png",
+      "tags": [
+        "starter",
+        "texture",
+        "brick",
+        "hewn",
+        "stone",
+        "normal"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 580996
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-burst-m",
+      "name": "Burst Mask",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Burst_M.png",
+      "tags": [
+        "starter",
+        "texture",
+        "burst",
+        "mask"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 128756
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-ceramic-tile-m",
+      "name": "Ceramic Tile Mask",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Ceramic_Tile_M.png",
+      "tags": [
+        "starter",
+        "texture",
+        "ceramic",
+        "tile",
+        "mask"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 28159
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-ceramic-tile-n",
+      "name": "Ceramic Tile Normal",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Ceramic_Tile_N.png",
+      "tags": [
+        "starter",
+        "texture",
+        "ceramic",
+        "tile",
+        "normal"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 28571
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-checker-noise-m",
+      "name": "Checker Noise Mask",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Checker_Noise_M.png",
+      "tags": [
+        "starter",
+        "texture",
+        "checker",
+        "noise",
+        "mask"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 149000
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
       "id": "starter-mat-prototype-grid",
       "name": "Prototype Grid Material",
       "assetType": "material",
@@ -1512,6 +1892,108 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 371
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-mat-brick-clay-old",
+      "name": "Brick Clay Old Material",
+      "assetType": "material",
+      "category": "starter-materials",
+      "path": "assets/starter-content/Materials/M_Brick_Clay_Old.material.json",
+      "tags": [
+        "starter",
+        "material",
+        "brick",
+        "clay",
+        "old"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 322
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-mat-brick-cut-stone",
+      "name": "Brick Cut Stone Material",
+      "assetType": "material",
+      "category": "starter-materials",
+      "path": "assets/starter-content/Materials/M_Brick_Cut_Stone.material.json",
+      "tags": [
+        "starter",
+        "material",
+        "brick",
+        "cut",
+        "stone"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 325
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-mat-brick-hewn-stone",
+      "name": "Brick Hewn Stone Material",
+      "assetType": "material",
+      "category": "starter-materials",
+      "path": "assets/starter-content/Materials/M_Brick_Hewn_Stone.material.json",
+      "tags": [
+        "starter",
+        "material",
+        "brick",
+        "hewn",
+        "stone"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 378
       },
       "source": {
         "origin": "forge",

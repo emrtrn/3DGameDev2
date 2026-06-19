@@ -25,12 +25,15 @@ import {
   MathUtils,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   PerspectiveCamera,
+  RepeatWrapping,
   Raycaster,
   Scene,
   SphereGeometry,
   SRGBColorSpace,
   Spherical,
+  TextureLoader,
   Vector2,
   Vector3,
   WebGLRenderer,
@@ -60,6 +63,13 @@ export interface StaticMeshEditorOptions {
   modelPath: string;
   /** Display name shown in the editor header / tab. */
   label: string;
+  /** Manifest assets used by the material slot dropdown. */
+  assets?: Array<{
+    id: string;
+    name: string;
+    assetType: string;
+    path: string;
+  }>;
   /** Optional status sink (surfaces to the host editor's status bar). */
   onStatus?: (message: string, tone?: "info" | "warning" | "error") => void;
 }
@@ -122,6 +132,7 @@ export class StaticMeshEditor {
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(45, 1, 0.01, 1000);
   private readonly loader = new GLTFLoader();
+  private readonly textureLoader = new TextureLoader();
   private readonly modelGroup = new Group();
   private readonly overlayGroup = new Group();
   private readonly resizeObserver: ResizeObserver;
@@ -135,6 +146,8 @@ export class StaticMeshEditor {
   private menuOpen = false;
 
   private collision: AssetCollisionDef = defaultAssetCollisionDef();
+  private selectedMaterialId = "";
+  private previewMaterial: MeshStandardMaterial | null = null;
   private modelBounds = new Box3();
   private selectedPrimitive = -1;
   private readonly overlays: PrimitiveOverlay[] = [];
@@ -785,6 +798,13 @@ export class StaticMeshEditor {
     this.detailsHost.innerHTML = `
       <div class="sm-details-heading">Details</div>
       <div class="sm-section">
+        <div class="sm-section-title">Materials</div>
+        <label class="sm-row">
+          <span>Element 0</span>
+          <select data-sm-field="materialSlot">${this.materialSlotOptions()}</select>
+        </label>
+      </div>
+      <div class="sm-section">
         <div class="sm-section-title">Collision</div>
         <label class="sm-row">
           <span>Collision Presets</span>
@@ -821,6 +841,12 @@ export class StaticMeshEditor {
       </div>
     `;
 
+    this.detailsHost
+      .querySelector<HTMLSelectElement>('[data-sm-field="materialSlot"]')
+      ?.addEventListener("change", (event) => {
+        const value = (event.target as HTMLSelectElement).value;
+        void this.applyPreviewMaterial(value);
+      });
     this.detailsHost
       .querySelector<HTMLSelectElement>('[data-sm-field="preset"]')
       ?.addEventListener("change", (event) => {
@@ -861,6 +887,87 @@ export class StaticMeshEditor {
         this.deleteSelected();
       });
     });
+  }
+
+  private materialSlotOptions(): string {
+    const materials = this.options.assets?.filter((asset) => asset.assetType === "material") ?? [];
+    return [`<option value="" ${this.selectedMaterialId ? "" : "selected"}>None</option>`]
+      .concat(
+        materials.map(
+          (asset) =>
+            `<option value="${escapeHtml(asset.id)}" ${
+              this.selectedMaterialId === asset.id ? "selected" : ""
+            }>${escapeHtml(asset.name)}</option>`,
+        ),
+      )
+      .join("");
+  }
+
+  private async applyPreviewMaterial(materialId: string): Promise<void> {
+    this.selectedMaterialId = materialId;
+    this.previewMaterial?.map?.dispose();
+    this.previewMaterial?.normalMap?.dispose();
+    this.previewMaterial?.dispose();
+    this.previewMaterial = null;
+    if (!materialId) {
+      this.setStatus("Material slot cleared.");
+      return;
+    }
+    const record = this.options.assets?.find((asset) => asset.id === materialId);
+    if (!record) {
+      this.setStatus(`Material not found: ${materialId}`, "warning");
+      return;
+    }
+    try {
+      const response = await fetch(projectFileUrl(record.path));
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      const def = (await response.json()) as {
+        name?: string;
+        baseColor?: string;
+        baseColorTexture?: string;
+        normalTexture?: string;
+        roughness?: number;
+        metalness?: number;
+      };
+      const material = new MeshStandardMaterial({
+        name: def.name ?? record.name,
+        color: new Color(def.baseColor ?? "#ffffff"),
+        roughness: def.roughness ?? 0.8,
+        metalness: def.metalness ?? 0,
+      });
+      if (def.baseColorTexture) {
+        const texture = await this.loadTextureAsset(def.baseColorTexture);
+        if (texture) {
+          texture.colorSpace = SRGBColorSpace;
+          texture.wrapS = RepeatWrapping;
+          texture.wrapT = RepeatWrapping;
+          material.map = texture;
+        }
+      }
+      if (def.normalTexture) {
+        const texture = await this.loadTextureAsset(def.normalTexture);
+        if (texture) {
+          texture.wrapS = RepeatWrapping;
+          texture.wrapT = RepeatWrapping;
+          material.normalMap = texture;
+        }
+      }
+      material.needsUpdate = true;
+      this.previewMaterial = material;
+      this.modelGroup.traverse((object) => {
+        if (!(object instanceof Mesh)) return;
+        object.material = material;
+      });
+      this.setStatus(`Preview material: ${record.name}`);
+    } catch (error) {
+      this.setStatus(`Material preview failed: ${describeError(error)}`, "error");
+    }
+  }
+
+  private async loadTextureAsset(textureId: string) {
+    const record = this.options.assets?.find((asset) => asset.id === textureId);
+    if (!record) return null;
+    return this.textureLoader.loadAsync(projectFileUrl(record.path));
   }
 
   // --- save / status -----------------------------------------------------
@@ -912,6 +1019,9 @@ export class StaticMeshEditor {
     this.resizeObserver.disconnect();
     this.transformControls?.detach();
     this.transformControls?.dispose();
+    this.previewMaterial?.map?.dispose();
+    this.previewMaterial?.normalMap?.dispose();
+    this.previewMaterial?.dispose();
     for (const overlay of this.overlays) disposeOverlay(overlay);
     this.renderer.dispose();
     this.overlay.remove();
@@ -1018,6 +1128,14 @@ function degToRad(deg: number): number {
 
 function capitalize(value: string): string {
   return value.length > 0 ? value[0]!.toUpperCase() + value.slice(1) : value;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function describeError(error: unknown): string {

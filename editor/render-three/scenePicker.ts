@@ -6,7 +6,7 @@ import {
   findParentInstancedMesh,
   findParentLight,
 } from "@engine/render-three/picking";
-import type { Selection } from "@editor/core/selection";
+import type { InstanceSelection, Selection } from "@editor/core/selection";
 import { pickGizmoHandle as pickGizmoHandleFromObjects } from "@editor/gizmos/interaction";
 import type { GizmoHandle } from "@editor/gizmos/handles";
 
@@ -73,6 +73,9 @@ export class ScenePicker {
         return { kind: "instance", assetId, placementIndex: hit.instanceId };
       }
 
+      const instance = findParentMaterialOverride(hit.object);
+      if (instance) return instance;
+
       const character = findParentCharacter(hit.object);
       if (character) {
         const index = Number(character.userData.characterIndex);
@@ -133,10 +136,14 @@ export class ScenePicker {
   private isSelfHit(hit: Intersection, selection: Selection): boolean {
     if (selection.kind === "instance") {
       const mesh = findParentInstancedMesh(hit.object);
+      const override = findParentMaterialOverride(hit.object);
       return Boolean(
-        mesh &&
+        (mesh &&
           String(mesh.userData.assetId ?? "") === selection.assetId &&
-          hit.instanceId === selection.placementIndex,
+          hit.instanceId === selection.placementIndex) ||
+          (override &&
+            override.assetId === selection.assetId &&
+            override.placementIndex === selection.placementIndex),
       );
     }
     const character = findParentCharacter(hit.object);
@@ -148,4 +155,17 @@ export class ScenePicker {
     this.pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     this.pointerNdc.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
   }
+}
+
+function findParentMaterialOverride(object: Object3D): InstanceSelection | null {
+  let current: Object3D | null = object;
+  while (current) {
+    const assetId = current.userData.assetId;
+    const placementIndex = current.userData.placementIndex;
+    if (typeof assetId === "string" && Number.isInteger(placementIndex)) {
+      return { kind: "instance", assetId, placementIndex };
+    }
+    current = current.parent;
+  }
+  return null;
 }

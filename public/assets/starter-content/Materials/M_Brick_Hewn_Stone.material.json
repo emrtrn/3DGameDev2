@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "materialType": "standard",
+  "name": "Brick Hewn Stone Material",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "starter-tex-brick-hewn-stone-d",
+  "maskTexture": "starter-tex-brick-hewn-stone-m",
+  "normalTexture": "starter-tex-brick-hewn-stone-n",
+  "roughness": 0.9,
+  "metalness": 0,
+  "opacity": 1,
+  "emissive": "#000000",
+  "emissiveIntensity": 0
+}

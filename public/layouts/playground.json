@@ -44,6 +44,9 @@
             0,
             -0.6
           ],
+          "behavior": {
+            "script": "collision-chime"
+          },
           "audio": {
             "clipId": "starter-snd-music-01",
             "autoPlay": true
@@ -51,6 +54,9 @@
           "particle": {
             "effectId": "starter-fx-dust-hit",
             "autoPlay": true
+          },
+          "interaction": {
+            "action": "interact"
           },
           "rotationYDeg": 0,
           "scale": 1
@@ -81,6 +87,7 @@
             2.25
           ],
           "name": "Cube",
+          "materialSlot": "starter-mat-brick-clay-beveled",
           "simulatePhysics": true,
           "rotationYDeg": 0,
           "scale": 1
@@ -92,6 +99,7 @@
             1.52
           ],
           "name": "Cube",
+          "materialSlot": "starter-mat-brick-clay-new",
           "simulatePhysics": true,
           "rotationYDeg": 0,
           "scale": 1
@@ -103,6 +111,7 @@
             2.06
           ],
           "name": "Cube",
+          "materialSlot": "starter-mat-concrete",
           "simulatePhysics": true,
           "rotationYDeg": 0,
           "scale": 1
@@ -114,6 +123,7 @@
             0.64
           ],
           "name": "Cube",
+          "materialSlot": "starter-mat-concrete",
           "simulatePhysics": true,
           "rotationYDeg": 0,
           "scale": 1
@@ -125,6 +135,7 @@
             1.18
           ],
           "name": "Cube",
+          "materialSlot": "starter-mat-glass",
           "simulatePhysics": true,
           "rotationYDeg": 0,
           "scale": 1
@@ -136,6 +147,7 @@
             -0.38
           ],
           "name": "Cube",
+          "materialSlot": "starter-mat-metal",
           "simulatePhysics": true,
           "rotationYDeg": 0,
           "scale": 1
@@ -190,48 +202,26 @@
     },
     {
       "assetId": "wall",
-      "placements": [
-        {
-          "position": [
-            -1.66,
-            0,
-            2.88
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": [
-            5.85,
-            1.16,
-            0.05
-          ]
-        },
-        {
-          "position": [
-            3,
-            0,
-            -3.18
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": [
-            5.85,
-            1.16,
-            0.05
-          ]
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "starter-sm-wall",
       "placements": []
+    },
+    {
+      "assetId": "floor-full",
+      "placements": [
+        {
+          "position": [
+            -1.01,
+            0,
+            2.97
+          ],
+          "materialSlot": "starter-mat-prototype-grid",
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
     }
   ],
   "characters": [],
@@ -259,6 +249,36 @@
       "color": "#ffffff",
       "intensity": 1,
       "castShadow": true
+    },
+    {
+      "id": "point-light-mqki39ei-5kj",
+      "type": "point",
+      "position": [
+        -1.08,
+        2.06,
+        2.2
+      ],
+      "name": "Point Light",
+      "color": "#ffffff",
+      "intensity": 2.5,
+      "castShadow": false,
+      "distance": 8,
+      "decay": 2
+    },
+    {
+      "id": "point-light-mqki6c31-5qn",
+      "type": "point",
+      "position": [
+        -1.08,
+        2.06,
+        0.65
+      ],
+      "name": "Point Light 3",
+      "color": "#ffffff",
+      "intensity": 2.5,
+      "castShadow": false,
+      "distance": 8,
+      "decay": 2
     }
   ]
 }

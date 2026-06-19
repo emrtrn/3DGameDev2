@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "materialType": "standard",
+  "name": "Brick Clay Old Material",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "starter-tex-brick-clay-old-d",
+  "normalTexture": "starter-tex-brick-clay-old-n",
+  "roughness": 0.84,
+  "metalness": 0,
+  "opacity": 1,
+  "emissive": "#000000",
+  "emissiveIntensity": 0
+}

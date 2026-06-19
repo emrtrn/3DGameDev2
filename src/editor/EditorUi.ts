@@ -4,6 +4,7 @@ import "./editorUi.css";
 import {
   ASSET_TYPES,
   assetPath,
+  assetRecordById,
   assetType,
   inferAssetTypeFromPath,
   isModelAssetType,
@@ -142,6 +143,7 @@ export class EditorUi {
   private redoButton: HTMLButtonElement;
   private toolButtons = new Map<EditorTool, HTMLButtonElement>();
   private readonly thumbnailRenderer = new ThumbnailRenderer();
+  private readonly materialTexturePreviewCache = new Map<string, Promise<string | undefined>>();
   private activeTool: EditorTool = "move";
   private projectInfo: EditorProjectInfo | null = null;
   private metadataSchema: MetadataSchema | null = null;
@@ -943,6 +945,7 @@ export class EditorUi {
 
   private createAssetCard(item: BrowserAssetItem): HTMLElement {
     const canPlace = Boolean(item.editable?.placeable);
+    const canAssignMaterial = Boolean(item.editable && item.type === "material");
     const issues = contentAssetIssues(item);
     const issueTooltip = contentAssetIssueTooltip(issues);
     const card = document.createElement("button");
@@ -954,7 +957,7 @@ export class EditorUi {
       "is-selected",
       Boolean(item.editable && item.editable.id === this.selectedAssetId),
     );
-    card.draggable = canPlace;
+    card.draggable = canPlace || canAssignMaterial;
     card.dataset.assetPath = item.path;
     if (item.editable) card.dataset.assetId = item.editable.id;
     card.innerHTML = `
@@ -970,16 +973,23 @@ export class EditorUi {
       </span>
     `;
     card.addEventListener("dragstart", (event) => {
-      if (!item.editable || !canPlace) return;
-      event.dataTransfer?.setData("application/x-3dgamedev-asset", item.editable.id);
+      if (!item.editable || (!canPlace && !canAssignMaterial)) return;
+      if (canAssignMaterial) {
+        event.dataTransfer?.setData("application/x-forge-material", item.editable.id);
+      } else {
+        event.dataTransfer?.setData("application/x-3dgamedev-asset", item.editable.id);
+      }
       event.dataTransfer!.effectAllowed = "copy";
       // Hide the browser's default drag image (a snapshot of the card) so only
       // the 3D placement ghost in the viewport tracks the cursor.
       event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
       this.setSelectedAsset(item.editable.id);
-      // Spawn the live placement ghost so the viewport shows where it will land.
-      this.app.beginAssetDragPreview(item.editable.id);
-      this.setStatus(`Dragging ${item.editable.id} — drop in the viewport to place.`);
+      if (canPlace) this.app.beginAssetDragPreview(item.editable.id);
+      this.setStatus(
+        canAssignMaterial
+          ? `Dragging ${item.editable.id} — drop on a static mesh.`
+          : `Dragging ${item.editable.id} — drop in the viewport to place.`,
+      );
     });
     card.addEventListener("dragend", () => {
       this.app.endAssetDragPreview();
@@ -1002,6 +1012,8 @@ export class EditorUi {
     const thumb = card.querySelector<HTMLElement>("[data-asset-thumb]");
     if (thumb && item.type !== "file" && isModelAssetType(item.type)) {
       void this.renderAssetThumbnail(item, thumb);
+    } else if (thumb && item.type === "material") {
+      void this.renderMaterialThumbnail(item, thumb);
     } else if (thumb && item.type === "texture") {
       this.renderTextureThumbnail(item, thumb);
     }
@@ -1020,6 +1032,45 @@ export class EditorUi {
     image.alt = "";
     image.src = projectFileUrl(item.path);
     thumb.append(image);
+  }
+
+  private async renderMaterialThumbnail(item: BrowserAssetItem, thumb: HTMLElement): Promise<void> {
+    try {
+      const texturePath = await this.resolveMaterialBaseTexturePath(item);
+      const imageUrl = await this.thumbnailRenderer.renderMaterial(
+        item.editable?.id ?? item.path,
+        texturePath ? projectFileUrl(texturePath) : undefined,
+      );
+      if (!thumb.isConnected) return;
+      thumb.replaceChildren();
+      const image = document.createElement("img");
+      image.alt = "";
+      image.src = imageUrl;
+      thumb.append(image);
+    } catch {
+      if (thumb.isConnected) thumb.textContent = item.ext.toUpperCase();
+    }
+  }
+
+  private resolveMaterialBaseTexturePath(item: BrowserAssetItem): Promise<string | undefined> {
+    const key = item.editable?.id ?? item.path;
+    let cached = this.materialTexturePreviewCache.get(key);
+    if (!cached) {
+      cached = this.resolveMaterialBaseTexturePathUncached(item);
+      this.materialTexturePreviewCache.set(key, cached);
+    }
+    return cached;
+  }
+
+  private async resolveMaterialBaseTexturePathUncached(
+    item: BrowserAssetItem,
+  ): Promise<string | undefined> {
+    const response = await fetch(projectFileUrl(item.path));
+    if (!response.ok) return undefined;
+    const data = (await response.json()) as { baseColorTexture?: unknown };
+    if (typeof data.baseColorTexture !== "string") return undefined;
+    const texture = assetRecordById({ version: 1, generated: "", ktx2: false, assets: this.editableAssets }, data.baseColorTexture);
+    return texture ? assetPath(texture) : undefined;
   }
 
   private async renderAssetThumbnail(
@@ -1050,6 +1101,12 @@ export class EditorUi {
       StaticMeshEditor.open({
         modelPath: item.path,
         label: item.label,
+        assets: this.editableAssets.map((asset) => ({
+          id: asset.id,
+          name: asset.displayName ?? asset.name,
+          assetType: assetType(asset),
+          path: assetPath(asset),
+        })),
         onStatus: (message, tone) => this.setStatus(message, tone),
       });
     } catch (error) {
@@ -1511,6 +1568,7 @@ export class EditorUi {
       ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
       ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
       ${pivotRow(selection.pivot, selection.locked, this.app.isPivotEditMode())}
+      ${this.renderMaterialSection(selection)}
       <div class="detail-section">
         <div class="detail-actions-row">
           <button type="button" data-detail-action="reset" ${lockedAttr}
@@ -1619,6 +1677,13 @@ export class EditorUi {
         this.app.setSelectionCollisionPreset(value ? (value as CollisionPresetId) : undefined);
       });
 
+    this.detailsBody
+      .querySelector<HTMLSelectElement>("[data-material-slot]")
+      ?.addEventListener("change", (event) => {
+        const value = (event.target as HTMLSelectElement).value;
+        this.app.setSelectionMaterialSlot(value || undefined);
+      });
+
     this.bindPhysicsInputs();
     this.bindComponentsInputs();
     this.bindMetadataInputs();
@@ -1629,6 +1694,30 @@ export class EditorUi {
    * the Collision toggle plus a preset override that defaults to the asset's
    * collision definition ("inherit") until the user picks one.
    */
+  private renderMaterialSection(selection: EditableSelection): string {
+    if (selection.kind !== "instance") return "";
+    const materialAssets = this.editableAssets.filter((asset) => assetType(asset) === "material");
+    const options = [`<option value="" ${selection.materialSlot ? "" : "selected"}>None</option>`]
+      .concat(
+        materialAssets.map(
+          (asset) =>
+            `<option value="${escapeHtml(asset.id)}" ${
+              selection.materialSlot === asset.id ? "selected" : ""
+            }>${escapeHtml(asset.displayName ?? asset.name)}</option>`,
+        ),
+      )
+      .join("");
+    return `
+      <div class="detail-section">
+        <div class="detail-section-title">Materials</div>
+        <label class="detail-row">
+          <span>Element 0</span>
+          <select data-material-slot ${selection.locked ? "disabled" : ""}>${options}</select>
+        </label>
+      </div>
+    `;
+  }
+
   private renderCollisionSection(selection: EditableSelection): string {
     const presetOptions = [
       `<option value="" ${selection.collisionPreset ? "" : "selected"}>Inherit (asset default)</option>`,

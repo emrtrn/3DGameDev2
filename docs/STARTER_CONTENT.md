@@ -33,6 +33,17 @@ replaceable.
   - `T_Brick_Clay_New_D.png`
   - `T_Brick_Clay_New_M.png`
   - `T_Brick_Clay_New_N.png`
+  - `T_Brick_Clay_Old_D.png`
+  - `T_Brick_Clay_Old_N.png`
+  - `T_Brick_Cut_Stone_D.png`
+  - `T_Brick_Cut_Stone_N.png`
+  - `T_Brick_Hewn_Stone_D.png`
+  - `T_Brick_Hewn_Stone_M.png`
+  - `T_Brick_Hewn_Stone_N.png`
+  - `T_Burst_M.png`
+  - `T_Ceramic_Tile_M.png`
+  - `T_Ceramic_Tile_N.png`
+  - `T_Checker_Noise_M.png`
 - `Materials`
   - `M_Prototype_Grid.material.json`
   - `M_Concrete.material.json`
@@ -40,6 +51,11 @@ replaceable.
   - `M_Metal.material.json`
   - `M_Glass.material.json`
   - `M_Emissive.material.json`
+  - `M_Brick_Clay_Beveled.material.json`
+  - `M_Brick_Clay_New.material.json`
+  - `M_Brick_Clay_Old.material.json`
+  - `M_Brick_Cut_Stone.material.json`
+  - `M_Brick_Hewn_Stone.material.json`
 - `Sounds`
   - `S_UI_Click.wav`
   - `S_UI_Confirm.wav`

@@ -44,6 +44,7 @@ export interface EditorInputBindings {
   onAssetDragOver(clientX: number, clientY: number): void;
   onAssetDragLeave(): void;
   onAssetDrop(assetId: string, clientX: number, clientY: number): void;
+  onMaterialDrop(materialId: string, clientX: number, clientY: number): void;
   onLightDrop(type: LayoutLightActor["type"], clientX: number, clientY: number): void;
   onWheel(event: WheelEvent): void;
 
@@ -188,6 +189,11 @@ export function bindEditorInputEvents(
     const assetId = event.dataTransfer?.getData("application/x-3dgamedev-asset");
     if (assetId) {
       bindings.onAssetDrop(assetId, event.clientX, event.clientY);
+      return;
+    }
+    const materialId = event.dataTransfer?.getData("application/x-forge-material");
+    if (materialId) {
+      bindings.onMaterialDrop(materialId, event.clientX, event.clientY);
       return;
     }
     const lightType = event.dataTransfer?.getData("application/x-forge-light-actor");

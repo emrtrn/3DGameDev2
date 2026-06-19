@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "materialType": "standard",
+  "name": "Brick Cut Stone Material",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "starter-tex-brick-cut-stone-d",
+  "normalTexture": "starter-tex-brick-cut-stone-n",
+  "roughness": 0.88,
+  "metalness": 0,
+  "opacity": 1,
+  "emissive": "#000000",
+  "emissiveIntensity": 0
+}
