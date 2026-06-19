@@ -269,6 +269,34 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-19* — **Actor Script Faz 10 — editör 3D viewport (tamam).**
+  `ActorScriptEditor`'ın placeholder kartı, sınıfın component-ağacını canlı render
+  eden gerçek bir 3D viewport ile değiştirildi (checklist:
+  `docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 10). **Mimari:** saf, three.js'siz,
+  test edilebilir `engine/scene/actorPreview.ts` (`actorPreviewNodes(def)` → tüm
+  ağacı koruyan flat preview-node listesi; runtime `actorInstanceToEntity`'nin
+  flat-collapse'inin aksine **çoklu node + parent-child** korunur). Render tarafı
+  editör-only ayrı modül `src/editor/ActorScriptViewport.ts` (StaticMeshEditor
+  viewport deseni: kendi `WebGLRenderer`/`PerspectiveCamera`/`Scene`/grid/2 dir-ışık;
+  spherical orbit/pan/dolly; `ResizeObserver`; RAF). **Derleme:** her preview node
+  bir `Group` (local TRS props'tan), `parent` ile three sahne grafiğine bağlanır →
+  world transform otomatik compose. MeshRenderer → kendi `GLTFLoader`+`MeshoptDecoder`,
+  path-cache'li yükleme + clone, gelene kadar placeholder kutu; Collider → shape
+  wireframe (sensor farklı renk); Light → engine `lights` helper'ları
+  (`createLightObject`/gizmo); Audio/Particle/Interaction/Behavior/Metadata → glyph
+  sprite marker. **Seçim senkronu:** node id → `Group` map + `BoxHelper`
+  (her kare `update()`); ağaç seçimi viewport'u vurgular, viewport tıklaması
+  (`userData.nodeId` raycast) ağacı seçer; Details prop edit'i debounce'lu rebuild
+  ile canlı yansır. **Perf/lifecycle:** component-ağacı imzası değişmedikçe rebuild
+  atlanır (seçim-only render rebuild etmez); build kaynakları (geom/mat/texture/
+  light-gizmo) her rebuild'de + dispose'da temizlenir, clone'lar paylaşımlı → cache
+  teardown'da bir kez dispose. **Plumbing:** `EditorUi.openActorScriptEditor` artık
+  `assets` (id/type/path) geçiyor → editör model path'lerini çözüyor; viewport CSS
+  (canvas %100 + hint rozeti). **Gate:** tsc temiz · engine 185 → **188**
+  (`actorPreviewNodes` testleri) · build başarılı. **Kalan:** per-instance override
+  authoring, behavior stub üretimi (Faz 8). Kapsam dışı: skeletal anim, gerçek
+  malzeme/UVW, gölge kalitesi.
+
 - *2026-06-19* — **Actor Script Faz 7 Slice 3 — editör-içi yerleştirme (tamam).**
   Placed Actor Script class instance'ları artık editörde birinci-sınıf nesne
   (checklist: `docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 7 Slice 3). **Kullanıcı

@@ -32,6 +32,7 @@ import {
 } from "@engine/assets/material";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { loadMaterialAsset, saveMaterialAsset } from "@/editor/materialStore";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
@@ -87,6 +88,8 @@ export class MaterialEditor {
   private readonly sphere = new Mesh(new SphereGeometry(0.9, 64, 40));
   private readonly textureLoader = new TextureLoader();
   private readonly loadedTextures: Texture[] = [];
+  private readonly controls: OrbitControls;
+  private readonly resizeObserver: ResizeObserver;
 
   private def: ForgeMaterialDef;
   private previewMaterial: Material | null = null;
@@ -132,9 +135,17 @@ export class MaterialEditor {
     this.statusEl = this.requireEl("[data-me-status]");
 
     this.renderer = new WebGLRenderer({ antialias: true });
+    this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.previewHost.append(this.renderer.domElement);
     this.setupPreviewScene();
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = false;
+    this.controls.target.set(0, 0, 0);
+    this.controls.update();
+    this.controls.addEventListener("change", () => this.renderPreview());
+    this.resizeObserver = new ResizeObserver(() => this.resize());
+    this.resizeObserver.observe(this.previewHost);
 
     this.requireEl<HTMLButtonElement>("[data-me-close]").addEventListener("click", () =>
       this.close(),
@@ -163,6 +174,7 @@ export class MaterialEditor {
       }
     });
     window.addEventListener("resize", this.resize);
+    requestAnimationFrame(() => this.resize());
     this.overlay.focus();
   }
 
@@ -263,7 +275,10 @@ export class MaterialEditor {
     return `
       <label class="me-row">
         <span>${label}</span>
-        <input data-me-field="${field}" type="number" min="${min}" max="${max}" step="${step}" value="${value}" />
+        <span class="me-number-pair">
+          <input data-me-field="${field}" type="range" min="${min}" max="${max}" step="${step}" value="${value}" />
+          <input data-me-field="${field}" type="number" min="${min}" max="${max}" step="${step}" value="${value}" />
+        </span>
       </label>
     `;
   }
@@ -304,8 +319,25 @@ export class MaterialEditor {
     this.def = normalizeForgeMaterialDef(next, this.options.label);
     this.dirty = true;
     this.titleEl.textContent = this.def.name;
+    this.syncFieldControls(field, input.value);
     this.markDirty();
     await this.updatePreviewMaterial();
+    this.warnIfTransparentMaterial(field);
+  }
+
+  private syncFieldControls(field: string, value: string): void {
+    this.detailsHost
+      .querySelectorAll<HTMLInputElement | HTMLSelectElement>(`[data-me-field="${field}"]`)
+      .forEach((control) => {
+        if (control.value !== value) control.value = value;
+      });
+  }
+
+  private warnIfTransparentMaterial(field: string): void {
+    if (field !== "opacity" && field !== "alphaMode") return;
+    if (this.def.alphaMode === "blend" || this.def.opacity < 1) {
+      this.setStatus("Transparent materials are supported, but render sorting can still depend on scene order.", "warning");
+    }
   }
 
   private async updatePreviewMaterial(): Promise<void> {
@@ -396,6 +428,8 @@ export class MaterialEditor {
     if (this.dirty && !window.confirm("Close Material Editor without saving?")) return;
     this.disposed = true;
     window.removeEventListener("resize", this.resize);
+    this.resizeObserver.disconnect();
+    this.controls.dispose();
     this.disposePreviewMaterial();
     this.sphere.geometry.dispose();
     this.renderer.dispose();

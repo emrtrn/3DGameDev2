@@ -6372,121 +6372,6 @@
       "license": "Unknown"
     },
     {
-      "id": "lamba",
-      "name": "Lamba",
-      "assetType": "prefab",
-      "category": "Script",
-      "path": "assets/starter-content/Script/Lamba.actor.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Script",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 490
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "player",
-      "name": "Player",
-      "assetType": "prefab",
-      "category": "Script",
-      "path": "assets/starter-content/Script/player.actor.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Script",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 258
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "playercharacter",
-      "name": "Player Character",
-      "assetType": "prefab",
-      "category": "Script",
-      "path": "assets/starter-content/Script/PlayerCharacter.actor.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Script",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 267
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "script-lamp",
-      "name": "Script Lamp",
-      "assetType": "prefab",
-      "category": "Script",
-      "path": "assets/starter-content/Script/Script_Lamp.script.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Script",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 78
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "trigablelamp",
-      "name": "Trigablelamp",
-      "assetType": "prefab",
-      "category": "Script",
-      "path": "assets/starter-content/Script/trigablelamp.actor.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Script",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 260
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "warning",
       "name": "Warning",
       "assetType": "prefab",
@@ -6552,6 +6437,29 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 622
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "script-lamp-actor",
+      "name": "Script Lamp.Actor",
+      "assetType": "prefab",
+      "category": "Script",
+      "path": "assets/starter-content/Script/Script_Lamp.actor.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Script",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 259
       },
       "license": "Unknown"
     }

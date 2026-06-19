@@ -43,14 +43,16 @@ import {
   type ShapePrimitiveType,
 } from "@engine/scene/shapes";
 import { writePlayCameraPose } from "@/play/cameraHandoff";
-import { ThumbnailRenderer } from "./ThumbnailRenderer";
+import { ThumbnailRenderer, type ThumbnailMaterialPreview } from "./ThumbnailRenderer";
 import {
   createProjectContent,
+  deleteProjectContent,
   fetchProjectDir,
   findProjectDir,
   flattenProjectFiles,
   importProjectAsset,
   normalizeProjectPath,
+  renameProjectContent,
   type ContentNewKind,
   type ProjectDirNode,
 } from "@/project/ProjectAssetTree";
@@ -66,6 +68,7 @@ import {
 } from "@engine/scene/actorScript";
 import {
   FORGE_MATERIAL_PRESETS,
+  normalizeForgeMaterialDef,
   type ForgeMaterialPreset,
 } from "@engine/assets/material";
 import { COLLISION_PRESET_IDS, type CollisionPresetId } from "@engine/scene/collision";
@@ -191,8 +194,8 @@ export class EditorUi {
   private redoButton: HTMLButtonElement;
   private toolButtons = new Map<EditorTool, HTMLButtonElement>();
   private readonly thumbnailRenderer = new ThumbnailRenderer();
-  private readonly materialTexturePreviewCache = new Map<string, Promise<string | undefined>>();
-  private readonly modelMaterialPreviewCache = new Map<string, Promise<string | undefined>>();
+  private readonly materialPreviewCache = new Map<string, Promise<ThumbnailMaterialPreview | undefined>>();
+  private readonly modelMaterialPreviewCache = new Map<string, Promise<ThumbnailMaterialPreview | undefined>>();
   private activeTool: EditorTool = "move";
   private projectInfo: EditorProjectInfo | null = null;
   private metadataSchema: MetadataSchema | null = null;
@@ -202,6 +205,8 @@ export class EditorUi {
   private collapsedFolderPaths = new Set<string>();
   /** Content Browser asset card highlighted as selected (orange). */
   private selectedAssetId: string | null = null;
+  /** Last asset-grid summary status, restored when the selection is cleared. */
+  private contentListStatus = "";
   /** Cached 1x1 transparent image used to suppress the native drag thumbnail. */
   private emptyDragImage: HTMLImageElement | null = null;
   private contentQuery = "";
@@ -574,9 +579,15 @@ export class EditorUi {
     });
 
     // Right-click empty asset-grid space -> create content in the current folder.
+    // (Right-clicking a card stops propagation and shows the asset menu instead.)
     this.contentList.addEventListener("contextmenu", (event) => {
       event.preventDefault();
       this.openContentContextMenu(event, this.selectedFolder);
+    });
+
+    // Click empty asset-grid space -> clear the current asset selection.
+    this.contentList.addEventListener("click", (event) => {
+      if (event.target === this.contentList) this.clearContentSelection();
     });
 
     this.contentSearch.addEventListener("input", () => {
@@ -878,12 +889,13 @@ export class EditorUi {
     const missingManifestAssetCount = this.countMissingManifestAssetFiles();
 
     this.contentPathLabel.textContent = this.selectedFolder || this.assetTreeRoot.path;
-    this.contentStatus.textContent = formatContentListStatus(
+    this.contentListStatus = formatContentListStatus(
       items.length,
       files.length,
       issueCount,
       missingManifestAssetCount,
     );
+    this.contentStatus.textContent = this.contentListStatus;
 
     if (items.length === 0) {
       this.contentList.innerHTML = `
@@ -1084,6 +1096,14 @@ export class EditorUi {
       this.setSelectedAsset(item.editable.id);
       this.showContentAssetDetails(item, issues);
     });
+    card.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      // Stop the bubble so the asset-grid's "new content" menu doesn't replace this.
+      event.stopPropagation();
+      if (item.editable) this.setSelectedAsset(item.editable.id);
+      this.showContentAssetDetails(item, issues);
+      this.openAssetContextMenu(event, item);
+    });
     if (item.type !== "file" && isModelAssetType(item.type)) {
       card.addEventListener("dblclick", (event) => {
         event.preventDefault();
@@ -1121,6 +1141,99 @@ export class EditorUi {
       issues.length > 0 ? `${prefix} · ${contentAssetIssueTooltip(issues)}` : `${prefix} · No issues`;
   }
 
+  /** Drops the Content Browser asset selection and restores the grid summary. */
+  private clearContentSelection(): void {
+    if (this.selectedAssetId === null) return;
+    this.setSelectedAsset(null);
+    this.contentStatus.textContent = this.contentListStatus;
+  }
+
+  /** Right-click menu for a single Content Browser asset card. */
+  private openAssetContextMenu(event: MouseEvent, item: BrowserAssetItem): void {
+    const opener = this.assetEditorOpener(item);
+    const items: ContextMenuItem[] = [];
+    if (opener) {
+      items.push({ label: "Open", run: opener });
+      items.push({ separator: true });
+    }
+    items.push({ label: "Rename...", run: () => void this.renameContentAsset(item) });
+    items.push({ label: "Copy Path", run: () => void this.copyContentAssetPath(item) });
+    items.push({ separator: true });
+    items.push({
+      label: "Delete",
+      danger: true,
+      run: () => void this.deleteContentAsset(item),
+    });
+    this.openContextMenu(event, items);
+  }
+
+  /** Returns an action opening the editor that matches `item`, or null. */
+  private assetEditorOpener(item: BrowserAssetItem): (() => void) | null {
+    if (item.type === "material") return () => void this.openMaterialEditor(item);
+    if (isActorScriptItem(item)) return () => void this.openActorScriptEditor(item);
+    if (item.type !== "file" && isModelAssetType(item.type)) {
+      return () => void this.openStaticMeshEditor(item);
+    }
+    return null;
+  }
+
+  /** Prompts for a new base name and renames the asset file via the dev endpoint. */
+  private async renameContentAsset(item: BrowserAssetItem): Promise<void> {
+    const fileName = item.path.split("/").at(-1) ?? item.path;
+    const dot = fileName.indexOf(".");
+    const currentBase = dot > 0 ? fileName.slice(0, dot) : fileName;
+    const next = window.prompt("Rename asset", currentBase);
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === currentBase) return;
+    try {
+      const result = await renameProjectContent(item.path, trimmed);
+      this.setStatus(`Renamed to ${result.path}`, "success");
+      if (result.registered) {
+        try {
+          this.editableAssets = await this.app.reloadEditableAssets();
+        } catch {
+          // Keep the stale list; the tree refresh below still shows the new name.
+        }
+      }
+      await this.refreshAssetTree({ quiet: false });
+    } catch (error) {
+      this.setStatus(error instanceof Error ? error.message : String(error), "error");
+    }
+  }
+
+  /** Confirms, then deletes the asset file (and sidecars/manifest entry). */
+  private async deleteContentAsset(item: BrowserAssetItem): Promise<void> {
+    if (!window.confirm(`Delete "${item.label}"? This cannot be undone.`)) return;
+    try {
+      const result = await deleteProjectContent(item.path);
+      if (item.editable && this.selectedAssetId === item.editable.id) {
+        this.setSelectedAsset(null);
+      }
+      this.setStatus(`Deleted ${result.path}`, "success");
+      if (result.registered) {
+        try {
+          this.editableAssets = await this.app.reloadEditableAssets();
+        } catch {
+          // Keep the stale list; the tree refresh below drops the deleted card.
+        }
+      }
+      await this.refreshAssetTree({ quiet: false });
+    } catch (error) {
+      this.setStatus(error instanceof Error ? error.message : String(error), "error");
+    }
+  }
+
+  /** Copies the asset's public-relative path to the clipboard. */
+  private async copyContentAssetPath(item: BrowserAssetItem): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(item.path);
+      this.setStatus(`Copied ${item.path}`, "success");
+    } catch {
+      this.setStatus(`Path: ${item.path}`, "info");
+    }
+  }
+
   private renderTextureThumbnail(item: BrowserAssetItem, thumb: HTMLElement): void {
     thumb.replaceChildren();
     const image = document.createElement("img");
@@ -1131,11 +1244,9 @@ export class EditorUi {
 
   private async renderMaterialThumbnail(item: BrowserAssetItem, thumb: HTMLElement): Promise<void> {
     try {
-      const texturePath = await this.resolveMaterialBaseTexturePath(item);
-      const imageUrl = await this.thumbnailRenderer.renderMaterial(
-        item.editable?.id ?? item.path,
-        texturePath ? projectFileUrl(texturePath) : undefined,
-      );
+      const material = await this.resolveMaterialPreview(item);
+      if (!material) throw new Error("Material preview unavailable");
+      const imageUrl = await this.thumbnailRenderer.renderMaterial(item.editable?.id ?? item.path, material);
       if (!thumb.isConnected) return;
       thumb.replaceChildren();
       const image = document.createElement("img");
@@ -1147,44 +1258,44 @@ export class EditorUi {
     }
   }
 
-  private resolveMaterialBaseTexturePath(item: BrowserAssetItem): Promise<string | undefined> {
+  private resolveMaterialPreview(item: BrowserAssetItem): Promise<ThumbnailMaterialPreview | undefined> {
     const key = item.editable?.id ?? item.path;
-    let cached = this.materialTexturePreviewCache.get(key);
+    let cached = this.materialPreviewCache.get(key);
     if (!cached) {
-      cached = this.resolveMaterialBaseTexturePathUncached(item);
-      this.materialTexturePreviewCache.set(key, cached);
+      cached = this.resolveMaterialPreviewUncached(item);
+      this.materialPreviewCache.set(key, cached);
     }
     return cached;
   }
 
-  private async resolveMaterialBaseTexturePathUncached(
+  private async resolveMaterialPreviewUncached(
     item: BrowserAssetItem,
-  ): Promise<string | undefined> {
-    return this.resolveMaterialBaseTexturePathById(item.editable?.id, item.path);
+  ): Promise<ThumbnailMaterialPreview | undefined> {
+    return this.resolveMaterialPreviewById(item.editable?.id, item.path);
   }
 
-  private resolveModelDefaultMaterialTexturePath(item: BrowserAssetItem): Promise<string | undefined> {
+  private resolveModelDefaultMaterialPreview(item: BrowserAssetItem): Promise<ThumbnailMaterialPreview | undefined> {
     const key = item.editable?.id ?? item.path;
     let cached = this.modelMaterialPreviewCache.get(key);
     if (!cached) {
-      cached = this.resolveModelDefaultMaterialTexturePathUncached(item);
+      cached = this.resolveModelDefaultMaterialPreviewUncached(item);
       this.modelMaterialPreviewCache.set(key, cached);
     }
     return cached;
   }
 
-  private async resolveModelDefaultMaterialTexturePathUncached(
+  private async resolveModelDefaultMaterialPreviewUncached(
     item: BrowserAssetItem,
-  ): Promise<string | undefined> {
+  ): Promise<ThumbnailMaterialPreview | undefined> {
     const slots = await loadAssetMaterialSlots(item.path);
     const materialId = slots.slots[0];
-    return materialId ? this.resolveMaterialBaseTexturePathById(materialId) : undefined;
+    return materialId ? this.resolveMaterialPreviewById(materialId) : undefined;
   }
 
-  private async resolveMaterialBaseTexturePathById(
+  private async resolveMaterialPreviewById(
     materialId: string | undefined,
     fallbackPath?: string,
-  ): Promise<string | undefined> {
+  ): Promise<ThumbnailMaterialPreview | undefined> {
     const materialRecord = materialId
       ? assetRecordById({ version: 1, generated: "", ktx2: false, assets: this.editableAssets }, materialId)
       : undefined;
@@ -1192,9 +1303,31 @@ export class EditorUi {
     if (!materialPath) return undefined;
     const response = await fetch(projectFileUrl(materialPath));
     if (!response.ok) return undefined;
-    const data = (await response.json()) as { baseColorTexture?: unknown };
-    if (typeof data.baseColorTexture !== "string") return undefined;
-    const texture = assetRecordById({ version: 1, generated: "", ktx2: false, assets: this.editableAssets }, data.baseColorTexture);
+    const def = normalizeForgeMaterialDef(await response.json(), materialRecord?.name ?? "Material");
+    const baseColorTexturePath = this.texturePathById(def.baseColorTexture);
+    const normalTexturePath = this.texturePathById(def.normalTexture);
+    return {
+      materialType: def.materialType,
+      baseColor: def.baseColor,
+      ...(baseColorTexturePath ? { baseColorTextureUrl: projectFileUrl(baseColorTexturePath) } : {}),
+      ...(normalTexturePath ? { normalTextureUrl: projectFileUrl(normalTexturePath) } : {}),
+      roughness: def.roughness,
+      metalness: def.metalness,
+      opacity: def.opacity,
+      alphaMode: def.alphaMode,
+      alphaTest: def.alphaTest,
+      side: def.side,
+      emissive: def.emissive,
+      emissiveIntensity: def.emissiveIntensity,
+    };
+  }
+
+  private texturePathById(textureId: string | null): string | undefined {
+    if (!textureId) return undefined;
+    const texture = assetRecordById(
+      { version: 1, generated: "", ktx2: false, assets: this.editableAssets },
+      textureId,
+    );
     return texture ? assetPath(texture) : undefined;
   }
 
@@ -1203,10 +1336,10 @@ export class EditorUi {
     thumb: HTMLElement,
   ): Promise<void> {
     try {
-      const materialTexturePath = await this.resolveModelDefaultMaterialTexturePath(item);
+      const material = await this.resolveModelDefaultMaterialPreview(item);
       const imageUrl = await this.thumbnailRenderer.renderModel(
         projectFileUrl(item.path),
-        materialTexturePath ? projectFileUrl(materialTexturePath) : undefined,
+        material,
       );
       if (!thumb.isConnected) return;
       thumb.replaceChildren();
@@ -1275,7 +1408,7 @@ export class EditorUi {
         onStatus: (message, tone) => this.setStatus(message, tone),
         onSaved: () => {
           const key = item.editable?.id ?? item.path;
-          this.materialTexturePreviewCache.delete(key);
+          this.materialPreviewCache.delete(key);
           this.modelMaterialPreviewCache.clear();
           this.thumbnailRenderer.clearCache();
           this.renderContentAssets();
@@ -1741,6 +1874,11 @@ export class EditorUi {
         label: item.label.replace(/\.actor\.json$/i, ""),
         behaviorScriptIds: BEHAVIOR_SCRIPT_IDS,
         assetIds: this.editableAssets.map((asset) => asset.id),
+        assets: this.editableAssets.map((asset) => ({
+          id: asset.id,
+          assetType: assetType(asset),
+          path: assetPath(asset),
+        })),
         onStatus: (message, tone) => this.setStatus(message, tone),
         onBrowse: () => this.setStatus(`In Content Browser: ${item.path}`),
       });

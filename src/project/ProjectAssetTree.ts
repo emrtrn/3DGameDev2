@@ -138,3 +138,55 @@ export async function importProjectAsset(
   }
   return { path: data.path ?? "", registeredId: data.registeredId ?? null };
 }
+
+/**
+ * Renames a single asset file via the localhost-only `/__content-rename`
+ * endpoint. `name` is the new base name (no extension); the server preserves the
+ * file's extension chain and repoints the manifest entry. Returns the new path
+ * and whether a manifest entry was updated.
+ */
+export async function renameProjectContent(
+  path: string,
+  name: string,
+): Promise<{ path: string; registered: boolean }> {
+  const response = await fetch("/__content-rename", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, name }),
+  });
+  const data = (await response.json().catch(() => null)) as {
+    ok?: boolean;
+    path?: string;
+    registered?: boolean;
+    error?: string;
+  } | null;
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.error ?? `Rename failed: ${response.status} ${response.statusText}`);
+  }
+  return { path: data.path ?? "", registered: Boolean(data.registered) };
+}
+
+/**
+ * Deletes a single asset file (and its model sidecars / manifest entry) via the
+ * localhost-only `/__content-delete` endpoint. Returns whether a manifest entry
+ * was removed.
+ */
+export async function deleteProjectContent(
+  path: string,
+): Promise<{ path: string; registered: boolean }> {
+  const response = await fetch("/__content-delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  const data = (await response.json().catch(() => null)) as {
+    ok?: boolean;
+    path?: string;
+    registered?: boolean;
+    error?: string;
+  } | null;
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.error ?? `Delete failed: ${response.status} ${response.statusText}`);
+  }
+  return { path: data.path ?? "", registered: Boolean(data.registered) };
+}

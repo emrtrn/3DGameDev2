@@ -133,9 +133,12 @@ import type { SceneDocument } from "../engine/scene/sceneDocument";
 import {
   buildImportedAssetRecord,
   resolveContentNewFile,
+  resolveContentRenameTarget,
   resolveImportPath,
   validateAssetCollisionDef,
+  validateContentDeletePayload,
   validateContentNewPayload,
+  validateContentRenamePayload,
   validateImportAssetMeta,
   validateActorInstance,
   validateLayout,
@@ -152,6 +155,7 @@ import {
   defaultActorScriptDef,
   normalizeActorScriptDef,
 } from "../engine/scene/actorScript";
+import { actorPreviewNodes } from "../engine/scene/actorPreview";
 import { normalizeForgeMaterialDef } from "../engine/assets/material";
 import {
   actorInstanceEntityId,
@@ -4706,6 +4710,50 @@ check("content-new 'script' creates a `.actor.json` Actor Script seeded with the
   );
 });
 
+check("content-rename validates payload and rejects extensions / unsafe names", () => {
+  const payload = validateContentRenamePayload({ path: "assets/props/chair.glb", name: " Sofa " });
+  assert.equal(payload.path, "assets/props/chair.glb");
+  assert.equal(payload.name, "Sofa");
+  // Turkish letters are allowed in the base name.
+  assert.equal(
+    validateContentRenamePayload({ path: "assets/a.glb", name: "Işık" }).name,
+    "Işık",
+  );
+  assert.throws(() => validateContentRenamePayload({ path: "assets/a.glb", name: "Sofa.glb" }));
+  assert.throws(() => validateContentRenamePayload({ path: "assets/a.glb", name: "a/b" }));
+  assert.throws(() => validateContentRenamePayload({ path: "assets/a.glb", name: "" }));
+  assert.throws(() => validateContentRenamePayload({ path: "", name: "Sofa" }));
+  assert.throws(() => validateContentRenamePayload({ path: "../escape.glb", name: "Sofa" }));
+});
+
+check("content-rename target keeps the extension chain and source directory", () => {
+  // Simple single extension.
+  const glb = resolveContentRenameTarget({ path: "assets/props/chair.glb", name: "Sofa" });
+  assert.equal(glb.to, "assets/props/Sofa.glb");
+  assert.equal(glb.ext, ".glb");
+  // Compound asset extension is preserved (only the base changes).
+  const material = resolveContentRenameTarget({
+    path: "assets/Materials/Ground.material.json",
+    name: "Stone",
+  });
+  assert.equal(material.to, "assets/Materials/Stone.material.json");
+  assert.equal(material.ext, ".material.json");
+  // Extensionless file at the root.
+  const bare = resolveContentRenameTarget({ path: "README", name: "Notes" });
+  assert.equal(bare.to, "Notes");
+  assert.equal(bare.ext, "");
+});
+
+check("content-delete validates payload and normalizes the path", () => {
+  assert.equal(
+    validateContentDeletePayload({ path: "/assets/props/chair.glb/" }).path,
+    "assets/props/chair.glb",
+  );
+  assert.throws(() => validateContentDeletePayload({ path: "" }));
+  assert.throws(() => validateContentDeletePayload({ path: "../escape.glb" }));
+  assert.throws(() => validateContentDeletePayload({ path: 42 }));
+});
+
 check("normalizeActorScriptDef coerces malformed/legacy data to a valid class", () => {
   // Legacy stub (old `type:"script"` with a dead graph) → empty actor class.
   const legacy = normalizeActorScriptDef({ schema: 1, type: "script", name: "Old", graph: {} });
@@ -4816,6 +4864,88 @@ check("actorInstanceToEntity flattens a class + placement into one entity", () =
   // Round-trips through the entity-id helpers.
   assert.equal(parseActorInstanceEntityIndex(actorInstanceEntityId(7)), 7);
   assert.equal(parseActorInstanceEntityIndex("character:7"), null);
+});
+
+check("actorPreviewNodes keeps the whole tree with per-node local transforms", () => {
+  const def = normalizeActorScriptDef({
+    name: "DoorBP",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      {
+        id: "mesh",
+        parent: "root",
+        component: "MeshRenderer",
+        props: { assetId: "door_01", position: [1, 0, 0], rotation: [0, 90, 0], scale: [2, 2, 2] },
+      },
+      // A second mesh of the same kind is preserved (unlike the runtime collapse).
+      { id: "mesh2", parent: "root", component: "MeshRenderer", props: { assetId: "knob" } },
+      {
+        id: "trig",
+        parent: "mesh",
+        component: "Collider",
+        props: { shape: "sphere", size: [2, 2, 2], center: [0, 1, 0], rotation: [0, 45, 0], isSensor: true },
+      },
+      { id: "lamp", parent: "root", component: "Light", props: { type: "point", intensity: 3, distance: 6 } },
+    ],
+  });
+  const nodes = actorPreviewNodes(def);
+
+  // Every component node survives (no first-of-kind collapse).
+  assert.equal(nodes.length, 5);
+  assert.equal(nodes.filter((n) => n.component === "MeshRenderer").length, 2);
+
+  const mesh = nodes.find((n) => n.id === "mesh");
+  assert.equal(mesh?.parent, "root");
+  assert.equal(mesh?.mesh?.assetId, "door_01");
+  assert.deepEqual(mesh?.position, [1, 0, 0]);
+  assert.deepEqual(mesh?.rotation, [0, 90, 0]);
+  assert.deepEqual(mesh?.scale, [2, 2, 2]);
+
+  // Root + missing props default to identity.
+  const root = nodes.find((n) => n.id === "root");
+  assert.equal(root?.parent, undefined);
+  assert.deepEqual(root?.scale, [1, 1, 1]);
+
+  // Collider payload carries shape/size/center/rotation/sensor; node transform
+  // stays identity (orientation lives on the payload, not double-applied).
+  const trig = nodes.find((n) => n.id === "trig");
+  assert.equal(trig?.parent, "mesh");
+  assert.equal(trig?.collider?.shape, "sphere");
+  assert.deepEqual(trig?.collider?.size, [2, 2, 2]);
+  assert.deepEqual(trig?.collider?.center, [0, 1, 0]);
+  assert.deepEqual(trig?.collider?.rotation, [0, 45, 0]);
+  assert.equal(trig?.collider?.isSensor, true);
+  assert.deepEqual(trig?.rotation, [0, 0, 0]);
+  assert.deepEqual(trig?.scale, [1, 1, 1]);
+
+  // Light payload extraction.
+  const lamp = nodes.find((n) => n.id === "lamp");
+  assert.equal(lamp?.light?.type, "point");
+  assert.equal(lamp?.light?.intensity, 3);
+  assert.equal(lamp?.light?.distance, 6);
+});
+
+check("actorPreviewNodes defaults bad collider/light props and a bare class", () => {
+  const def = normalizeActorScriptDef({
+    name: "Messy",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "c", parent: "root", component: "Collider", props: { shape: "bogus" } },
+      { id: "l", parent: "root", component: "Light", props: { type: "weird" } },
+    ],
+  });
+  const nodes = actorPreviewNodes(def);
+  const collider = nodes.find((n) => n.id === "c")?.collider;
+  assert.equal(collider?.shape, "box");
+  assert.deepEqual(collider?.size, [1, 1, 1]);
+  assert.equal(collider?.isSensor, false);
+  assert.equal(nodes.find((n) => n.id === "l")?.light?.type, "directional");
+
+  // A default class previews to a single identity root with no payloads.
+  const bare = actorPreviewNodes(defaultActorScriptDef("Bare"));
+  assert.equal(bare.length, 1);
+  assert.equal(bare[0]?.component, "Transform");
+  assert.equal(bare[0]?.mesh, undefined);
 });
 
 check("actorInstanceToEntity falls back to a Behavior component node when no bindings", () => {

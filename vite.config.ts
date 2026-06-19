@@ -1,14 +1,17 @@
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import {
   buildImportedAssetRecord,
   resolveContentNewFile,
+  resolveContentRenameTarget,
   resolveImportPath,
+  validateContentDeletePayload,
   validateContentNewPayload,
+  validateContentRenamePayload,
   validateImportAssetMeta,
   validateSaveActorPayload,
   validateSaveCollisionPayload,
@@ -189,6 +192,89 @@ async function registerImportedAsset(rel: string, bytes: number): Promise<string
   return record.id;
 }
 
+// Model assets carry editor sidecars that share the file's base name. Renaming or
+// deleting the model must move/remove these too, or they orphan.
+const MODEL_EXTS = new Set([".glb", ".gltf"]);
+const MODEL_SIDECAR_SUFFIXES = [".collision.json", ".materials.json", ".uvw.json"];
+
+async function pathExists(absPath: string): Promise<boolean> {
+  return stat(absPath).then(
+    () => true,
+    () => false,
+  );
+}
+
+/** Strips the last extension from a public-relative path: `a/b.glb` -> `a/b`. */
+function stripLastExt(path: string): string {
+  return path.replace(/\.[^./]+$/, "");
+}
+
+/** Moves any existing model sidecars alongside a renamed model file. */
+async function moveModelSidecars(from: string, to: string): Promise<void> {
+  const fromBase = stripLastExt(from);
+  const toBase = stripLastExt(to);
+  for (const suffix of MODEL_SIDECAR_SUFFIXES) {
+    const fromAbs = resolvePublicPath(`${fromBase}${suffix}`);
+    if (!(await pathExists(fromAbs))) continue;
+    await rename(fromAbs, resolvePublicPath(`${toBase}${suffix}`));
+  }
+}
+
+/** Removes any existing model sidecars for a deleted model file. */
+async function deleteModelSidecars(path: string): Promise<void> {
+  const base = stripLastExt(path);
+  for (const suffix of MODEL_SIDECAR_SUFFIXES) {
+    const abs = resolvePublicPath(`${base}${suffix}`);
+    if (await pathExists(abs)) await unlink(abs);
+  }
+}
+
+/**
+ * Repoints the manifest entry whose `path`/`file` matches `from` to `to`,
+ * refreshing its display name. The asset id is kept stable so existing layout
+ * placements (which reference assets by id) still resolve. Returns true when an
+ * entry was updated.
+ */
+async function renameManifestEntry(from: string, to: string, name: string): Promise<boolean> {
+  const project = await readProjectManifest();
+  const manifestAbs = resolvePublicPath(project.editor.assetManifest);
+  const manifest = JSON.parse(await readFile(manifestAbs, "utf8")) as {
+    assets?: unknown[];
+  } & Record<string, unknown>;
+  if (!Array.isArray(manifest.assets)) return false;
+  let changed = false;
+  for (const asset of manifest.assets) {
+    if (!asset || typeof asset !== "object") continue;
+    const record = asset as Record<string, unknown>;
+    if (record.path !== from && record.file !== from) continue;
+    if (record.path === from) record.path = to;
+    if (record.file === from) record.file = to;
+    record.name = name;
+    changed = true;
+  }
+  if (changed) await writeFile(manifestAbs, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return changed;
+}
+
+/** Drops the manifest entry referencing `path`. Returns true when one was removed. */
+async function removeManifestEntry(path: string): Promise<boolean> {
+  const project = await readProjectManifest();
+  const manifestAbs = resolvePublicPath(project.editor.assetManifest);
+  const manifest = JSON.parse(await readFile(manifestAbs, "utf8")) as {
+    assets?: unknown[];
+  } & Record<string, unknown>;
+  if (!Array.isArray(manifest.assets)) return false;
+  const before = manifest.assets.length;
+  manifest.assets = manifest.assets.filter((asset) => {
+    if (!asset || typeof asset !== "object") return true;
+    const record = asset as Record<string, unknown>;
+    return record.path !== path && record.file !== path;
+  });
+  if (manifest.assets.length === before) return false;
+  await writeFile(manifestAbs, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return true;
+}
+
 // Endpoints that write files. These must never be reachable from the LAN even
 // when `server.host` is true; the read-only directory listing (/__project-dir)
 // stays open so real-device (LAN) testing can still render scenes.
@@ -198,6 +284,8 @@ const PRIVILEGED_URLS = new Set([
   "/__save-material-slots",
   "/__save-uvw",
   "/__content-new",
+  "/__content-rename",
+  "/__content-delete",
   "/__import-asset",
 ]);
 
@@ -431,6 +519,100 @@ function layoutEditorPlugin(): Plugin {
             res.end(
               JSON.stringify({ ok: true, path: target.path, kind: payload.kind, registeredId }),
             );
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Content Browser Rename: rename a single asset file (preserving its
+        // extension chain), move its model sidecars, and repoint the manifest
+        // entry (keeping the asset id stable so placements still resolve).
+        if (req.url === "/__content-rename") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateContentRenamePayload(await readJsonBody(req));
+            const target = resolveContentRenameTarget(payload);
+            if (target.from === target.to) {
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ ok: true, path: target.to, registered: false }));
+              return;
+            }
+            const fromAbs = resolvePublicPath(target.from);
+            const toAbs = resolvePublicPath(target.to);
+            const fromStat = await stat(fromAbs).catch(() => null);
+            if (!fromStat) {
+              res.statusCode = 404;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ ok: false, error: `not found: ${target.from}` }));
+              return;
+            }
+            if (await pathExists(toAbs)) {
+              res.statusCode = 409;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ ok: false, error: `already exists: ${target.to}` }));
+              return;
+            }
+            await rename(fromAbs, toAbs);
+            if (fromStat.isFile() && MODEL_EXTS.has(target.ext.toLowerCase())) {
+              await moveModelSidecars(target.from, target.to);
+            }
+            const registered = await renameManifestEntry(
+              target.from,
+              target.to,
+              payload.name,
+            ).catch(() => false);
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: target.to, registered }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Content Browser Delete: remove a single asset file, its model
+        // sidecars, and its manifest entry.
+        if (req.url === "/__content-delete") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateContentDeletePayload(await readJsonBody(req));
+            const absPath = resolvePublicPath(payload.path);
+            const fileStat = await stat(absPath).catch(() => null);
+            if (!fileStat) {
+              res.statusCode = 404;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ ok: false, error: `not found: ${payload.path}` }));
+              return;
+            }
+            if (!fileStat.isFile()) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ ok: false, error: `not a file: ${payload.path}` }));
+              return;
+            }
+            await unlink(absPath);
+            if (MODEL_EXTS.has(extname(payload.path).toLowerCase())) {
+              await deleteModelSidecars(payload.path);
+            }
+            const registered = await removeManifestEntry(payload.path).catch(() => false);
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, registered }));
           } catch (error) {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json; charset=utf-8");

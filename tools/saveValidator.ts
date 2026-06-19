@@ -1114,6 +1114,71 @@ export function resolveImportPath(meta: ImportAssetMeta): string {
   return dir ? `${dir}/${meta.name}` : meta.name;
 }
 
+export interface ContentRenamePayload {
+  /** Existing public-root-relative file path to rename. */
+  path: string;
+  /** New base name (single safe segment, without extension). */
+  name: string;
+}
+
+/**
+ * Validates a `/__content-rename` payload. The new name is sanitized to a single
+ * safe path segment and must not carry its own extension — the source file's
+ * extension chain (e.g. `.glb`, `.material.json`) is preserved by the resolver.
+ */
+export function validateContentRenamePayload(value: unknown): ContentRenamePayload {
+  if (!value || typeof value !== "object") throw new Error("rename payload must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string") throw new Error("rename payload path must be a string");
+  if (input.path.includes("..")) throw new Error("rename payload path must not contain ..");
+  const path = input.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  if (!path) throw new Error("rename payload path must not be empty");
+  const name = sanitizeContentName(input.name);
+  if (name.includes(".")) throw new Error("rename name must not include an extension");
+  return { path, name };
+}
+
+export interface ContentRenameTarget {
+  /** Normalized source path. */
+  from: string;
+  /** Destination path: source dir + new base + the source extension chain. */
+  to: string;
+  /** Source extension chain, including the leading dot (empty when extensionless). */
+  ext: string;
+}
+
+/**
+ * Resolves a rename to its source/destination paths. The "extension chain" is
+ * everything from the filename's first dot, so compound asset extensions like
+ * `.material.json` survive while only the base name changes.
+ */
+export function resolveContentRenameTarget(payload: ContentRenamePayload): ContentRenameTarget {
+  const from = payload.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const slash = from.lastIndexOf("/");
+  const dir = slash >= 0 ? from.slice(0, slash) : "";
+  const fileName = slash >= 0 ? from.slice(slash + 1) : from;
+  const dot = fileName.indexOf(".");
+  const ext = dot >= 0 ? fileName.slice(dot) : "";
+  const to = dir ? `${dir}/${payload.name}${ext}` : `${payload.name}${ext}`;
+  return { from, to, ext };
+}
+
+export interface ContentDeletePayload {
+  /** Public-root-relative file path to delete. */
+  path: string;
+}
+
+/** Validates a `/__content-delete` payload (a single existing file to remove). */
+export function validateContentDeletePayload(value: unknown): ContentDeletePayload {
+  if (!value || typeof value !== "object") throw new Error("delete payload must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string") throw new Error("delete payload path must be a string");
+  if (input.path.includes("..")) throw new Error("delete payload path must not contain ..");
+  const path = input.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  if (!path) throw new Error("delete payload path must not be empty");
+  return { path };
+}
+
 const ASSET_TYPE_CATEGORY: Record<AssetType, string> = {
   staticMesh: "prop",
   skeletalMesh: "character",

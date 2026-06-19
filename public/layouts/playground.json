@@ -5,21 +5,7 @@
   "instances": [
     {
       "assetId": "shape:plane",
-      "placements": [
-        {
-          "position": [
-            0,
-            0,
-            0
-          ],
-          "name": "Floor",
-          "scale": [
-            8,
-            1,
-            8
-          ]
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "rug-rectangle",
@@ -27,7 +13,7 @@
         {
           "position": [
             -0.52,
-            0,
+            0.26,
             0.64
           ],
           "rotationYDeg": 0,
@@ -41,7 +27,7 @@
         {
           "position": [
             -0.29,
-            0,
+            0.26,
             -0.6
           ],
           "behavior": {
@@ -69,7 +55,7 @@
         {
           "position": [
             0.41,
-            0.01,
+            0.27,
             0.31
           ],
           "rotationYDeg": 0,
@@ -87,7 +73,7 @@
         {
           "position": [
             0.05,
-            0.01,
+            0.27,
             1.73
           ],
           "name": "Player Start",
@@ -120,7 +106,48 @@
     },
     {
       "assetId": "starter-sm-crate",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -3.06,
+            0.75,
+            3.11
+          ],
+          "materialSlot": "starter-mat-brick-clay-beveled",
+          "rotationYDeg": 0,
+          "scale": 0.48
+        },
+        {
+          "position": [
+            -3.06,
+            0.75,
+            2.35
+          ],
+          "materialSlot": "starter-mat-brick-clay-new",
+          "rotationYDeg": 0,
+          "scale": 0.48
+        },
+        {
+          "position": [
+            -3.06,
+            0.75,
+            1.47
+          ],
+          "materialSlot": "starter-mat-brick-clay-old",
+          "rotationYDeg": 0,
+          "scale": 0.48
+        },
+        {
+          "position": [
+            -3.06,
+            0.75,
+            0.58
+          ],
+          "materialSlot": "starter-mat-brick-cut-stone",
+          "rotationYDeg": 0,
+          "scale": 0.48
+        }
+      ]
     },
     {
       "assetId": "wall-2",
@@ -132,7 +159,7 @@
         {
           "position": [
             0.93,
-            0,
+            0.26,
             -0.68
           ],
           "rotationYDeg": 0,
@@ -146,7 +173,7 @@
         {
           "position": [
             2.05,
-            0,
+            0.26,
             0.34
           ],
           "rotationYDeg": 0,
@@ -160,7 +187,7 @@
         {
           "position": [
             0.4,
-            0.24,
+            0.5,
             0.11
           ],
           "rotationYDeg": 0,
@@ -169,6 +196,51 @@
             180,
             0
           ],
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "starter-sm-platform",
+      "placements": [
+        {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "scaleLocked": true,
+          "materialSlot": "ground",
+          "rotationYDeg": 0,
+          "scale": 2
+        }
+      ]
+    },
+    {
+      "assetId": "starter-sm-ramp",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-pillar",
+      "placements": [
+        {
+          "position": [
+            -3.17,
+            1.75,
+            -3.11
+          ],
+          "materialSlot": "ground",
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            3.41,
+            1.75,
+            -3.1
+          ],
+          "materialSlot": "ground",
+          "rotationYDeg": 0,
           "scale": 1
         }
       ]
@@ -199,6 +271,21 @@
       "color": "#ffffff",
       "intensity": 1,
       "castShadow": true
+    },
+    {
+      "id": "point-light-mql9v7f3-1sb",
+      "type": "point",
+      "position": [
+        -2.32,
+        1.32,
+        1.58
+      ],
+      "name": "Point Light",
+      "color": "#ffffff",
+      "intensity": 2.5,
+      "castShadow": false,
+      "distance": 8,
+      "decay": 2
     }
   ]
 }

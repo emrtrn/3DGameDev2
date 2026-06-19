@@ -1586,6 +1586,8 @@ body.editor-mode #debug-stats {
 .me-editor-preview {
   min-width: 0;
   min-height: 0;
+  position: relative;
+  overflow: hidden;
   background:
     radial-gradient(circle at 50% 32%, #2b2f35 0%, #202327 62%, #181a1d 100%);
 }
@@ -1630,6 +1632,14 @@ body.editor-mode #debug-stats {
   color: #f2f5f7;
 }
 .me-row input[type="color"] { padding: 2px; }
+.me-number-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px;
+  gap: 6px;
+  align-items: center;
+}
+.me-number-pair input[type="range"] { padding: 0; }
+.me-number-pair input[type="number"] { width: 72px; }
 
 .me-editor-status {
   height: 26px;
@@ -1823,29 +1833,23 @@ body.editor-mode #debug-stats {
 .as-editor-viewport {
   flex: 1;
   min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
   background: radial-gradient(circle at 50% 30%, #2b2f35 0%, #202327 60%, #181a1d 100%);
 }
-.as-viewport-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 22px 28px;
+.as-editor-viewport canvas { display: block; width: 100%; height: 100%; }
+.as-viewport-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  padding: 6px 12px;
   border: 1px dashed rgba(255, 255, 255, 0.16);
-  border-radius: 10px;
-  background: rgba(20, 23, 27, 0.55);
-  cursor: pointer;
-  text-align: center;
+  border-radius: 8px;
+  background: rgba(20, 23, 27, 0.65);
+  color: #97a0a6;
+  font-size: 11px;
+  pointer-events: none;
 }
-.as-viewport-card:hover { border-color: rgba(91, 214, 160, 0.5); }
-.as-viewport-icon { font-size: 30px; color: #6fd0a4; }
-.as-viewport-name { font-size: 16px; font-weight: 600; }
-.as-viewport-class { color: #8fd0ff; font-size: 12px; }
-.as-viewport-counts { color: #97a0a6; font-size: 11px; }
-.as-viewport-note { color: #6a7378; font-size: 11px; margin-top: 6px; }
 
 .as-editor-graph { flex: 0 0 auto; max-height: 42%; overflow-y: auto; background: #181b1f; }
 .as-graph-hint { padding: 4px 10px; font-size: 11px; color: #6a7378; }

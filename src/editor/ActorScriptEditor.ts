@@ -30,7 +30,9 @@ import {
 } from "@engine/scene/actorScript";
 import type { MetadataFieldDef, MetadataFieldType } from "@engine/scene/metadataSchema";
 import type { SceneJsonValue } from "@engine/scene/entity";
+import { isModelAssetType, type AssetType } from "@engine/assets/manifest";
 import { loadActorScript, saveActorScript } from "@/editor/actorScriptStore";
+import { ActorScriptViewport } from "@/editor/ActorScriptViewport";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
@@ -43,6 +45,8 @@ export interface ActorScriptEditorOptions {
   behaviorScriptIds?: readonly string[];
   /** Manifest asset ids offered for MeshRenderer convenience. */
   assetIds?: readonly string[];
+  /** Manifest assets (id/type/path) used to resolve MeshRenderer previews in the viewport. */
+  assets?: ReadonlyArray<{ id: string; assetType: string; path: string }>;
   onStatus?: (message: string, tone?: StatusTone) => void;
   /** Reveal this asset in the Content Browser (Toolbar → Browse). */
   onBrowse?: () => void;
@@ -108,6 +112,13 @@ export class ActorScriptEditor {
   private dirty = false;
   private disposed = false;
   private nodeSeq = 0;
+
+  /** 3D preview of the component tree (lazily created on first render). */
+  private viewport: ActorScriptViewport | null = null;
+  /** Last component-tree signature built into the viewport (skips redundant rebuilds). */
+  private lastBuildSignature = "";
+  private viewportSyncTimer: number | undefined;
+  private modelPathById: Map<string, string> | null = null;
 
   private constructor(private readonly options: ActorScriptEditorOptions) {
     this.def = defaultActorScriptDef(options.label);
@@ -354,20 +365,53 @@ export class ActorScriptEditor {
       ?.addEventListener("click", () => this.addEvent());
   }
 
+  /** Ensures the 3D viewport exists, then syncs the tree + selection into it. */
   private renderViewport(): void {
-    const counts = `${this.def.components.length} component${this.def.components.length === 1 ? "" : "s"} · ${this.def.eventBindings.length} binding${this.def.eventBindings.length === 1 ? "" : "s"}`;
-    this.viewportHost.innerHTML = `
-      <div class="as-viewport-card" data-as-select-class>
-        <div class="as-viewport-icon">◈</div>
-        <div class="as-viewport-name">${escapeHtml(this.def.name)}</div>
-        <div class="as-viewport-class">${escapeHtml(PARENT_CLASS_LABELS[this.def.parentClass])}</div>
-        <div class="as-viewport-counts">${counts}</div>
-        <div class="as-viewport-note">3D preview coming soon — click to edit class defaults</div>
-      </div>
-    `;
-    this.viewportHost
-      .querySelector<HTMLElement>("[data-as-select-class]")
-      ?.addEventListener("click", () => this.select({ kind: "class" }));
+    if (this.disposed) return;
+    if (!this.viewport) {
+      this.viewport = new ActorScriptViewport({
+        host: this.viewportHost,
+        resolveModelPath: (assetId) => this.resolveModelPath(assetId),
+        onPickNode: (nodeId) => {
+          if (nodeId) this.select({ kind: "component", id: nodeId });
+        },
+      });
+      this.lastBuildSignature = "";
+    }
+    this.syncViewport();
+  }
+
+  /** Rebuilds the preview only when the component tree changed; always re-highlights. */
+  private syncViewport(): void {
+    if (!this.viewport) return;
+    const signature = JSON.stringify(this.def.components);
+    if (signature !== this.lastBuildSignature) {
+      this.lastBuildSignature = signature;
+      this.viewport.setDef(this.def);
+    }
+    this.viewport.setSelection(this.selection.kind === "component" ? this.selection.id : null);
+  }
+
+  /** Debounced viewport sync for live prop edits (avoids rebuilding per keystroke). */
+  private scheduleViewportSync(): void {
+    if (this.viewportSyncTimer !== undefined) return;
+    this.viewportSyncTimer = window.setTimeout(() => {
+      this.viewportSyncTimer = undefined;
+      this.syncViewport();
+    }, 150);
+  }
+
+  /** Maps a manifest asset id to its public-relative model path (mesh nodes only). */
+  private resolveModelPath(assetId: string): string | undefined {
+    if (!this.modelPathById) {
+      this.modelPathById = new Map();
+      for (const asset of this.options.assets ?? []) {
+        if (isModelAssetType(asset.assetType as AssetType)) {
+          this.modelPathById.set(asset.id, asset.path);
+        }
+      }
+    }
+    return this.modelPathById.get(assetId);
   }
 
   // --- details forms ------------------------------------------------------
@@ -529,6 +573,7 @@ export class ActorScriptEditor {
       if (parsed.ok) {
         node.props = parsed.value;
         this.markDirty();
+        this.scheduleViewportSync();
         if (error) error.textContent = "";
         props.classList.remove("is-invalid");
       } else {
@@ -868,6 +913,9 @@ export class ActorScriptEditor {
   private dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    if (this.viewportSyncTimer !== undefined) window.clearTimeout(this.viewportSyncTimer);
+    this.viewport?.dispose();
+    this.viewport = null;
     this.overlay.remove();
     if (ActorScriptEditor.activeInstance === this) ActorScriptEditor.activeInstance = null;
   }

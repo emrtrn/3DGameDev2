@@ -1,23 +1,48 @@
 import {
   AmbientLight,
+  BackSide,
   Box3,
   Color,
   DirectionalLight,
+  DoubleSide,
+  FrontSide,
   GridHelper,
   Group,
   PerspectiveCamera,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   RepeatWrapping,
   Scene,
   SRGBColorSpace,
   SphereGeometry,
+  type Material,
   TextureLoader,
   Vector3,
   WebGLRenderer,
 } from "three";
 import { MeshoptDecoder } from "meshoptimizer";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import type {
+  ForgeMaterialAlphaMode,
+  ForgeMaterialSide,
+  ForgeMaterialType,
+} from "@engine/assets/material";
+
+export interface ThumbnailMaterialPreview {
+  materialType: ForgeMaterialType;
+  baseColor: string;
+  baseColorTextureUrl?: string;
+  normalTextureUrl?: string;
+  roughness: number;
+  metalness: number;
+  opacity: number;
+  alphaMode: ForgeMaterialAlphaMode;
+  alphaTest: number;
+  side: ForgeMaterialSide;
+  emissive: string;
+  emissiveIntensity: number;
+}
 
 export class ThumbnailRenderer {
   private readonly loader = new GLTFLoader();
@@ -37,21 +62,21 @@ export class ThumbnailRenderer {
     this.renderer.outputColorSpace = SRGBColorSpace;
   }
 
-  renderModel(url: string, materialTextureUrl?: string): Promise<string> {
-    const cacheKey = materialTextureUrl ? `model:${url}:${materialTextureUrl}` : url;
+  renderModel(url: string, material?: ThumbnailMaterialPreview): Promise<string> {
+    const cacheKey = material ? `model:${url}:${materialCacheKey(material)}` : url;
     let cached = this.cache.get(cacheKey);
     if (!cached) {
-      cached = this.renderModelUncached(url, materialTextureUrl);
+      cached = this.renderModelUncached(url, material);
       this.cache.set(cacheKey, cached);
     }
     return cached;
   }
 
-  renderMaterial(key: string, textureUrl?: string): Promise<string> {
-    const cacheKey = `material:${key}:${textureUrl ?? "none"}`;
+  renderMaterial(key: string, material: ThumbnailMaterialPreview): Promise<string> {
+    const cacheKey = `material:${key}:${materialCacheKey(material)}`;
     let cached = this.cache.get(cacheKey);
     if (!cached) {
-      cached = this.renderMaterialUncached(textureUrl);
+      cached = this.renderMaterialUncached(material);
       this.cache.set(cacheKey, cached);
     }
     return cached;
@@ -66,7 +91,10 @@ export class ThumbnailRenderer {
     this.cache.clear();
   }
 
-  private async renderModelUncached(url: string, materialTextureUrl?: string): Promise<string> {
+  private async renderModelUncached(
+    url: string,
+    materialPreview?: ThumbnailMaterialPreview,
+  ): Promise<string> {
     const gltf = await this.loader.loadAsync(url);
     const model = gltf.scene.clone(true);
     const scene = new Scene();
@@ -82,16 +110,10 @@ export class ThumbnailRenderer {
     scene.add(fillLight);
 
     const group = new Group();
-    if (materialTextureUrl) {
-      const texture = await this.textureLoader.loadAsync(materialTextureUrl);
-      texture.colorSpace = SRGBColorSpace;
-      texture.wrapS = RepeatWrapping;
-      texture.wrapT = RepeatWrapping;
-      const material = new MeshStandardMaterial({
-        map: texture,
-        roughness: 0.78,
-        metalness: 0,
-      });
+    const material = materialPreview
+      ? await this.createMaterialFromPreview(materialPreview)
+      : null;
+    if (material) {
       model.traverse((object) => {
         if (object instanceof Mesh) object.material = material;
       });
@@ -119,10 +141,12 @@ export class ThumbnailRenderer {
 
     this.renderer.setClearColor(0x191b1f, 1);
     this.renderer.render(scene, camera);
-    return this.renderer.domElement.toDataURL("image/png");
+    const imageUrl = this.renderer.domElement.toDataURL("image/png");
+    disposeMaterial(material);
+    return imageUrl;
   }
 
-  private async renderMaterialUncached(textureUrl?: string): Promise<string> {
+  private async renderMaterialUncached(materialPreview: ThumbnailMaterialPreview): Promise<string> {
     const scene = new Scene();
     scene.background = new Color(0x191b1f);
     scene.add(new AmbientLight(0xffffff, 1.1));
@@ -135,19 +159,7 @@ export class ThumbnailRenderer {
     rimLight.position.set(-3, 2, -2);
     scene.add(rimLight);
 
-    const material = new MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 0.72,
-      metalness: 0,
-    });
-    if (textureUrl) {
-      const texture = await this.textureLoader.loadAsync(textureUrl);
-      texture.colorSpace = SRGBColorSpace;
-      texture.wrapS = RepeatWrapping;
-      texture.wrapT = RepeatWrapping;
-      material.map = texture;
-      material.needsUpdate = true;
-    }
+    const material = await this.createMaterialFromPreview(materialPreview);
 
     const sphere = new Mesh(new SphereGeometry(0.82, 48, 32), material);
     sphere.rotation.y = -Math.PI / 7;
@@ -162,8 +174,65 @@ export class ThumbnailRenderer {
     this.renderer.render(scene, camera);
     const url = this.renderer.domElement.toDataURL("image/png");
     sphere.geometry.dispose();
-    material.map?.dispose();
-    material.dispose();
+    disposeMaterial(material);
     return url;
   }
+
+  private async createMaterialFromPreview(
+    preview: ThumbnailMaterialPreview,
+  ): Promise<MeshStandardMaterial | MeshBasicMaterial> {
+    const shared = {
+      color: new Color(preview.baseColor),
+      transparent: preview.alphaMode === "blend" || preview.opacity < 1,
+      opacity: preview.opacity,
+      alphaTest: preview.alphaMode === "mask" ? preview.alphaTest : 0,
+      side: materialSide(preview.side),
+    };
+    const material =
+      preview.materialType === "basic"
+        ? new MeshBasicMaterial(shared)
+        : new MeshStandardMaterial({
+            ...shared,
+            roughness: preview.roughness,
+            metalness: preview.metalness,
+            emissive: new Color(preview.emissive),
+            emissiveIntensity: preview.emissiveIntensity,
+          });
+    if (preview.baseColorTextureUrl) {
+      const texture = await this.textureLoader.loadAsync(preview.baseColorTextureUrl);
+      texture.colorSpace = SRGBColorSpace;
+      texture.wrapS = RepeatWrapping;
+      texture.wrapT = RepeatWrapping;
+      material.map = texture;
+    }
+    if (preview.normalTextureUrl && material instanceof MeshStandardMaterial) {
+      const texture = await this.textureLoader.loadAsync(preview.normalTextureUrl);
+      texture.wrapS = RepeatWrapping;
+      texture.wrapT = RepeatWrapping;
+      material.normalMap = texture;
+    }
+    material.needsUpdate = true;
+    return material;
+  }
+}
+
+function disposeMaterial(material: Material | null): void {
+  if (!material) return;
+  if (material instanceof MeshBasicMaterial || material instanceof MeshStandardMaterial) {
+    material.map?.dispose();
+  }
+  if (material instanceof MeshStandardMaterial) {
+    material.normalMap?.dispose();
+  }
+  material.dispose();
+}
+
+function materialCacheKey(material: ThumbnailMaterialPreview): string {
+  return JSON.stringify(material);
+}
+
+function materialSide(side: ForgeMaterialSide): typeof FrontSide | typeof BackSide | typeof DoubleSide {
+  if (side === "back") return BackSide;
+  if (side === "double") return DoubleSide;
+  return FrontSide;
 }

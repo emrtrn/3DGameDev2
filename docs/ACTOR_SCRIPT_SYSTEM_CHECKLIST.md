@@ -317,8 +317,12 @@ Authoring dikey kesiti **tamamlandı ve yeşil** (tsc temiz · build başarılı
 → isim → `*.actor.json` · Content Browser'da çift tık → **Actor Script editörü**
 (Components ağacı, My Blueprint Variables, Event Graph bindings, Details,
 Compile/Save). Instance/spawn (Faz 7) tamamlandı: runtime + editör-içi sürükle-
-bırak yerleştirme/seçim/gizmo/sil/undo + WYSIWYG mesh. Kalan: editör viewport'unda
-3D component önizleme, per-instance override, behavior stub üretimi (Faz 8).
+bırak yerleştirme/seçim/gizmo/sil/undo + WYSIWYG mesh. **Faz 10 tamamlandı
+(2026-06-19):** editör viewport'u artık gerçek 3D component-ağacı önizlemesi
+(orbit kamera, mesh/collider/light/marker gizmo'ları, ağaç↔viewport seçim
+senkronu, canlı rebuild, dispose hijyeni) — `src/editor/ActorScriptViewport.ts` +
+saf `engine/scene/actorPreview.ts`. Kalan: per-instance override, behavior stub
+üretimi (Faz 8).
 
 İlgili commit'ler: veri modeli + content/save plumbing; editör (picker, overlay,
 paneller).
@@ -370,9 +374,9 @@ npm run build           # başarılı
 - [x] `src/editor/ActorScriptEditor.ts` overlay doküman (StaticMeshEditor deseni,
       dinamik import, Esc kapat, tek editör)
 - [x] Content Browser `*.actor.json` kartına `dblclick` → editörü aç (+ "BP" rozeti)
-- [~] Viewport: şimdilik **placeholder kart** (sınıf adı/parent/sayımlar); gerçek
-      3D viewport **Faz 10**'a taşındı
-- [ ] Orbit/pan/dolly kamera → **Faz 10.1**
+- [x] Viewport: gerçek 3D component-ağacı önizlemesi (**Faz 10**'da tamamlandı;
+      placeholder kart kaldırıldı)
+- [x] Orbit/pan/dolly kamera (**Faz 10.1**)
 - [x] Başlık = sınıf adı + parentClass rozeti; dinamik import ile DEV-gate
 
 ### Faz 4 — Components paneli (şablon ağacı)
@@ -381,7 +385,7 @@ npm run build           # başarılı
 - [x] `+ Add` menüsü: Forge component seti (`MeshRenderer`, `Collider`, `Audio`,
       `ParticleEmitter`, `Light`, `Interaction`, `Behavior`)
 - [x] Component seçimi → Details'ta form (id/parent/kind + **props JSON** editörü)
-- [ ] Viewport'ta component önizleme (mesh/collider/light gizmo'ları) → **Faz 10.2–10.3**
+- [x] Viewport'ta component önizleme (mesh/collider/light gizmo'ları) (**Faz 10.2–10.3**)
 - [ ] (ertele) Add menüsünü roadmap kategorileriyle (Movement/Camera/Spring Arm…)
 
 ### Faz 5 — Event Bindings + Variables + Details
@@ -478,63 +482,68 @@ procedural `shape:<type>` actor mesh'i + actor parent hiyerarşisi → B4/sonrak
 
 #### Slice 10.1 — Viewport altyapısı (placeholder → gerçek sahne)
 
-- [ ] `ActorScriptEditor`'a kendi `WebGLRenderer` + `PerspectiveCamera` + `Scene`
-      (StaticMeshEditor `buildScene` deseni: bg + `AmbientLight` + 2 `DirectionalLight`
-      + `GridHelper` + bir `modelGroup`)
-- [ ] `renderViewport()` placeholder kartını canvas + render döngüsü ile değiştir
+- [x] Ayrı `src/editor/ActorScriptViewport.ts`: kendi `WebGLRenderer` +
+      `PerspectiveCamera` + `Scene` (bg + `AmbientLight` + 2 `DirectionalLight`
+      + `GridHelper` + bir `modelGroup`); editör onu dinamik import arkasından kurar
+- [x] `renderViewport()` placeholder kartını canvas + render döngüsü ile değiştirir
       (`startRenderLoop` + `ResizeObserver` + `resize`)
-- [ ] Orbit/pan/dolly kamera (StaticMeshEditor `bindCameraControls`/`updateCamera`
-      — `spherical` + `target` deseni)
-- [ ] Editör kapanışında **dispose**: `renderer.dispose`, geometri/materyal/model
-      temizliği, RAF iptali, observer disconnect (mevcut `close()`/dispose yoluna bağla)
-- [ ] Boş/derlenmemiş sınıfta zarif boş durum (sadece grid + ışık + küçük ipucu)
+- [x] Orbit/pan/dolly kamera (`spherical` + `target` deseni; sol=orbit, MMB/Shift/sağ=pan, tekerlek=dolly)
+- [x] Editör kapanışında **dispose**: `renderer.dispose`, build kaynaklarının
+      (geometri/materyal/texture/light-gizmo) + cache'li GLTF temizliği, RAF iptali,
+      observer disconnect (editörün `dispose()` yoluna bağlı)
+- [x] Boş/derlenmemiş sınıfta zarif boş durum (grid + ışık + küçük ipucu rozeti)
 - Gate: `tsc` temiz · `build` başarılı.
 
 #### Slice 10.2 — Component ağacını sahneye derle (transform hiyerarşisi + mesh)
 
-- [ ] `def.components` → three `Object3D` ağacı; `ComponentTemplateNode.parent` ile
-      parent-child kurulur (root Transform = grup), her node'un `props`
+- [x] `def.components` → three `Object3D` ağacı; `ComponentTemplateNode.parent` ile
+      parent-child kurulur (her node bir `Group`), her node'un `props`
       position/rotation/scale'i local transform olarak uygulanır + parent zinciri
-      boyunca compose edilir
-- [ ] `MeshRenderer` node → `assetId` modelini yükle (`AssetLoader.loadModels`,
-      cache'li) + clone; eksik/yüklenemeyen/`shape:` assetId → placeholder kutu
-- [ ] Birden çok aynı-tip node desteklenir (runtime'da ilk-kazanır; **önizlemede
+      boyunca three sahne grafiği compose eder
+- [x] `MeshRenderer` node → `assetId` modelini yükle (kendi `GLTFLoader`'ı +
+      `MeshoptDecoder`, path-cache'li) + clone; eksik/yüklenemeyen/`shape:`/path'siz
+      assetId → placeholder kutu (önce placeholder, model gelince değişir)
+- [x] Birden çok aynı-tip node desteklenir (runtime'da ilk-kazanır; **önizlemede
       hepsi** görünür — editör gerçek ağacı gösterir)
-- [ ] Saf dönüşüm yardımcısı: `def → preview node tanım listesi` (three.js'siz, test
-      edilebilir; `engine/render-three/models.ts` `entityCharacterItem` ruhunda)
+- [x] Saf dönüşüm yardımcısı: `actorPreviewNodes(def)` → preview node listesi
+      (three.js'siz, `engine/scene/actorPreview.ts`; headless test edilir)
 - Gate: `tsc` · `build` · görsel: `door` mesh'li `ZZ_SmokeBP` açılınca kapıyı gösterir.
 
 #### Slice 10.3 — Görsel-olmayan / yardımcı component gizmo'ları
 
-- [ ] `Collider` node → shape'e göre wireframe (box/sphere/capsule); `isSensor`
-      farklı renk (`collisionWireboxes`/`colliderBoxFromBounds` yeniden kullan)
-- [ ] `Light` node → ışık + küçük ikon gizmo (engine lights render helper'ları)
-- [ ] `ParticleEmitter` node → placeholder ikon/billboard
-- [ ] `Audio`/`Interaction`/`Behavior`/`Metadata` → küçük ikon marker (veya non-visual atla)
+- [x] `Collider` node → shape'e göre wireframe (box/sphere/capsule≈sphere/
+      cylinder/cone); `isSensor` farklı renk; `size`/`center`/`rotation` props'tan
+- [x] `Light` node → ışık + reach wireframe gizmo (engine `lights` helper'ları:
+      `createLightObject`/`buildLightGizmo`/`disposeLightGizmo`)
+- [x] `ParticleEmitter` node → glyph billboard sprite marker
+- [x] `Audio`/`Interaction`/`Behavior`/`Metadata` → glyph ikon sprite marker
 - Gate: `tsc` · `build` · görsel: collider+light içeren sınıf gizmo'ları gösterir.
 
 #### Slice 10.4 — Ağaç ↔ viewport seçim senkronu
 
-- [ ] Sol Components ağacında bir node seçince viewport'ta eşleşen objeyi **vurgula**
-      (outline/box; node id → object map)
-- [ ] Seçili node'un props transform'unu Details'tan düzenleyince viewport **canlı**
-      güncellenir
-- [ ] (ops.) Viewport'ta tıklayınca ağaç node'unu seç (raycast → node id)
+- [x] Sol Components ağacında bir node seçince viewport'ta eşleşen objeyi **vurgula**
+      (`BoxHelper`; node id → `Group` map, her kare `update()` ile takip)
+- [x] Seçili node'un props transform'unu Details'tan düzenleyince viewport **canlı**
+      güncellenir (debounce'lu rebuild + re-highlight)
+- [x] Viewport'ta tıklayınca ağaç node'unu seç (raycast → `userData.nodeId`)
 - Gate: `tsc` · `build` · görsel: ağaçtan seçim viewport'ta vurgulanır.
 
 #### Slice 10.5 — Canlı güncelleme + perf/lifecycle
 
-- [ ] `def` değişince (component ekle/sil, props/mesh `assetId` düzenle) viewport'u
-      yeniden derle (önce tam rebuild; gerekirse artımlı)
-- [ ] Model yükleme cache'li + lazy; viewport gizliyken/kapanınca render döngüsü duraklat
-- [ ] Geometri/materyal/model dispose hijyeni (editör kapanışı + her rebuild)
+- [x] `def` değişince (component ekle/sil, props/mesh `assetId` düzenle) viewport'u
+      yeniden derle (tam rebuild; component-ağacı imzası değişmedikçe atlanır,
+      seçim-değişimi rebuild tetiklemez)
+- [x] Model yükleme path-cache'li + lazy (yalnızca mesh node'u için); render döngüsü
+      editör kapanınca (`dispose`) durur — overlay tam-ekran olduğu için "gizliyken" durumu yok
+- [x] Geometri/materyal/texture/light-gizmo dispose hijyeni (her rebuild + editör
+      kapanışı); clone'lanan model kaynakları paylaşımlı → sadece detach, cache teardown'da bir kez dispose
 - Gate: `tsc` · `build`.
 
 #### Slice 10.6 — Test & doküman
 
-- [ ] Headless test: `def → preview node tanım listesi` dönüşümü (10.2 saf yardımcısı;
-      parent-child + transform compose + mesh/collider/light tipleri)
-- [ ] Bu checklist + `docs/UNREAL_BASICS_LESSONS.md` Progress Log güncellenir
+- [x] Headless test: `actorPreviewNodes` dönüşümü (parent-child korunur + per-node
+      transform + mesh/collider/light payload + bozuk props default'ları + bare class)
+- [x] Bu checklist + `docs/UNREAL_BASICS_LESSONS.md` Progress Log güncellenir
 - Gate: `tsc` · `npm run test:engine` · `build`.
 
 **Notlar / sınırlar:**

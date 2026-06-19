@@ -280,7 +280,7 @@ Kabul kriteri:
 - [x] `MaterialEditor.ts` olustur.
 - [x] Material asset'e cift tiklayinca editor overlay ac.
 - [x] Mevcut material JSON'u yukle ve form alanlarini doldur.
-- [~] Preview sphere sahnesi kur: grid yok veya sade zemin, key/fill light, orbit kamera.
+- [x] Preview sphere sahnesi kur: grid yok veya sade zemin, key/fill light, orbit kamera.
 - [x] Form kontrolleri:
   - [x] name
   - [x] baseColor
@@ -312,6 +312,7 @@ Kabul kriteri:
 - [x] Save sonrasi `SceneApp` material cache invalidate eder.
 - [x] Save sonrasi material'i kullanan sahne instance'lari refresh olur.
 - [~] Static Mesh Editor icindeki material preview yeni loader helper'ini kullansin.
+- [x] Content Browser material thumbnail'i full canonical material degerlerinden render edilir.
 - [x] Thumbnail cache invalidation ekle.
 
 Kabul kriteri:
@@ -323,8 +324,8 @@ Kabul kriteri:
 
 - [x] Texture picker sadece manifest texture asset'lerini listeler.
 - [x] Texture picker'da `None` secenegi olur.
-- [ ] Slider + numeric input beraber calisir.
-- [ ] Glass preset icin transparency siralama uyarisi gerekiyorsa status mesajina eklenir.
+- [x] Slider + numeric input beraber calisir.
+- [x] Glass preset icin transparency siralama uyarisi gerekiyorsa status mesajina eklenir.
 - [x] `Apply to Selected` butonu secili static mesh instance'a material atar.
 - [x] `Browse` butonu Content Browser'da material asset'i secer.
 - [x] Editor kapanirken dirty state varsa kaydetmeden cikma uyarisi verir.
@@ -341,7 +342,7 @@ Kabul kriteri:
 - [~] Loader mapping icin unit test veya headless smoke test ekle.
 - [x] `npm run build:verify` calistir.
 - [x] Bu checklist'te tamamlanan maddeleri sadece dogrulama sonrasi isaretle.
-- [ ] Gerekirse `docs/STARTER_CONTENT.md` material preset bilgisini guncelle.
+- [x] Gerekirse `docs/STARTER_CONTENT.md` material preset bilgisini guncelle.
 
 Kabul kriteri:
 

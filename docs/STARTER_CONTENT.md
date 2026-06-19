@@ -86,6 +86,24 @@ replaceable.
   - `L_Starter_Showcase.level.json`
   - `L_Greybox_Prototype.level.json`
 
+## Material Authoring
+
+Content Browser -> New -> Material opens a preset picker before creating the
+asset. Current starter presets seed canonical `.material.json` data for:
+
+- Standard Surface
+- Textured Surface
+- Metal
+- Glass
+- Emissive
+- Unlit Basic
+
+Double-click a material asset to open the form-based Material Editor. The editor
+updates the material preview sphere, writes through `/__save-material`, refreshes
+scene material caches, and invalidates Content Browser thumbnails so saved color,
+texture, roughness, metalness, opacity, side, alpha, and emissive changes show in
+the asset card.
+
 ## Needs User Replacement
 
 These generated files are functional placeholders. Replace them with authored or
