@@ -156,7 +156,7 @@ export function buildSceneObjects(
 }
 
 /** Display name for an actor class instance: its placement name or the class file basename. */
-function actorClassName(classRef: string): string {
+export function actorClassName(classRef: string): string {
   const base = classRef.split("/").pop() ?? classRef;
   return base.replace(/\.actor\.json$/i, "");
 }

@@ -1,4 +1,5 @@
 import type {
+  LayoutActorInstance,
   LayoutBehavior,
   LayoutCharacter,
   LayoutLightActor,
@@ -130,6 +131,30 @@ export function cloneCharacter(character: LayoutCharacter): LayoutCharacter {
 
 export function cloneUngroupedCharacter(character: LayoutCharacter): LayoutCharacter {
   const clone = cloneCharacter(character);
+  delete clone.groupId;
+  return clone;
+}
+
+export function cloneActorInstance(actor: LayoutActorInstance): LayoutActorInstance {
+  const clone: LayoutActorInstance = {
+    classRef: actor.classRef,
+    position: [...actor.position],
+  };
+  if (actor.name !== undefined) clone.name = actor.name;
+  if (actor.hidden !== undefined) clone.hidden = actor.hidden;
+  if (actor.locked !== undefined) clone.locked = actor.locked;
+  if (actor.groupId !== undefined) clone.groupId = actor.groupId;
+  if (actor.nodeId !== undefined) clone.nodeId = actor.nodeId;
+  if (actor.parentId !== undefined) clone.parentId = actor.parentId;
+  if (actor.rotationYDeg !== undefined) clone.rotationYDeg = actor.rotationYDeg;
+  if (actor.rotation !== undefined) clone.rotation = [...actor.rotation];
+  if (actor.scale !== undefined) clone.scale = cloneScale(actor.scale);
+  if (actor.scaleLocked !== undefined) clone.scaleLocked = actor.scaleLocked;
+  return clone;
+}
+
+export function cloneUngroupedActorInstance(actor: LayoutActorInstance): LayoutActorInstance {
+  const clone = cloneActorInstance(actor);
   delete clone.groupId;
   return clone;
 }

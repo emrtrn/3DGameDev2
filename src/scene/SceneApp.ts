@@ -7,6 +7,7 @@
  */
 import {
   Box3,
+  BoxGeometry,
   BufferGeometry,
   DirectionalLight,
   Float32BufferAttribute,
@@ -42,12 +43,14 @@ import type { PlayCameraPose } from "@/play/cameraHandoff";
 import {
   assetPath,
   assetType,
+  isModelAssetType,
   type AssetManifest,
   type EditableAsset,
 } from "@engine/assets/manifest";
 import {
   dirnameProjectPath,
   loadActiveProject,
+  projectFileUrl,
   type ActiveProject,
 } from "@/project/ProjectSystem";
 import { loadRoomLayout } from "./roomLayout";
@@ -119,6 +122,7 @@ import {
   readScale,
 } from "@engine/scene/transform";
 import type {
+  LayoutActorInstance,
   LayoutAudio,
   LayoutBehavior,
   LayoutCharacter,
@@ -148,9 +152,15 @@ import {
   type ColliderTransformSource,
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
+import { readMeshRendererComponent } from "@engine/scene/components";
 import type { TransformComponent } from "@engine/scene/components";
+import type { Entity } from "@engine/scene/entity";
+import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
+import { actorInstanceToEntity } from "@engine/scene/actorInstance";
+import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
 import type { MetadataSchema } from "@engine/scene/metadataSchema";
 import {
+  cloneActorInstance,
   cloneCharacter,
   cloneLightActor,
   clonePlacement,
@@ -168,7 +178,7 @@ import {
   snapStatus,
   snapValue,
 } from "@editor/core/numeric";
-import { buildEditableSelection, buildSceneObjects } from "@editor/core/sceneObjects";
+import { actorClassName, buildEditableSelection, buildSceneObjects } from "@editor/core/sceneObjects";
 import type { EditorTool, TransformSpace } from "@editor/core/tools";
 import {
   worldSettingsEqual,
@@ -354,6 +364,17 @@ export class SceneApp {
   private readonly materialCache = new Map<string, MeshStandardMaterial>();
   private readonly materialLoads = new Map<string, Promise<MeshStandardMaterial>>();
   private characterObjects: Object3D[] = [];
+  /** Render object per placed actor instance, index-aligned with `layout.actors`. */
+  private actorObjects: Object3D[] = [];
+  /** Resolved `*.actor.json` classes, cached by classRef across instances. */
+  private readonly actorClassCache = new Map<string, ActorScriptDef>();
+  /** Shared geometry/material for mesh-less actor placeholders (logic/trigger actors). */
+  private readonly actorPlaceholderGeometry = new BoxGeometry(0.5, 0.5, 0.5);
+  private readonly actorPlaceholderMaterial = new MeshStandardMaterial({
+    color: 0x7c5cff,
+    transparent: true,
+    opacity: 0.65,
+  });
   private lightObjects: LightObjectRecord[] = [];
   private localBounds = new Map<string, Box3>();
   /** Authored asset collision definitions (sidecars) for assets that have primitives. */
@@ -474,6 +495,7 @@ export class SceneApp {
           objects.push(...objectsForAsset);
         }
         objects.push(...this.characterObjects);
+        objects.push(...this.actorObjects);
         for (const record of this.lightObjects) objects.push(record.root);
         return objects;
       },
@@ -484,6 +506,7 @@ export class SceneApp {
           objects.push(...objectsForAsset);
         }
         objects.push(...this.characterObjects);
+        objects.push(...this.actorObjects);
         return objects;
       },
       gizmo: () => ({ visible: this.gizmoGroup.visible, pickables: this.gizmoPickables }),
@@ -1760,6 +1783,7 @@ export class SceneApp {
       addCharacter: (assetId, character) => this.addCharacter(this.models.get(assetId), character),
       addLight: (light) => this.addLight(light),
     });
+    await this.loadActorInstances();
 
     this.fitSunShadowToScene();
     this.applyBackgroundAndAmbient();
@@ -1981,6 +2005,16 @@ export class SceneApp {
       return;
     }
 
+    if (selection.kind === "actor") {
+      const actorObject = this.actorObjects[selection.index];
+      const actorTransform = this.getMutableTransform(selection);
+      if (!actorObject || !actorTransform) return;
+      actorObject.position.set(...actorTransform.position);
+      applyEulerDegrees(actorObject, readRotation(actorTransform));
+      actorObject.scale.set(...readScale(actorTransform as LayoutActorInstance));
+      return;
+    }
+
     const object = this.characterObjects[selection.index];
     const transform = this.getMutableTransform(selection);
     if (!object || !transform) return;
@@ -2020,6 +2054,158 @@ export class SceneApp {
     removedObject?.removeFromParent();
     this.refreshCharacterIndices();
     return removedLayout ? cloneCharacter(removedLayout) : null;
+  }
+
+  // --- Actor Script class instances (placed `layout.actors`) ----------------
+
+  /**
+   * Resolves every placed actor class, flattens each instance into an entity,
+   * loads any referenced mesh assets, then builds a render object per instance.
+   * Mirrors RuntimeSceneApp's actor pipeline but for the edit-mode scene so
+   * placements are visible + selectable (WYSIWYG). Mesh-less logic/trigger actors
+   * fall back to a placeholder marker so they stay pickable + gizmo-movable.
+   */
+  private async loadActorInstances(): Promise<void> {
+    const actors = this.layout?.actors ?? [];
+    const entities = await Promise.all(
+      actors.map(async (instance, index) => {
+        const def = await this.resolveActorClass(instance.classRef);
+        return actorInstanceToEntity(def, instance, index);
+      }),
+    );
+    await this.loadActorMeshModels(entities);
+    this.addActorObjects(entities);
+  }
+
+  /** Fetches + normalizes a `*.actor.json` class, caching by classRef (never throws). */
+  private async resolveActorClass(classRef: string): Promise<ActorScriptDef> {
+    const cached = this.actorClassCache.get(classRef);
+    if (cached) return cached;
+    let def: ActorScriptDef;
+    try {
+      const response = await fetch(projectFileUrl(classRef), { cache: "no-cache" });
+      def = normalizeActorScriptDef(response.ok ? await response.json() : {}, classRef);
+    } catch {
+      def = normalizeActorScriptDef({}, classRef);
+    }
+    this.actorClassCache.set(classRef, def);
+    return def;
+  }
+
+  /** Loads manifest meshes referenced by the given actor entities (missing/non-mesh ids are skipped). */
+  private async loadActorMeshModels(entities: Entity[]): Promise<void> {
+    if (!this.assetLoader) return;
+    const needed = new Set<string>();
+    for (const entity of entities) {
+      const renderer = readMeshRendererComponent(entity);
+      if (renderer && !this.models.has(renderer.assetId)) needed.add(renderer.assetId);
+    }
+    if (needed.size === 0) return;
+    const manifest = this.manifest ?? (await this.assetLoader.loadManifest());
+    const loadable: string[] = [];
+    for (const id of needed) {
+      const record = manifest.assets.find((asset) => asset.id === id);
+      if (record && isModelAssetType(assetType(record))) loadable.push(id);
+    }
+    if (loadable.length === 0) return;
+    const models = await this.assetLoader.loadModels(loadable);
+    for (const [id, model] of models) this.models.set(id, model);
+  }
+
+  /** Rebuilds the actor render objects array (index-aligned with layout.actors) from entities. */
+  private addActorObjects(entities: Entity[]): void {
+    for (const object of this.actorObjects) object.removeFromParent();
+    this.actorObjects = [];
+    entities.forEach((entity, index) => {
+      const object = this.buildActorObject(entity);
+      object.userData.actorIndex = index;
+      this.scene.add(object);
+      this.actorObjects[index] = object;
+    });
+  }
+
+  /** Real mesh when the class has a loadable MeshRenderer; a placeholder marker otherwise. */
+  private buildActorObject(entity: Entity): Object3D {
+    const renderer = readMeshRendererComponent(entity);
+    const gltf = renderer ? this.models.get(renderer.assetId) : undefined;
+    if (gltf) return createCharacterSceneObject(gltf, entityCharacterItem(entity));
+    const item = entityCharacterItem(entity);
+    const mesh = new Mesh(this.actorPlaceholderGeometry, this.actorPlaceholderMaterial);
+    mesh.name = item.name;
+    mesh.position.set(...item.position);
+    applyEulerDegrees(mesh, item.rotation);
+    mesh.scale.set(...item.scale);
+    mesh.visible = !item.hidden;
+    return mesh;
+  }
+
+  private insertActorPlacement(
+    index: number,
+    instance: LayoutActorInstance,
+    def: ActorScriptDef,
+  ): void {
+    if (!this.layout) return;
+    if (!this.layout.actors) this.layout.actors = [];
+    const insertionIndex = clampIndex(index, this.layout.actors.length);
+    const entity = actorInstanceToEntity(def, instance, insertionIndex);
+    const object = this.buildActorObject(entity);
+    object.userData.actorIndex = insertionIndex;
+    this.layout.actors.splice(insertionIndex, 0, cloneActorInstance(instance));
+    this.actorObjects.splice(insertionIndex, 0, object);
+    this.scene.add(object);
+    this.refreshActorIndices();
+  }
+
+  private removeActorPlacement(index: number): LayoutActorInstance | null {
+    if (!this.layout?.actors) return null;
+    const [removedLayout] = this.layout.actors.splice(index, 1);
+    const [removedObject] = this.actorObjects.splice(index, 1);
+    removedObject?.removeFromParent();
+    this.refreshActorIndices();
+    return removedLayout ? cloneActorInstance(removedLayout) : null;
+  }
+
+  private refreshActorIndices(): void {
+    this.actorObjects.forEach((object, index) => {
+      object.userData.actorIndex = index;
+    });
+  }
+
+  /**
+   * Places an actor class instance from a Content Browser drop. Resolves the
+   * class + loads its mesh (so the object renders immediately), then commits the
+   * placement through the undo stack and selects it. Async: the drop handler
+   * fires this without awaiting.
+   */
+  async addActorAt(classRef: string, clientX: number, clientY: number): Promise<void> {
+    if (!this.layout) return;
+    const hit = this.picker.clientToSurface(clientX, clientY);
+    if (!hit) return;
+    const def = await this.resolveActorClass(classRef);
+    const instance: LayoutActorInstance = {
+      classRef,
+      position: [
+        snapValue(hit.x, this.snapSettings.move, this.snapSettings.moveEnabled),
+        round(hit.y),
+        snapValue(hit.z, this.snapSettings.move, this.snapSettings.moveEnabled),
+      ],
+      rotationYDeg: snapValue(0, this.snapSettings.rotate, this.snapSettings.rotateEnabled),
+    };
+    // Ensure the class's mesh is loaded before the (synchronous) insert builds its object.
+    await this.loadActorMeshModels([actorInstanceToEntity(def, instance, 0)]);
+    const index = this.layout.actors?.length ?? 0;
+    const selection: Selection = { kind: "actor", index };
+    this.executeCommand({
+      label: `Place ${actorClassName(classRef)}`,
+      redo: () => {
+        this.insertActorPlacement(index, instance, def);
+        this.select(selection);
+      },
+      undo: () => {
+        this.removeActorPlacement(index);
+        this.select(null);
+      },
+    });
   }
 
   private ensureDefaultLights(): void {
@@ -2152,6 +2338,10 @@ export class SceneApp {
       const object = this.characterObjects[selection.index];
       const character = this.layout?.characters[selection.index];
       if (object && character) object.name = target.name ?? character.assetId;
+    }
+    if (selection.kind === "actor") {
+      const object = this.actorObjects[selection.index];
+      if (object) object.name = target.name ?? object.name;
     }
     if (selection.kind === "light") this.refreshLightObject(selection.index);
 
@@ -2402,6 +2592,12 @@ export class SceneApp {
     }
     if (selection.kind === "light") {
       this.refreshLightObject(selection.index);
+      return;
+    }
+    if (selection.kind === "actor") {
+      const object = this.actorObjects[selection.index];
+      const actor = this.layout?.actors?.[selection.index];
+      if (object && actor) object.visible = !(actor.hidden ?? false);
       return;
     }
     const object = this.characterObjects[selection.index];
@@ -2844,6 +3040,10 @@ export class SceneApp {
       if (!options.includeHidden && light.hidden) return;
       selections.push({ kind: "light", index });
     });
+    this.layout.actors?.forEach((actor, index) => {
+      if (!options.includeHidden && actor.hidden) return;
+      selections.push({ kind: "actor", index });
+    });
     return selections;
   }
 
@@ -2856,13 +3056,17 @@ export class SceneApp {
       const light = transform as LayoutLightActor | null;
       return light?.name ?? light?.id ?? "light";
     }
+    if (selection.kind === "actor") {
+      const actor = transform as LayoutActorInstance | null;
+      return actor?.name ?? (actor ? actorClassName(actor.classRef) : "actor");
+    }
     const character = transform as LayoutCharacter | null;
     return character?.name ?? character?.assetId ?? "object";
   }
 
   /** The active selection's local authoring pivot (`[0,0,0]` when none / light). */
   private getSelectionPivot(selection: Selection): Vec3 {
-    if (selection.kind === "light") return [0, 0, 0];
+    if (selection.kind === "light" || selection.kind === "actor") return [0, 0, 0];
     const transform = this.getMutableTransform(selection) as
       | LayoutPlacement
       | LayoutCharacter
@@ -2897,6 +3101,10 @@ export class SceneApp {
       // Box the small icon, not the (large) wireframe reach.
       const icon = record.gizmo.getObjectByName("light-icon") ?? record.root;
       return new Box3().setFromObject(icon);
+    }
+    if (selection.kind === "actor") {
+      const actorObject = this.actorObjects[selection.index];
+      return actorObject ? new Box3().setFromObject(actorObject) : null;
     }
     const object = this.characterObjects[selection.index];
     return object ? new Box3().setFromObject(object) : null;
@@ -2945,6 +3153,13 @@ export class SceneApp {
       proxy.receiveShadow = false;
       proxy.raycast = () => {};
       return proxy;
+    }
+
+    if (selection.kind === "actor") {
+      const actorObject = this.actorObjects[selection.index];
+      const actor = this.layout.actors?.[selection.index];
+      if (!actorObject || actor?.hidden) return null;
+      return this.selectionOutline.cloneRenderableMeshes(actorObject);
     }
 
     const object = this.characterObjects[selection.index];
@@ -3168,13 +3383,14 @@ export class SceneApp {
 
   private getMutableTransform(
     selection: Selection,
-  ): (LayoutPlacement | LayoutCharacter | LayoutLightActor) | null {
+  ): (LayoutPlacement | LayoutCharacter | LayoutLightActor | LayoutActorInstance) | null {
     if (!this.layout) return null;
     if (selection.kind === "instance") {
       const instance = this.layout.instances.find((entry) => entry.assetId === selection.assetId);
       return instance?.placements[selection.placementIndex] ?? null;
     }
     if (selection.kind === "light") return this.layout.lights?.[selection.index] ?? null;
+    if (selection.kind === "actor") return this.layout.actors?.[selection.index] ?? null;
     return this.layout.characters[selection.index] ?? null;
   }
 
@@ -3187,7 +3403,7 @@ export class SceneApp {
       scale:
         selection.kind === "light"
           ? [1, 1, 1]
-          : readScale(transform as LayoutPlacement | LayoutCharacter),
+          : readScale(transform as LayoutPlacement | LayoutCharacter | LayoutActorInstance),
     };
   }
 
@@ -3329,6 +3545,7 @@ export class SceneApp {
       return Boolean(instance?.placements[selection.placementIndex]);
     }
     if (selection.kind === "light") return Boolean(this.layout.lights?.[selection.index]);
+    if (selection.kind === "actor") return Boolean(this.layout.actors?.[selection.index]);
     return Boolean(this.layout.characters[selection.index]);
   }
 
