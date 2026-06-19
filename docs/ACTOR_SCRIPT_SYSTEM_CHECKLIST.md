@@ -449,7 +449,98 @@ procedural `shape:<type>` actor mesh'i + actor parent hiyerarşisi → B4/sonrak
 - [x] `tools/engine-tests.ts`: normalize/coerce + content-new + save payload (175 check)
 - [x] Save payload normalize testi (bozuk gövde güvenli default'a düşüyor)
 - [x] `npx tsc --noEmit` temiz · `npm run build` başarılı
-- [ ] `docs/UNREAL_BASICS_LESSONS.md` Progress Log'a giriş
+- [x] `docs/UNREAL_BASICS_LESSONS.md` Progress Log'a giriş
 - [x] Uçtan uca: sağ tık → sınıf seç → editör → component+değişken+event → kaydet
       → Content'ten level'a sürükle-bırak → seç/taşı/sil/undo → Play'de spawn
       (✓). Kalan uç: per-instance override authoring.
+
+### Faz 10 — Actor Script Editör 3D Viewport (component-ağacı önizleme)
+
+> Amaç: `ActorScriptEditor`'daki **placeholder kartı** (bugün `renderViewport()`
+> "3D preview coming soon" yazan statik HTML basıyor), sınıfın **component
+> ağacını canlı render eden, orbit'lenebilir** gerçek bir 3D viewport ile
+> değiştirmek. Desen `src/editor/StaticMeshEditor.ts`'in izole viewport'unu izler
+> (kendi `WebGLRenderer` + `PerspectiveCamera` + `Scene` + grid + ışık + spherical
+> orbit + render döngüsü + dispose). **Editör-only**: tüm kod `src/editor/` altında,
+> `?editor` dinamik importu arkasında (game bundle'a girmez).
+>
+> **Tasarım kararı:** Bu viewport bir **read-only önizlemedir**; component
+> transform'ları/props'ları Details panelinden düzenlenir (viewport'ta zorunlu
+> gizmo yok — 10.4'teki opsiyonel viewport-seçimi hariç). Runtime'ın v1 "flat
+> entity" collapse'ından **bağımsızdır**: editör önizlemesi component ağacının
+> _tamamını_ (çoklu node + parent-child) gösterir.
+>
+> **Yeniden kullanım noktaları:** `StaticMeshEditor.buildScene/bindCameraControls/
+> updateCamera/startRenderLoop/resize/dispose` deseni; mesh için `AssetLoader`
+> (`loadModels`) + `createCharacterSceneObject`/clone; collider için
+> `@engine/render-three/collisionView` (`collisionWireboxes`) /
+> `colliderBoxFromBounds`; ışık için `@engine/render-three/lights` helper'ları.
+
+#### Slice 10.1 — Viewport altyapısı (placeholder → gerçek sahne)
+
+- [ ] `ActorScriptEditor`'a kendi `WebGLRenderer` + `PerspectiveCamera` + `Scene`
+      (StaticMeshEditor `buildScene` deseni: bg + `AmbientLight` + 2 `DirectionalLight`
+      + `GridHelper` + bir `modelGroup`)
+- [ ] `renderViewport()` placeholder kartını canvas + render döngüsü ile değiştir
+      (`startRenderLoop` + `ResizeObserver` + `resize`)
+- [ ] Orbit/pan/dolly kamera (StaticMeshEditor `bindCameraControls`/`updateCamera`
+      — `spherical` + `target` deseni)
+- [ ] Editör kapanışında **dispose**: `renderer.dispose`, geometri/materyal/model
+      temizliği, RAF iptali, observer disconnect (mevcut `close()`/dispose yoluna bağla)
+- [ ] Boş/derlenmemiş sınıfta zarif boş durum (sadece grid + ışık + küçük ipucu)
+- Gate: `tsc` temiz · `build` başarılı.
+
+#### Slice 10.2 — Component ağacını sahneye derle (transform hiyerarşisi + mesh)
+
+- [ ] `def.components` → three `Object3D` ağacı; `ComponentTemplateNode.parent` ile
+      parent-child kurulur (root Transform = grup), her node'un `props`
+      position/rotation/scale'i local transform olarak uygulanır + parent zinciri
+      boyunca compose edilir
+- [ ] `MeshRenderer` node → `assetId` modelini yükle (`AssetLoader.loadModels`,
+      cache'li) + clone; eksik/yüklenemeyen/`shape:` assetId → placeholder kutu
+- [ ] Birden çok aynı-tip node desteklenir (runtime'da ilk-kazanır; **önizlemede
+      hepsi** görünür — editör gerçek ağacı gösterir)
+- [ ] Saf dönüşüm yardımcısı: `def → preview node tanım listesi` (three.js'siz, test
+      edilebilir; `engine/render-three/models.ts` `entityCharacterItem` ruhunda)
+- Gate: `tsc` · `build` · görsel: `door` mesh'li `ZZ_SmokeBP` açılınca kapıyı gösterir.
+
+#### Slice 10.3 — Görsel-olmayan / yardımcı component gizmo'ları
+
+- [ ] `Collider` node → shape'e göre wireframe (box/sphere/capsule); `isSensor`
+      farklı renk (`collisionWireboxes`/`colliderBoxFromBounds` yeniden kullan)
+- [ ] `Light` node → ışık + küçük ikon gizmo (engine lights render helper'ları)
+- [ ] `ParticleEmitter` node → placeholder ikon/billboard
+- [ ] `Audio`/`Interaction`/`Behavior`/`Metadata` → küçük ikon marker (veya non-visual atla)
+- Gate: `tsc` · `build` · görsel: collider+light içeren sınıf gizmo'ları gösterir.
+
+#### Slice 10.4 — Ağaç ↔ viewport seçim senkronu
+
+- [ ] Sol Components ağacında bir node seçince viewport'ta eşleşen objeyi **vurgula**
+      (outline/box; node id → object map)
+- [ ] Seçili node'un props transform'unu Details'tan düzenleyince viewport **canlı**
+      güncellenir
+- [ ] (ops.) Viewport'ta tıklayınca ağaç node'unu seç (raycast → node id)
+- Gate: `tsc` · `build` · görsel: ağaçtan seçim viewport'ta vurgulanır.
+
+#### Slice 10.5 — Canlı güncelleme + perf/lifecycle
+
+- [ ] `def` değişince (component ekle/sil, props/mesh `assetId` düzenle) viewport'u
+      yeniden derle (önce tam rebuild; gerekirse artımlı)
+- [ ] Model yükleme cache'li + lazy; viewport gizliyken/kapanınca render döngüsü duraklat
+- [ ] Geometri/materyal/model dispose hijyeni (editör kapanışı + her rebuild)
+- Gate: `tsc` · `build`.
+
+#### Slice 10.6 — Test & doküman
+
+- [ ] Headless test: `def → preview node tanım listesi` dönüşümü (10.2 saf yardımcısı;
+      parent-child + transform compose + mesh/collider/light tipleri)
+- [ ] Bu checklist + `docs/UNREAL_BASICS_LESSONS.md` Progress Log güncellenir
+- Gate: `tsc` · `npm run test:engine` · `build`.
+
+**Notlar / sınırlar:**
+
+- Faz 3 (`[~]` viewport placeholder, `[ ]` orbit kamera) ve Faz 4 (`[ ]` component
+  önizleme) maddeleri buraya taşındı/genişletildi.
+- Skeletal mesh animasyonu, gerçek malzeme/UVW sidecar uygulaması, gölge kalitesi
+  **kapsam dışı** (önizleme statik + temel ışık). Construction Script önizlemesi
+  Faz 5'e bağlı, ertelenmiş.
