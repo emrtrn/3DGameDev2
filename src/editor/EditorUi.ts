@@ -57,6 +57,13 @@ import {
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { loadAssetMaterialSlots } from "@/scene/assetMaterialSlotsLoader";
 import { GAME_MODE_OPTIONS } from "@/game/gameModes/catalog";
+import { BEHAVIOR_SCRIPT_IDS } from "@/game/behaviors";
+import {
+  PARENT_CLASSES,
+  PARENT_CLASS_DESCRIPTIONS,
+  PARENT_CLASS_LABELS,
+  type ParentClass,
+} from "@engine/scene/actorScript";
 import { COLLISION_PRESET_IDS, type CollisionPresetId } from "@engine/scene/collision";
 import {
   nextTransformTool,
@@ -1044,7 +1051,15 @@ export class EditorUi {
         void this.openStaticMeshEditor(item);
       });
     }
+    if (isActorScriptItem(item)) {
+      card.classList.add("is-actor-script");
+      card.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        void this.openActorScriptEditor(item);
+      });
+    }
     const thumb = card.querySelector<HTMLElement>("[data-asset-thumb]");
+    if (thumb && isActorScriptItem(item)) thumb.textContent = "BP";
     if (thumb && item.type !== "file" && isModelAssetType(item.type)) {
       void this.renderAssetThumbnail(item, thumb);
     } else if (thumb && item.type === "material") {
@@ -1494,15 +1509,102 @@ export class EditorUi {
 
   /** Prompts for a name, then creates the folder/typed stub and refreshes the tree. */
   private async createContent(kind: ContentNewKind, dir: string): Promise<void> {
-    const label = kind === "folder" ? "folder" : `${kind} asset`;
+    // A "Script" is an Actor Script class-asset: pick its parent class first
+    // (Unreal's Pick Parent Class dialog), like creating a Blueprint Class.
+    let parentClass: ParentClass | undefined;
+    if (kind === "script") {
+      const picked = await this.pickParentClass();
+      if (!picked) return;
+      parentClass = picked;
+    }
+    const label = kind === "folder" ? "folder" : kind === "script" ? "Actor Script" : `${kind} asset`;
     const name = window.prompt(`New ${label} name`, "");
     if (name === null || !name.trim()) return;
     try {
-      const result = await createProjectContent({ kind, dir, name: name.trim() });
+      const result = await createProjectContent({
+        kind,
+        dir,
+        name: name.trim(),
+        ...(parentClass ? { parentClass } : {}),
+      });
       this.setStatus(`Created ${result.path}`, "success");
       await this.refreshAssetTree({ quiet: false });
     } catch (error) {
       this.setStatus(error instanceof Error ? error.message : String(error), "error");
+    }
+  }
+
+  /**
+   * Modal mirroring Unreal's "Pick Parent Class": resolves to the chosen
+   * {@link ParentClass}, or null when cancelled. Used when creating an Actor
+   * Script from the Content Browser.
+   */
+  private pickParentClass(): Promise<ParentClass | null> {
+    return new Promise((resolvePick) => {
+      const overlay = document.createElement("div");
+      overlay.className = "parent-class-overlay";
+      const options = PARENT_CLASSES.map(
+        (cls) => `
+        <button type="button" class="parent-class-option" data-parent-class="${cls}">
+          <span class="parent-class-name">${escapeHtml(PARENT_CLASS_LABELS[cls])}</span>
+          <span class="parent-class-desc">${escapeHtml(PARENT_CLASS_DESCRIPTIONS[cls])}</span>
+        </button>`,
+      ).join("");
+      overlay.innerHTML = `
+        <div class="parent-class-dialog" role="dialog" aria-label="Pick Parent Class">
+          <header class="parent-class-head">Pick Parent Class</header>
+          <div class="parent-class-list">${options}</div>
+          <footer class="parent-class-foot">
+            <button type="button" class="parent-class-cancel" data-parent-cancel>Cancel</button>
+          </footer>
+        </div>
+      `;
+      document.body.append(overlay);
+      const finish = (value: ParentClass | null): void => {
+        cleanup();
+        resolvePick(value);
+      };
+      const onKey = (event: KeyboardEvent): void => {
+        if (event.key === "Escape") finish(null);
+      };
+      const cleanup = (): void => {
+        window.removeEventListener("keydown", onKey, true);
+        overlay.remove();
+      };
+      window.addEventListener("keydown", onKey, true);
+      overlay.addEventListener("click", (event) => {
+        const target = event.target as HTMLElement;
+        if (target === overlay || target.closest("[data-parent-cancel]")) {
+          finish(null);
+          return;
+        }
+        const option = target.closest<HTMLElement>("[data-parent-class]");
+        if (option) finish(option.dataset.parentClass as ParentClass);
+      });
+    });
+  }
+
+  /**
+   * Opens the Actor Script editor for a `*.actor.json` class-asset (Content
+   * Browser double-click). Dynamically imported so its panels stay out of the
+   * editor entry until a class is actually opened.
+   */
+  private async openActorScriptEditor(item: BrowserAssetItem): Promise<void> {
+    try {
+      const { ActorScriptEditor } = await import("@/editor/ActorScriptEditor");
+      await ActorScriptEditor.open({
+        path: item.path,
+        label: item.label.replace(/\.actor\.json$/i, ""),
+        behaviorScriptIds: BEHAVIOR_SCRIPT_IDS,
+        assetIds: this.editableAssets.map((asset) => asset.id),
+        onStatus: (message, tone) => this.setStatus(message, tone),
+        onBrowse: () => this.setStatus(`In Content Browser: ${item.path}`),
+      });
+    } catch (error) {
+      this.setStatus(
+        `Could not open Actor Script editor: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
     }
   }
 
@@ -2975,6 +3077,11 @@ function formatContentTypeLabel(value: string): string {
   if (value === "level") return "Levels";
   if (value === "file") return "Files";
   return formatAssetTypeFallbackLabel(value);
+}
+
+/** True when a Content Browser item is an Actor Script class-asset (`*.actor.json`). */
+function isActorScriptItem(item: BrowserAssetItem): boolean {
+  return item.path.toLowerCase().endsWith(".actor.json");
 }
 
 function formatContentTypeBadge(value: BrowserAssetItem["type"]): string {

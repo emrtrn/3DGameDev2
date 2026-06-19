@@ -20,6 +20,21 @@ import {
   type InteractionTriggerState,
 } from "./interaction";
 
+/**
+ * Catalog of behavior script ids the runtime registry resolves. Authoring
+ * surfaces (the Actor Script editor's Event Bindings) offer these as suggestions;
+ * free-form ids are still allowed so an AI-authored behavior can be referenced
+ * before it is registered here. Keep in sync with the `behaviors` map below.
+ */
+export const BEHAVIOR_SCRIPT_IDS = [
+  "spin",
+  "input-move",
+  "collision-chime",
+  "goal-reached",
+  "interact",
+] as const;
+export type BehaviorScriptId = (typeof BEHAVIOR_SCRIPT_IDS)[number];
+
 /** Gravity used when the host does not inject one (e.g. headless tests). */
 const DEFAULT_GRAVITY_Y = -9.81;
 
