@@ -125,7 +125,40 @@ export function buildSceneObjects(
     objects.push(sceneObject);
   });
 
+  layout.actors?.forEach((actor, index) => {
+    const selection: Selection = { kind: "actor", index };
+    objects.push({
+      id: selectionId(selection),
+      kind: "actor",
+      assetId: actor.classRef,
+      category: "actor",
+      label: actor.name ?? actorClassName(actor.classRef),
+      position: [...actor.position],
+      rotation: readRotation(actor),
+      scale: readScale(actor),
+      pivot: [0, 0, 0],
+      scaleLocked: actor.scaleLocked ?? false,
+      selected: deps.isSelected(selection),
+      hidden: actor.hidden ?? false,
+      locked: actor.locked ?? false,
+      castShadow: true,
+      collision: true,
+      simulatePhysics: false,
+      physics: {},
+      metadata: {},
+      groupId: actor.groupId,
+      nodeId: actor.nodeId,
+      parentId: actor.parentId,
+    });
+  });
+
   return objects;
+}
+
+/** Display name for an actor class instance: its placement name or the class file basename. */
+function actorClassName(classRef: string): string {
+  const base = classRef.split("/").pop() ?? classRef;
+  return base.replace(/\.actor\.json$/i, "");
 }
 
 /**
@@ -195,6 +228,29 @@ export function buildEditableSelection(
     };
     applyOptionalLightFields(editable, light);
     return editable;
+  }
+
+  if (selection.kind === "actor") {
+    const actor = layout.actors?.[selection.index];
+    if (!actor) return null;
+    return {
+      id: selectionId(selection),
+      kind: "actor",
+      assetId: actor.classRef,
+      category: "actor",
+      label: actor.name ?? actorClassName(actor.classRef),
+      position: [...actor.position],
+      rotation: readRotation(actor),
+      scale: readScale(actor),
+      pivot: [0, 0, 0],
+      scaleLocked: actor.scaleLocked ?? false,
+      locked: actor.locked ?? false,
+      castShadow: true,
+      collision: true,
+      simulatePhysics: false,
+      physics: {},
+      metadata: {},
+    };
   }
 
   const character = layout.characters[selection.index];

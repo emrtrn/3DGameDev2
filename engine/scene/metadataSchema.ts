@@ -46,7 +46,7 @@ export interface MetadataSchema {
 }
 
 export interface MetadataTarget {
-  kind: MetadataAppliesTo | "light";
+  kind: MetadataAppliesTo | "light" | "actor";
   category: string;
 }
 
@@ -56,7 +56,9 @@ export function metadataGroupsForTarget(
   target: MetadataTarget,
 ): MetadataGroupDef[] {
   if (!schema) return [];
-  if (target.kind === "light") return [];
+  // Lights have no project metadata schema; actor instances carry their schema on
+  // the class (`*.actor.json` variables), not per-instance, so neither maps here.
+  if (target.kind === "light" || target.kind === "actor") return [];
   const kind: MetadataAppliesTo = target.kind;
   return schema.groups.filter((group) => {
     if (group.appliesTo && !group.appliesTo.includes(kind)) return false;

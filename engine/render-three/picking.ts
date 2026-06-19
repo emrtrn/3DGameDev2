@@ -18,6 +18,15 @@ export function findParentCharacter(object: Object3D): Object3D | null {
   return null;
 }
 
+export function findParentActor(object: Object3D): Object3D | null {
+  let current: Object3D | null = object;
+  while (current) {
+    if (current.userData.actorIndex !== undefined) return current;
+    current = current.parent;
+  }
+  return null;
+}
+
 export function findParentLight(object: Object3D): Object3D | null {
   let current: Object3D | null = object;
   while (current) {

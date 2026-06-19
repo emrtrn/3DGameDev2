@@ -1,11 +1,13 @@
 export type Selection =
   | { kind: "instance"; assetId: string; placementIndex: number }
   | { kind: "character"; index: number }
-  | { kind: "light"; index: number };
+  | { kind: "light"; index: number }
+  | { kind: "actor"; index: number };
 
 export type InstanceSelection = Extract<Selection, { kind: "instance" }>;
 export type CharacterSelection = Extract<Selection, { kind: "character" }>;
 export type LightSelection = Extract<Selection, { kind: "light" }>;
+export type ActorSelection = Extract<Selection, { kind: "actor" }>;
 
 export function cloneSelection(selection: Selection): Selection {
   if (selection.kind === "instance") {
@@ -16,12 +18,14 @@ export function cloneSelection(selection: Selection): Selection {
     };
   }
   if (selection.kind === "light") return { kind: "light", index: selection.index };
+  if (selection.kind === "actor") return { kind: "actor", index: selection.index };
   return { kind: "character", index: selection.index };
 }
 
 export function selectionId(selection: Selection): string {
   if (selection.kind === "character") return `character:${selection.index}`;
   if (selection.kind === "light") return `light:${selection.index}`;
+  if (selection.kind === "actor") return `actor:${selection.index}`;
   return `instance:${encodeURIComponent(selection.assetId)}:${selection.placementIndex}`;
 }
 
@@ -34,6 +38,10 @@ export function parseSelectionId(id: string): Selection | null {
   if (kind === "light") {
     const index = Number(encodedAssetId);
     return Number.isInteger(index) ? { kind: "light", index } : null;
+  }
+  if (kind === "actor") {
+    const index = Number(encodedAssetId);
+    return Number.isInteger(index) ? { kind: "actor", index } : null;
   }
   if (kind !== "instance" || rawIndex === undefined) return null;
   const placementIndex = Number(rawIndex);
@@ -54,6 +62,9 @@ export function selectionsEqual(
     return left.index === right.index;
   }
   if (left.kind === "light" && right.kind === "light") {
+    return left.index === right.index;
+  }
+  if (left.kind === "actor" && right.kind === "actor") {
     return left.index === right.index;
   }
   if (left.kind !== "instance" || right.kind !== "instance") return false;
@@ -171,5 +182,21 @@ export function compareLightRestores(
   right: { selection: Selection },
 ): number {
   if (left.selection.kind !== "light" || right.selection.kind !== "light") return 0;
+  return left.selection.index - right.selection.index;
+}
+
+export function compareActorDeletes(
+  left: { selection: Selection },
+  right: { selection: Selection },
+): number {
+  if (left.selection.kind !== "actor" || right.selection.kind !== "actor") return 0;
+  return right.selection.index - left.selection.index;
+}
+
+export function compareActorRestores(
+  left: { selection: Selection },
+  right: { selection: Selection },
+): number {
+  if (left.selection.kind !== "actor" || right.selection.kind !== "actor") return 0;
   return left.selection.index - right.selection.index;
 }

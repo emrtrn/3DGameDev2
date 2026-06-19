@@ -2,6 +2,7 @@ import { Plane, Raycaster, Vector2, Vector3 } from "three";
 import type { Intersection, Object3D, PerspectiveCamera } from "three";
 
 import {
+  findParentActor,
   findParentCharacter,
   findParentInstancedMesh,
   findParentLight,
@@ -82,6 +83,12 @@ export class ScenePicker {
         if (Number.isInteger(index)) return { kind: "character", index };
       }
 
+      const actor = findParentActor(hit.object);
+      if (actor) {
+        const index = Number(actor.userData.actorIndex);
+        if (Number.isInteger(index)) return { kind: "actor", index };
+      }
+
       const light = findParentLight(hit.object);
       if (light) {
         const index = Number(light.userData.lightIndex);
@@ -145,6 +152,10 @@ export class ScenePicker {
             override.assetId === selection.assetId &&
             override.placementIndex === selection.placementIndex),
       );
+    }
+    if (selection.kind === "actor") {
+      const actor = findParentActor(hit.object);
+      return actor ? Number(actor.userData.actorIndex) === selection.index : false;
     }
     const character = findParentCharacter(hit.object);
     return character ? Number(character.userData.characterIndex) === selection.index : false;
