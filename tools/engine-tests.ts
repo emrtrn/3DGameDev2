@@ -131,11 +131,14 @@ import {
 } from "../src/scene/SceneRuntimeCore";
 import type { SceneDocument } from "../engine/scene/sceneDocument";
 import {
+  resolveContentNewFile,
   validateAssetCollisionDef,
+  validateContentNewPayload,
   validateLayout,
   validateLightActor,
   validatePlacement,
   validateSaveCollisionPayload,
+  validateSaveMaterialSlotsPayload,
 } from "./saveValidator";
 import {
   assetByteSize,
@@ -1002,6 +1005,17 @@ check("layout behavior maps to a readable behavior component", () => {
   const move = hero ? readBehaviorComponent(hero) : undefined;
   assert.equal(move?.scriptId, "input-move");
   assert.equal(move?.params, undefined);
+});
+
+check("layout materialSlot maps to the mesh renderer component", () => {
+  const entities = instanceEntitiesForAsset("crate", [
+    { position: [0, 0, 0], materialSlot: "starter-mat-brick-clay-old" },
+  ]);
+  const renderer = readMeshRendererComponent(entities[0]!);
+  assert.deepEqual(renderer, {
+    assetId: "crate",
+    materialSlot: "starter-mat-brick-clay-old",
+  });
 });
 
 // 6.1.3b Legacy collision flags now derive Collider components. Missing
@@ -2798,6 +2812,7 @@ check("save validator allowlist keeps known placement fields, drops unknown ones
     position: [1, 2, 3],
     name: "crate",
     collision: false,
+    materialSlot: "starter-mat-brick-clay-old",
     simulatePhysics: true,
     physics: {
       massKg: 2,
@@ -2814,6 +2829,7 @@ check("save validator allowlist keeps known placement fields, drops unknown ones
   assert.deepEqual(placement.position, [1, 2, 3]);
   assert.equal(placement.name, "crate");
   assert.equal(placement.collision, false);
+  assert.equal(placement.materialSlot, "starter-mat-brick-clay-old");
   assert.equal(placement.simulatePhysics, true);
   assert.deepEqual(placement.physics, {
     massKg: 2,
@@ -4399,6 +4415,62 @@ check("collision save payload requires a .collision.json path", () => {
   assert.throws(() =>
     validateSaveCollisionPayload({ path: "../secret.collision.json", collision: {} }),
   );
+});
+
+check("material slots save payload requires a .materials.json path", () => {
+  const payload = validateSaveMaterialSlotsPayload({
+    path: "assets/props/chair.materials.json",
+    materialSlots: { schema: 1, slots: ["starter-mat-brick-clay-old"] },
+  });
+  assert.equal(payload.path, "assets/props/chair.materials.json");
+  assert.deepEqual(payload.materialSlots, {
+    schema: 1,
+    slots: ["starter-mat-brick-clay-old"],
+  });
+  assert.throws(() =>
+    validateSaveMaterialSlotsPayload({ path: "assets/props/chair.json", materialSlots: { slots: [] } }),
+  );
+  assert.throws(() =>
+    validateSaveMaterialSlotsPayload({ path: "../secret.materials.json", materialSlots: { slots: [] } }),
+  );
+  assert.throws(() =>
+    validateSaveMaterialSlotsPayload({
+      path: "assets/props/chair.materials.json",
+      materialSlots: { slots: [false] },
+    }),
+  );
+});
+
+check("content-new payload validates kind/name and rejects unsafe names", () => {
+  const level = validateContentNewPayload({ kind: "level", dir: "assets/levels", name: " Giris " });
+  assert.equal(level.kind, "level");
+  assert.equal(level.name, "Giris");
+  // Turkish letters are allowed.
+  assert.equal(validateContentNewPayload({ kind: "material", dir: "", name: "Işık" }).name, "Işık");
+  assert.throws(() => validateContentNewPayload({ kind: "bogus", dir: "", name: "x" }));
+  assert.throws(() => validateContentNewPayload({ kind: "level", dir: "", name: "" }));
+  assert.throws(() => validateContentNewPayload({ kind: "level", dir: "", name: "a/b" }));
+  assert.throws(() => validateContentNewPayload({ kind: "level", dir: "", name: ".." }));
+  assert.throws(() => validateContentNewPayload({ kind: "level", dir: "../escape", name: "x" }));
+});
+check("content-new resolves to typed stub files and folders", () => {
+  const folder = resolveContentNewFile({ kind: "folder", dir: "assets", name: "Props" });
+  assert.equal(folder.path, "assets/Props");
+  assert.equal(folder.content, null);
+
+  const material = resolveContentNewFile({ kind: "material", dir: "assets/materials", name: "Tas" });
+  assert.equal(material.path, "assets/materials/Tas.material.json");
+  assert.deepEqual(JSON.parse(material.content ?? ""), { schema: 1, type: "material", name: "Tas" });
+
+  const level = resolveContentNewFile({ kind: "level", dir: "", name: "Main" });
+  assert.equal(level.path, "Main.level.json");
+  assert.deepEqual(JSON.parse(level.content ?? ""), {
+    schema: 1,
+    name: "Main",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+  });
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

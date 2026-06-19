@@ -1,10 +1,16 @@
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
-import { readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, URL } from "node:url";
-import { validateSaveCollisionPayload, validateSavePayload } from "./tools/saveValidator";
+import {
+  resolveContentNewFile,
+  validateContentNewPayload,
+  validateSaveCollisionPayload,
+  validateSaveMaterialSlotsPayload,
+  validateSavePayload,
+} from "./tools/saveValidator";
 
 // Single-codebase template: this repo's own public/ is the project root that
 // both the game (static fetch) and the editor (authoring middleware) read/write.
@@ -129,7 +135,12 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 // Endpoints that write files. These must never be reachable from the LAN even
 // when `server.host` is true; the read-only directory listing (/__project-dir)
 // stays open so real-device (LAN) testing can still render scenes.
-const PRIVILEGED_URLS = new Set(["/__save-layout", "/__save-collision"]);
+const PRIVILEGED_URLS = new Set([
+  "/__save-layout",
+  "/__save-collision",
+  "/__save-material-slots",
+  "/__content-new",
+]);
 
 function isPrivilegedUrl(url: string | undefined): boolean {
   if (!url) return false;
@@ -204,6 +215,71 @@ function layoutEditorPlugin(): Plugin {
             await writeFile(sidecarPath, nextSidecar, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== nextSidecar }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        if (req.url === "/__save-material-slots") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateSaveMaterialSlotsPayload(await readJsonBody(req));
+            const sidecarPath = resolvePublicPath(payload.path);
+            const previous = await readFile(sidecarPath, "utf8").catch(() => null);
+            const nextSidecar = `${JSON.stringify(payload.materialSlots, null, 2)}\n`;
+            await writeFile(sidecarPath, nextSidecar, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== nextSidecar }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Content Browser "new content": create a folder or a typed stub asset
+        // (`<name>.<kind>.json`) inside a public-scoped directory. The path stays
+        // inside public/ via resolvePublicPath; existing targets are never
+        // overwritten (409). Real per-type editors come later.
+        if (req.url === "/__content-new") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateContentNewPayload(await readJsonBody(req));
+            const target = resolveContentNewFile(payload);
+            const absPath = resolvePublicPath(target.path);
+            const exists = await stat(absPath).then(
+              () => true,
+              () => false,
+            );
+            if (exists) {
+              res.statusCode = 409;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ ok: false, error: `already exists: ${target.path}` }));
+              return;
+            }
+            if (target.content === null) {
+              await mkdir(absPath);
+            } else {
+              await writeFile(absPath, target.content, "utf8");
+            }
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: target.path, kind: payload.kind }));
           } catch (error) {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json; charset=utf-8");

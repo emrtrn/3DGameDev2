@@ -45,13 +45,16 @@ import {
 import { writePlayCameraPose } from "@/play/cameraHandoff";
 import { ThumbnailRenderer } from "./ThumbnailRenderer";
 import {
+  createProjectContent,
   fetchProjectDir,
   findProjectDir,
   flattenProjectFiles,
   normalizeProjectPath,
+  type ContentNewKind,
   type ProjectDirNode,
 } from "@/project/ProjectAssetTree";
 import { projectFileUrl } from "@/project/ProjectSystem";
+import { loadAssetMaterialSlots } from "@/scene/assetMaterialSlotsLoader";
 import { GAME_MODE_OPTIONS } from "@/game/gameModes/catalog";
 import { COLLISION_PRESET_IDS, type CollisionPresetId } from "@engine/scene/collision";
 import {
@@ -65,6 +68,21 @@ type InspectorTab = "details" | "world";
 const DEFAULT_LINEAR_DAMPING = 0.12;
 const DEFAULT_ANGULAR_DAMPING = 0.45;
 const PHYSICS_AXIS_LABELS = ["X", "Y", "Z"] as const;
+
+/** Typed assets the Content Browser context menu can create (besides folders). */
+const CONTENT_NEW_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string }> = [
+  { kind: "level", label: "Level" },
+  { kind: "material", label: "Material" },
+  { kind: "particle", label: "Particle" },
+  { kind: "script", label: "Script" },
+  { kind: "sound", label: "Sound" },
+  { kind: "ui", label: "UI" },
+];
+
+/** A context-menu entry: a clickable item or a visual separator. */
+type ContextMenuItem =
+  | { separator: true }
+  | { separator?: false; label: string; enabled?: boolean; danger?: boolean; run: () => void };
 
 /** Optional components the Details panel can add/remove (Transform is required). */
 const ADDABLE_COMPONENTS = ["audio", "behavior", "particle", "interaction"] as const;
@@ -144,6 +162,7 @@ export class EditorUi {
   private toolButtons = new Map<EditorTool, HTMLButtonElement>();
   private readonly thumbnailRenderer = new ThumbnailRenderer();
   private readonly materialTexturePreviewCache = new Map<string, Promise<string | undefined>>();
+  private readonly modelMaterialPreviewCache = new Map<string, Promise<string | undefined>>();
   private activeTool: EditorTool = "move";
   private projectInfo: EditorProjectInfo | null = null;
   private metadataSchema: MetadataSchema | null = null;
@@ -520,6 +539,12 @@ export class EditorUi {
       void this.refreshAssetTree();
     });
 
+    // Right-click empty asset-grid space -> create content in the current folder.
+    this.contentList.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      this.openContentContextMenu(event, this.selectedFolder);
+    });
+
     this.contentSearch.addEventListener("input", () => {
       this.contentQuery = this.contentSearch.value.trim().toLocaleLowerCase();
       this.renderContentAssets();
@@ -773,6 +798,11 @@ export class EditorUi {
       }
       this.renderFolderTree();
       this.renderContentAssets();
+    });
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.openContentContextMenu(event, node.path);
     });
     wrapper.append(button);
 
@@ -1065,7 +1095,37 @@ export class EditorUi {
   private async resolveMaterialBaseTexturePathUncached(
     item: BrowserAssetItem,
   ): Promise<string | undefined> {
-    const response = await fetch(projectFileUrl(item.path));
+    return this.resolveMaterialBaseTexturePathById(item.editable?.id, item.path);
+  }
+
+  private resolveModelDefaultMaterialTexturePath(item: BrowserAssetItem): Promise<string | undefined> {
+    const key = item.editable?.id ?? item.path;
+    let cached = this.modelMaterialPreviewCache.get(key);
+    if (!cached) {
+      cached = this.resolveModelDefaultMaterialTexturePathUncached(item);
+      this.modelMaterialPreviewCache.set(key, cached);
+    }
+    return cached;
+  }
+
+  private async resolveModelDefaultMaterialTexturePathUncached(
+    item: BrowserAssetItem,
+  ): Promise<string | undefined> {
+    const slots = await loadAssetMaterialSlots(item.path);
+    const materialId = slots.slots[0];
+    return materialId ? this.resolveMaterialBaseTexturePathById(materialId) : undefined;
+  }
+
+  private async resolveMaterialBaseTexturePathById(
+    materialId: string | undefined,
+    fallbackPath?: string,
+  ): Promise<string | undefined> {
+    const materialRecord = materialId
+      ? assetRecordById({ version: 1, generated: "", ktx2: false, assets: this.editableAssets }, materialId)
+      : undefined;
+    const materialPath = materialRecord ? assetPath(materialRecord) : fallbackPath;
+    if (!materialPath) return undefined;
+    const response = await fetch(projectFileUrl(materialPath));
     if (!response.ok) return undefined;
     const data = (await response.json()) as { baseColorTexture?: unknown };
     if (typeof data.baseColorTexture !== "string") return undefined;
@@ -1078,7 +1138,11 @@ export class EditorUi {
     thumb: HTMLElement,
   ): Promise<void> {
     try {
-      const imageUrl = await this.thumbnailRenderer.renderModel(projectFileUrl(item.path));
+      const materialTexturePath = await this.resolveModelDefaultMaterialTexturePath(item);
+      const imageUrl = await this.thumbnailRenderer.renderModel(
+        projectFileUrl(item.path),
+        materialTexturePath ? projectFileUrl(materialTexturePath) : undefined,
+      );
       if (!thumb.isConnected) return;
       thumb.replaceChildren();
       const image = document.createElement("img");
@@ -1100,6 +1164,7 @@ export class EditorUi {
       const { StaticMeshEditor } = await import("@/editor/StaticMeshEditor");
       StaticMeshEditor.open({
         modelPath: item.path,
+        ...(item.editable ? { assetId: item.editable.id } : {}),
         label: item.label,
         assets: this.editableAssets.map((asset) => ({
           id: asset.id,
@@ -1108,6 +1173,11 @@ export class EditorUi {
           path: assetPath(asset),
         })),
         onStatus: (message, tone) => this.setStatus(message, tone),
+        onMaterialSlotsSaved: (assetId) => {
+          this.modelMaterialPreviewCache.delete(assetId);
+          this.renderContentAssets();
+          void this.app.refreshAssetMaterialSlots(assetId);
+        },
       });
     } catch (error) {
       this.setStatus(
@@ -1277,8 +1347,6 @@ export class EditorUi {
 
   /** Right-click menu for outliner rows: rename / duplicate / group / delete. */
   private openOutlinerContextMenu(event: MouseEvent, object: EditableSceneObject): void {
-    this.closeContextMenu();
-
     const selectedCount = this.outlinerObjects.filter((entry) => entry.selected).length;
     const inGroup =
       object.groupId !== undefined ||
@@ -1288,7 +1356,7 @@ export class EditorUi {
       if (!object.selected) this.app.selectSceneObject(object.id);
     };
 
-    const items: Array<{ label: string; enabled: boolean; danger?: boolean; run: () => void }> = [
+    const items: ContextMenuItem[] = [
       {
         label: "Rename",
         enabled: true,
@@ -1344,14 +1412,30 @@ export class EditorUi {
       },
     ];
 
+    this.openContextMenu(event, items);
+  }
+
+  /**
+   * Builds and positions a context menu at the pointer, wiring outside-click /
+   * Escape / blur dismissal. Shared by the outliner and the Content Browser.
+   */
+  private openContextMenu(event: MouseEvent, items: ContextMenuItem[]): void {
+    this.closeContextMenu();
+
     const menu = document.createElement("div");
     menu.className = "context-menu";
     for (const item of items) {
+      if (item.separator) {
+        const divider = document.createElement("div");
+        divider.className = "context-menu-separator";
+        menu.appendChild(divider);
+        continue;
+      }
       const button = document.createElement("button");
       button.type = "button";
       button.className = `context-menu-item${item.danger ? " danger" : ""}`;
       button.textContent = item.label;
-      button.disabled = !item.enabled;
+      button.disabled = item.enabled === false;
       button.addEventListener("click", () => {
         this.closeContextMenu();
         item.run();
@@ -1383,6 +1467,36 @@ export class EditorUi {
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("blur", this.closeContextMenu);
     };
+  }
+
+  /** Right-click menu for the Content Browser: New Folder / Import / typed assets. */
+  private openContentContextMenu(event: MouseEvent, dir: string): void {
+    const items: ContextMenuItem[] = [
+      { label: "New Folder", run: () => void this.createContent("folder", dir) },
+      { separator: true },
+      // Import lands in a later phase (binary upload endpoint); shown but disabled.
+      { label: "Import", enabled: false, run: () => {} },
+      { separator: true },
+      ...CONTENT_NEW_ITEMS.map((item) => ({
+        label: item.label,
+        run: () => void this.createContent(item.kind, dir),
+      })),
+    ];
+    this.openContextMenu(event, items);
+  }
+
+  /** Prompts for a name, then creates the folder/typed stub and refreshes the tree. */
+  private async createContent(kind: ContentNewKind, dir: string): Promise<void> {
+    const label = kind === "folder" ? "folder" : `${kind} asset`;
+    const name = window.prompt(`New ${label} name`, "");
+    if (name === null || !name.trim()) return;
+    try {
+      const result = await createProjectContent({ kind, dir, name: name.trim() });
+      this.setStatus(`Created ${result.path}`, "success");
+      await this.refreshAssetTree({ quiet: false });
+    } catch (error) {
+      this.setStatus(error instanceof Error ? error.message : String(error), "error");
+    }
   }
 
   private closeContextMenu = (): void => {

@@ -388,6 +388,12 @@ body.editor-mode #debug-stats {
   background: rgba(225, 91, 91, 0.25);
 }
 
+.context-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .outliner-actions {
   display: inline-flex;
   gap: 4px;

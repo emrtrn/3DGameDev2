@@ -57,10 +57,18 @@ import {
 import type { Vec3 } from "@engine/scene/layout";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { loadAssetCollision, saveAssetCollision } from "@/editor/assetCollisionStore";
+import {
+  defaultAssetMaterialSlots,
+  loadAssetMaterialSlots,
+  saveAssetMaterialSlots,
+  type AssetMaterialSlotsDef,
+} from "@/editor/assetMaterialSlotsStore";
 
 export interface StaticMeshEditorOptions {
   /** Public-relative path to the model file (e.g. `assets/props/chair.glb`). */
   modelPath: string;
+  /** Manifest asset id for the opened mesh. */
+  assetId?: string;
   /** Display name shown in the editor header / tab. */
   label: string;
   /** Manifest assets used by the material slot dropdown. */
@@ -72,6 +80,7 @@ export interface StaticMeshEditorOptions {
   }>;
   /** Optional status sink (surfaces to the host editor's status bar). */
   onStatus?: (message: string, tone?: "info" | "warning" | "error") => void;
+  onMaterialSlotsSaved?: (assetId: string) => void;
 }
 
 const PRESET_LABELS: Record<CollisionPresetId, string> = {
@@ -146,8 +155,10 @@ export class StaticMeshEditor {
   private menuOpen = false;
 
   private collision: AssetCollisionDef = defaultAssetCollisionDef();
+  private materialSlots: AssetMaterialSlotsDef = defaultAssetMaterialSlots();
   private selectedMaterialId = "";
   private previewMaterial: MeshStandardMaterial | null = null;
+  private readonly originalMeshMaterials = new Map<Mesh, Mesh["material"]>();
   private modelBounds = new Box3();
   private selectedPrimitive = -1;
   private readonly overlays: PrimitiveOverlay[] = [];
@@ -171,7 +182,7 @@ export class StaticMeshEditor {
             <strong data-sm-title></strong>
           </span>
           <div class="sm-editor-header-actions">
-            <button type="button" class="sm-editor-save" data-sm-save title="Save collision (Ctrl+S)">Save</button>
+            <button type="button" class="sm-editor-save" data-sm-save title="Save collision and material slots (Ctrl+S)">Save</button>
             <button type="button" class="sm-editor-close" data-sm-close title="Close (Esc)">✕</button>
           </div>
         </header>
@@ -216,6 +227,7 @@ export class StaticMeshEditor {
 
     void this.loadModel();
     void this.loadCollision();
+    void this.loadMaterialSlots();
   }
 
   // --- scene setup -------------------------------------------------------
@@ -396,6 +408,11 @@ export class StaticMeshEditor {
       if (this.disposed) return;
       const model = gltf.scene;
       this.modelGroup.add(model);
+      model.traverse((object) => {
+        if (object instanceof Mesh && !this.originalMeshMaterials.has(object)) {
+          this.originalMeshMaterials.set(object, object.material);
+        }
+      });
       this.modelBounds = new Box3().setFromObject(model);
       const center = this.modelBounds.getCenter(new Vector3());
       const size = this.modelBounds.getSize(new Vector3());
@@ -403,6 +420,9 @@ export class StaticMeshEditor {
       this.target.copy(center);
       this.spherical.radius = this.modelRadius * 2.6;
       this.updateCamera();
+      if (this.selectedMaterialId) {
+        void this.applyPreviewMaterial(this.selectedMaterialId, { dirty: false, status: false });
+      }
       this.setStatus("Ready.");
     } catch (error) {
       this.setStatus(`Failed to load model: ${describeError(error)}`, "error");
@@ -414,6 +434,16 @@ export class StaticMeshEditor {
     if (this.disposed) return;
     this.renderDetails();
     this.rebuildOverlays();
+  }
+
+  private async loadMaterialSlots(): Promise<void> {
+    this.materialSlots = await loadAssetMaterialSlots(this.options.modelPath);
+    if (this.disposed) return;
+    this.selectedMaterialId = this.materialSlots.slots[0] ?? "";
+    this.renderDetails();
+    if (this.selectedMaterialId) {
+      await this.applyPreviewMaterial(this.selectedMaterialId, { dirty: false, status: false });
+    }
   }
 
   // --- toolbar -----------------------------------------------------------
@@ -845,7 +875,7 @@ export class StaticMeshEditor {
       .querySelector<HTMLSelectElement>('[data-sm-field="materialSlot"]')
       ?.addEventListener("change", (event) => {
         const value = (event.target as HTMLSelectElement).value;
-        void this.applyPreviewMaterial(value);
+        void this.applyPreviewMaterial(value, { dirty: true, status: true });
       });
     this.detailsHost
       .querySelector<HTMLSelectElement>('[data-sm-field="preset"]')
@@ -903,14 +933,20 @@ export class StaticMeshEditor {
       .join("");
   }
 
-  private async applyPreviewMaterial(materialId: string): Promise<void> {
+  private async applyPreviewMaterial(
+    materialId: string,
+    options: { dirty?: boolean; status?: boolean } = {},
+  ): Promise<void> {
     this.selectedMaterialId = materialId;
+    this.materialSlots = { schema: 1, slots: materialId ? [materialId] : [] };
     this.previewMaterial?.map?.dispose();
     this.previewMaterial?.normalMap?.dispose();
     this.previewMaterial?.dispose();
     this.previewMaterial = null;
     if (!materialId) {
-      this.setStatus("Material slot cleared.");
+      this.restoreOriginalMaterials();
+      if (options.dirty) this.markDirty();
+      if (options.status !== false) this.setStatus("Material slot cleared.");
       return;
     }
     const record = this.options.assets?.find((asset) => asset.id === materialId);
@@ -958,7 +994,8 @@ export class StaticMeshEditor {
         if (!(object instanceof Mesh)) return;
         object.material = material;
       });
-      this.setStatus(`Preview material: ${record.name}`);
+      if (options.dirty) this.markDirty();
+      if (options.status !== false) this.setStatus(`Preview material: ${record.name}`);
     } catch (error) {
       this.setStatus(`Material preview failed: ${describeError(error)}`, "error");
     }
@@ -968,6 +1005,12 @@ export class StaticMeshEditor {
     const record = this.options.assets?.find((asset) => asset.id === textureId);
     if (!record) return null;
     return this.textureLoader.loadAsync(projectFileUrl(record.path));
+  }
+
+  private restoreOriginalMaterials(): void {
+    for (const [mesh, material] of this.originalMeshMaterials) {
+      mesh.material = material;
+    }
   }
 
   // --- save / status -----------------------------------------------------
@@ -992,9 +1035,14 @@ export class StaticMeshEditor {
 
   private async save(): Promise<void> {
     try {
-      const result = await saveAssetCollision(this.options.modelPath, this.collision);
+      const [collisionResult, materialResult] = await Promise.all([
+        saveAssetCollision(this.options.modelPath, this.collision),
+        saveAssetMaterialSlots(this.options.modelPath, this.materialSlots),
+      ]);
       this.overlay.querySelector<HTMLButtonElement>("[data-sm-save]")?.classList.remove("is-dirty");
-      this.setStatus(result.changed ? `Saved ${result.path}` : "No changes to save.");
+      const changed = collisionResult.changed || materialResult.changed;
+      this.setStatus(changed ? `Saved ${collisionResult.path} and ${materialResult.path}` : "No changes to save.");
+      if (this.options.assetId) this.options.onMaterialSlotsSaved?.(this.options.assetId);
     } catch (error) {
       this.setStatus(`Save failed: ${describeError(error)}`, "error");
     }

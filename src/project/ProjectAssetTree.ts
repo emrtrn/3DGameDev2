@@ -55,3 +55,44 @@ export function findProjectDir(
 export function isModelFile(node: ProjectDirNode): boolean {
   return node.type === "file" && (node.ext === "glb" || node.ext === "gltf");
 }
+
+/** Content Browser "new content" kinds the `/__content-new` endpoint can create. */
+export type ContentNewKind =
+  | "folder"
+  | "level"
+  | "material"
+  | "particle"
+  | "script"
+  | "sound"
+  | "ui";
+
+export interface ContentNewRequest {
+  kind: ContentNewKind;
+  /** Public-root-relative directory the new folder/file is created inside. */
+  dir: string;
+  /** User-entered base name (sanitized server-side). */
+  name: string;
+}
+
+/**
+ * Creates a folder or a typed stub asset under `dir`. Hits the localhost-only
+ * `/__content-new` dev endpoint; returns the created public-relative path.
+ */
+export async function createProjectContent(
+  request: ContentNewRequest,
+): Promise<{ path: string }> {
+  const response = await fetch("/__content-new", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  const data = (await response.json().catch(() => null)) as {
+    ok?: boolean;
+    path?: string;
+    error?: string;
+  } | null;
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.error ?? `Create failed: ${response.status} ${response.statusText}`);
+  }
+  return { path: data.path ?? "" };
+}

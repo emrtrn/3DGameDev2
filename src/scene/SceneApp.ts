@@ -135,6 +135,10 @@ import type {
 import type { AssetCollisionDef, CollisionPresetId } from "@engine/scene/collision";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
 import {
+  loadAssetMaterialSlots,
+  type AssetMaterialSlotsDef,
+} from "@/scene/assetMaterialSlotsLoader";
+import {
   lightEntity,
   roomLayoutToSceneDocument,
   type ColliderTransformSource,
@@ -350,6 +354,7 @@ export class SceneApp {
   private localBounds = new Map<string, Box3>();
   /** Authored asset collision definitions (sidecars) for assets that have primitives. */
   private collisionDefs = new Map<string, AssetCollisionDef>();
+  private assetMaterialSlots = new Map<string, AssetMaterialSlotsDef>();
   private assetPlacements = new Map<string, EditableAsset["placement"]>();
   /** Active selection, delegating to the store so ownership lives there. */
   private get selection(): Selection | null {
@@ -1149,6 +1154,7 @@ export class SceneApp {
       for (const [id, box] of computeModelLocalBounds(single)) {
         this.localBounds.set(id, box);
       }
+      await this.refreshAssetMaterialSlots(assetId);
       return true;
     } catch (error) {
       this.onStatus?.(
@@ -1721,6 +1727,7 @@ export class SceneApp {
     // Shape actors persist as `shape:<type>` instances; their synthetic models
     // aren't part of any loadGroup, so register them before the scene is built.
     this.registerShapeModelsFromLayout();
+    await this.refreshAssetMaterialSlots(undefined, { rebuild: false });
 
     this.assetPlacements.clear();
     for (const asset of await this.assetLoader.loadEditableAssets()) {
@@ -1809,10 +1816,11 @@ export class SceneApp {
     if (!gltf) throw new Error(`Render test asset missing: ${assetId}`);
     const renderedOverrideObjects: Object3D[] = [];
     const instancedPlacements = placements.map((placement) => {
-      if (placement.materialSlot && this.materialCache.has(placement.materialSlot)) {
+      const materialSlot = this.resolvePlacementMaterialSlot(assetId, placement);
+      if (materialSlot && this.materialCache.has(materialSlot)) {
         return { ...placement, hidden: true };
       }
-      if (placement.materialSlot) this.ensureMaterialLoaded(placement.materialSlot, assetId);
+      if (materialSlot) this.ensureMaterialLoaded(materialSlot, assetId);
       return placement;
     });
 
@@ -1824,9 +1832,8 @@ export class SceneApp {
       receiveShadow: this.staticObjectsReceiveShadow(),
     });
     placements.forEach((placement, placementIndex) => {
-      const material = placement.materialSlot
-        ? this.materialCache.get(placement.materialSlot)
-        : undefined;
+      const materialSlot = this.resolvePlacementMaterialSlot(assetId, placement);
+      const material = materialSlot ? this.materialCache.get(materialSlot) : undefined;
       if (!material || placement.hidden) return;
       const object = this.createMaterialOverrideObject(assetId, placementIndex, placement, gltf, material);
       group.add(object);
@@ -1836,6 +1843,10 @@ export class SceneApp {
     this.instanceMeshes.set(assetId, meshes);
     this.instanceOverrideObjects.set(assetId, renderedOverrideObjects);
     return group;
+  }
+
+  private resolvePlacementMaterialSlot(assetId: string, placement: LayoutPlacement): string | undefined {
+    return placement.materialSlot ?? this.assetMaterialSlots.get(assetId)?.slots[0];
   }
 
   private createMaterialOverrideObject(
@@ -1865,8 +1876,23 @@ export class SceneApp {
     return object;
   }
 
-  private ensureMaterialLoaded(materialId: string, assetIdToRebuild?: string): void {
-    if (this.materialCache.has(materialId) || this.materialLoads.has(materialId) || !this.manifest) return;
+  private ensureMaterialLoaded(
+    materialId: string,
+    assetIdToRebuild?: string,
+  ): Promise<Material | undefined> {
+    const cached = this.materialCache.get(materialId);
+    if (cached) return Promise.resolve(cached);
+    const pending = this.materialLoads.get(materialId);
+    if (pending) {
+      if (assetIdToRebuild) {
+        void pending.then(
+          () => this.rebuildInstanceGroup(assetIdToRebuild),
+          () => undefined,
+        );
+      }
+      return pending;
+    }
+    if (!this.manifest) return Promise.resolve(undefined);
     const load = loadForgeMaterial(this.manifest, materialId, this.textureLoader)
       .then((material) => {
         this.materialCache.set(materialId, material);
@@ -1883,6 +1909,7 @@ export class SceneApp {
         throw error;
       });
     this.materialLoads.set(materialId, load);
+    return load;
   }
 
   private rebuildInstanceGroup(assetId: string): void {
@@ -2975,6 +3002,33 @@ export class SceneApp {
     );
     this.collisionDefs = next;
     this.updateCollisionBoxes();
+  }
+
+  async refreshAssetMaterialSlots(
+    assetIds?: string | string[],
+    options: { rebuild?: boolean } = {},
+  ): Promise<void> {
+    if (!this.manifest) return;
+    const rebuild = options.rebuild !== false;
+    const ids = typeof assetIds === "string"
+      ? [assetIds]
+      : assetIds ?? sceneModelAssetIds(this.layout);
+    await Promise.all(
+      [...new Set(ids)].map(async (assetId) => {
+        const asset = this.manifest?.assets.find((entry) => entry.id === assetId);
+        if (!asset) return;
+        const materialSlots = await loadAssetMaterialSlots(assetPath(asset));
+        if (materialSlots.slots.length > 0) {
+          this.assetMaterialSlots.set(assetId, materialSlots);
+          await this.ensureMaterialLoaded(materialSlots.slots[0]!);
+        } else {
+          this.assetMaterialSlots.delete(assetId);
+        }
+      }),
+    );
+    if (rebuild) {
+      for (const assetId of new Set(ids)) this.rebuildInstanceGroup(assetId);
+    }
   }
 
   /**

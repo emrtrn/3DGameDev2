@@ -665,6 +665,132 @@ export function validateSaveCollisionPayload(value: unknown): {
   };
 }
 
+export function validateAssetMaterialSlotsDef(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("material slots def must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (!Array.isArray(input.slots)) throw new Error("materialSlots.slots must be an array");
+  const slots = input.slots.map((slot, index) => {
+    if (typeof slot !== "string" || slot.length === 0) {
+      throw new Error(`materialSlots.slots[${index}] must be a non-empty string`);
+    }
+    return slot;
+  });
+  return { schema: 1, slots };
+}
+
+export function validateSaveMaterialSlotsPayload(value: unknown): {
+  path: string;
+  materialSlots: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("material slots payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".materials.json")) {
+    throw new Error("material slots payload path must end with .materials.json");
+  }
+  if (input.path.includes("..")) {
+    throw new Error("material slots payload path must not contain ..");
+  }
+  return {
+    path: input.path,
+    materialSlots: validateAssetMaterialSlotsDef(input.materialSlots),
+  };
+}
+
+/** Content Browser "new content" kinds the `/__content-new` endpoint accepts. */
+export const CONTENT_NEW_KINDS = [
+  "folder",
+  "level",
+  "material",
+  "particle",
+  "script",
+  "sound",
+  "ui",
+] as const;
+export type ContentNewKind = (typeof CONTENT_NEW_KINDS)[number];
+
+export interface ContentNewPayload {
+  kind: ContentNewKind;
+  dir: string;
+  name: string;
+}
+
+function isContentNewKind(value: unknown): value is ContentNewKind {
+  return typeof value === "string" && (CONTENT_NEW_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * Sanitizes a user-entered content name to a single safe path segment: trimmed,
+ * non-empty, no slashes / `..` / leading dot, Unicode letters+digits and a few
+ * separators only (so Turkish names like "Işık" are allowed).
+ */
+function sanitizeContentName(value: unknown): string {
+  if (typeof value !== "string") throw new Error("content name must be a string");
+  const trimmed = value.trim();
+  if (!trimmed) throw new Error("content name must not be empty");
+  if (/[\\/]/.test(trimmed)) throw new Error("content name must not contain slashes");
+  if (trimmed.includes("..")) throw new Error("content name must not contain ..");
+  if (trimmed.startsWith(".")) throw new Error("content name must not start with a dot");
+  if (trimmed.length > 80) throw new Error("content name too long");
+  if (!/^[\p{L}\p{N} ._-]+$/u.test(trimmed)) throw new Error("content name has invalid characters");
+  return trimmed;
+}
+
+/** Validates a `/__content-new` payload (folder or typed stub file to create). */
+export function validateContentNewPayload(value: unknown): ContentNewPayload {
+  if (!value || typeof value !== "object") throw new Error("content payload must be an object");
+  const input = value as Record<string, unknown>;
+  if (!isContentNewKind(input.kind)) throw new Error(`invalid content kind: ${String(input.kind)}`);
+  if (typeof input.dir !== "string") throw new Error("content payload dir must be a string");
+  if (input.dir.includes("..")) throw new Error("content payload dir must not contain ..");
+  return { kind: input.kind, dir: input.dir, name: sanitizeContentName(input.name) };
+}
+
+export interface ContentNewFile {
+  /** Public-root-relative path of the file/folder to create. */
+  path: string;
+  /** File contents to write, or null when the target is a directory. */
+  content: string | null;
+}
+
+/** Minimal JSON stub for a typed asset; real editors expand these later. */
+function contentStubJson(kind: Exclude<ContentNewKind, "folder">, name: string): string {
+  let body: Record<string, unknown>;
+  if (kind === "level") {
+    // Empty RoomLayout (engine/scene/layout.ts).
+    body = { schema: 1, name, loadGroups: [], instances: [], characters: [] };
+  } else if (kind === "script") {
+    body = { schema: 1, type: "script", name, graph: {} };
+  } else if (kind === "sound") {
+    body = { schema: 1, type: "sound", name, clip: "" };
+  } else if (kind === "ui") {
+    body = { schema: 1, type: "ui", name, root: {} };
+  } else {
+    body = { schema: 1, type: kind, name };
+  }
+  return `${JSON.stringify(body, null, 2)}\n`;
+}
+
+/**
+ * Resolves the validated payload to the public-relative path + content to
+ * create. Folders carry `content: null` (mkdir); typed files are written as
+ * `<name>.<kind>.json` stubs inside `dir`.
+ */
+export function resolveContentNewFile(payload: ContentNewPayload): ContentNewFile {
+  const dir = payload.dir.replace(/\\/g, "/").replace(/\/+$/, "").replace(/^\/+/, "");
+  const join = (segment: string): string => (dir ? `${dir}/${segment}` : segment);
+  if (payload.kind === "folder") {
+    return { path: join(payload.name), content: null };
+  }
+  return {
+    path: join(`${payload.name}.${payload.kind}.json`),
+    content: contentStubJson(payload.kind, payload.name),
+  };
+}
+
 export function validateSavePayload(value: unknown): {
   layout: unknown;
   editor: EditorSettingsPatch | null;

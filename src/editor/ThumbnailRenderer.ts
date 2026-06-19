@@ -37,11 +37,12 @@ export class ThumbnailRenderer {
     this.renderer.outputColorSpace = SRGBColorSpace;
   }
 
-  renderModel(url: string): Promise<string> {
-    let cached = this.cache.get(url);
+  renderModel(url: string, materialTextureUrl?: string): Promise<string> {
+    const cacheKey = materialTextureUrl ? `model:${url}:${materialTextureUrl}` : url;
+    let cached = this.cache.get(cacheKey);
     if (!cached) {
-      cached = this.renderModelUncached(url);
-      this.cache.set(url, cached);
+      cached = this.renderModelUncached(url, materialTextureUrl);
+      this.cache.set(cacheKey, cached);
     }
     return cached;
   }
@@ -61,7 +62,7 @@ export class ThumbnailRenderer {
     this.cache.clear();
   }
 
-  private async renderModelUncached(url: string): Promise<string> {
+  private async renderModelUncached(url: string, materialTextureUrl?: string): Promise<string> {
     const gltf = await this.loader.loadAsync(url);
     const model = gltf.scene.clone(true);
     const scene = new Scene();
@@ -77,6 +78,20 @@ export class ThumbnailRenderer {
     scene.add(fillLight);
 
     const group = new Group();
+    if (materialTextureUrl) {
+      const texture = await this.textureLoader.loadAsync(materialTextureUrl);
+      texture.colorSpace = SRGBColorSpace;
+      texture.wrapS = RepeatWrapping;
+      texture.wrapT = RepeatWrapping;
+      const material = new MeshStandardMaterial({
+        map: texture,
+        roughness: 0.78,
+        metalness: 0,
+      });
+      model.traverse((object) => {
+        if (object instanceof Mesh) object.material = material;
+      });
+    }
     group.add(model);
     scene.add(group);
 
