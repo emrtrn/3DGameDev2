@@ -167,7 +167,15 @@ async function registerImportedAsset(rel: string, bytes: number): Promise<string
   const entries = manifest.assets.filter(
     (asset): asset is Record<string, unknown> => Boolean(asset) && typeof asset === "object",
   );
-  if (entries.some((asset) => asset.path === rel)) return null;
+  if (
+    entries.some((asset) => {
+      const path = typeof asset.path === "string" ? asset.path : undefined;
+      const file = typeof asset.file === "string" ? asset.file : undefined;
+      return path === rel || file === rel;
+    })
+  ) {
+    return null;
+  }
 
   const existingIds = entries
     .map((asset) => asset.id)
@@ -383,8 +391,21 @@ function layoutEditorPlugin(): Plugin {
             } else {
               await writeFile(absPath, target.content, "utf8");
             }
+            let registeredId: string | null = null;
+            if (target.content !== null) {
+              try {
+                registeredId = await registerImportedAsset(
+                  target.path,
+                  Buffer.byteLength(target.content, "utf8"),
+                );
+              } catch {
+                registeredId = null;
+              }
+            }
             res.setHeader("Content-Type", "application/json; charset=utf-8");
-            res.end(JSON.stringify({ ok: true, path: target.path, kind: payload.kind }));
+            res.end(
+              JSON.stringify({ ok: true, path: target.path, kind: payload.kind, registeredId }),
+            );
           } catch (error) {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json; charset=utf-8");

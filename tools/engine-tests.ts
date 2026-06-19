@@ -4528,6 +4528,10 @@ check("content-new resolves to typed stub files and folders", () => {
     instances: [],
     characters: [],
   });
+
+  const particle = resolveContentNewFile({ kind: "particle", dir: "assets/effects", name: "Dust Hit" });
+  assert.equal(particle.path, "assets/effects/Dust Hit.effect.json");
+  assert.equal(parseEffectDefinition(JSON.parse(particle.content ?? ""))?.effectId, "dust-hit");
 });
 
 check("content-new 'script' creates a `.actor.json` Actor Script seeded with the parent class", () => {
@@ -4767,6 +4771,21 @@ check("buildImportedAssetRecord derives a valid manifest entry per type", () => 
   assert.equal(texture?.placeable, false);
   assert.equal(texture?.runtime.collision, false);
   assert.equal(texture?.category, "texture"); // falls back to type when dir is "assets"
+
+  const material = buildImportedAssetRecord("assets/materials/Stone.material.json", 50, []);
+  assert.equal(material?.assetType, "material");
+  assert.equal(material?.placeable, false);
+
+  const actor = buildImportedAssetRecord("assets/blueprints/DoorBP.actor.json", 75, []);
+  assert.equal(actor?.assetType, "prefab");
+  assert.equal(actor?.category, "blueprints");
+
+  const effect = buildImportedAssetRecord("assets/effects/Dust.effect.json", 80, []);
+  assert.equal(effect?.assetType, "prefab");
+  assert.equal(effect?.placeable, false);
+
+  const legacyScript = buildImportedAssetRecord("assets/blueprints/Old.script.json", 75, []);
+  assert.equal(legacyScript?.assetType, "prefab");
 
   // Unknown/companion types are not auto-registered.
   assert.equal(buildImportedAssetRecord("assets/models/props/chair.bin", 10, []), null);

@@ -370,8 +370,9 @@ npm run build           # başarılı
 - [x] `src/editor/ActorScriptEditor.ts` overlay doküman (StaticMeshEditor deseni,
       dinamik import, Esc kapat, tek editör)
 - [x] Content Browser `*.actor.json` kartına `dblclick` → editörü aç (+ "BP" rozeti)
-- [~] Viewport: şimdilik **placeholder kart** (sınıf adı/parent/sayımlar); 3D grid+ışık ertelendi
-- [ ] Orbit/pan/dolly kamera (3D viewport ile birlikte)
+- [~] Viewport: şimdilik **placeholder kart** (sınıf adı/parent/sayımlar); gerçek
+      3D viewport **Faz 10**'a taşındı
+- [ ] Orbit/pan/dolly kamera → **Faz 10.1**
 - [x] Başlık = sınıf adı + parentClass rozeti; dinamik import ile DEV-gate
 
 ### Faz 4 — Components paneli (şablon ağacı)
@@ -380,7 +381,7 @@ npm run build           # başarılı
 - [x] `+ Add` menüsü: Forge component seti (`MeshRenderer`, `Collider`, `Audio`,
       `ParticleEmitter`, `Light`, `Interaction`, `Behavior`)
 - [x] Component seçimi → Details'ta form (id/parent/kind + **props JSON** editörü)
-- [ ] Viewport'ta component önizleme (mesh/collider/light gizmo'ları)
+- [ ] Viewport'ta component önizleme (mesh/collider/light gizmo'ları) → **Faz 10.2–10.3**
 - [ ] (ertele) Add menüsünü roadmap kategorileriyle (Movement/Camera/Spring Arm…)
 
 ### Faz 5 — Event Bindings + Variables + Details

@@ -916,6 +916,21 @@ function contentStubJson(payload: ContentNewPayload): string {
       { name, parentClass: payload.parentClass ?? "actor" },
       name,
     ) as unknown as Record<string, unknown>;
+  } else if (kind === "particle") {
+    body = {
+      schema: 1,
+      effectId: slugifyId(name),
+      name,
+      loop: true,
+      rate: 10,
+      lifetime: 1,
+      startSize: 0.2,
+      endSize: 0.2,
+      velocity: [0, 1, 0],
+      spread: 0.2,
+      materialMode: "alpha",
+      color: "#ffffff",
+    };
   } else if (kind === "sound") {
     body = { schema: 1, type: "sound", name, clip: "" };
   } else if (kind === "ui") {
@@ -938,7 +953,8 @@ export function resolveContentNewFile(payload: ContentNewPayload): ContentNewFil
     return { path: join(payload.name), content: null };
   }
   // A "script" is an Actor Script class-asset, stored as `<name>.actor.json`.
-  const ext = payload.kind === "script" ? "actor" : payload.kind;
+  const ext =
+    payload.kind === "script" ? "actor" : payload.kind === "particle" ? "effect" : payload.kind;
   return {
     path: join(`${payload.name}.${ext}.json`),
     content: contentStubJson(payload),
@@ -1062,8 +1078,8 @@ export function buildImportedAssetRecord(
     placement: defaultPlacementForAsset(type),
     runtime: {
       loadGroup: category,
-      castShadow: true,
-      receiveShadow: true,
+      castShadow: placeable,
+      receiveShadow: placeable,
       collision: placeable,
       bytes: Math.max(0, Math.floor(bytes)),
     },

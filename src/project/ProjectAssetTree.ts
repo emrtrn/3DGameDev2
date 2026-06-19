@@ -90,7 +90,7 @@ export interface ContentNewRequest {
  */
 export async function createProjectContent(
   request: ContentNewRequest,
-): Promise<{ path: string }> {
+): Promise<{ path: string; registeredId: string | null }> {
   const response = await fetch("/__content-new", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -99,12 +99,13 @@ export async function createProjectContent(
   const data = (await response.json().catch(() => null)) as {
     ok?: boolean;
     path?: string;
+    registeredId?: string | null;
     error?: string;
   } | null;
   if (!response.ok || !data?.ok) {
     throw new Error(data?.error ?? `Create failed: ${response.status} ${response.statusText}`);
   }
-  return { path: data.path ?? "" };
+  return { path: data.path ?? "", registeredId: data.registeredId ?? null };
 }
 
 /**

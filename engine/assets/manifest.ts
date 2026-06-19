@@ -119,6 +119,15 @@ const THUMBNAIL_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
 const SOUND_EXTENSIONS = new Set(["mp3", "ogg", "wav"]);
 const MATERIAL_EXTENSIONS = new Set(["material.json", "mat.json"]);
 const LEVEL_EXTENSIONS = new Set(["level.json", "layout.json"]);
+const PREFAB_EXTENSIONS = new Set([
+  "actor.json",
+  "effect.json",
+  "particle.json",
+  "prefab.json",
+  "script.json",
+  "sound.json",
+  "ui.json",
+]);
 const ASSET_FILE_EXTENSIONS = new Set([
   ...MODEL_EXTENSIONS,
   ...THUMBNAIL_EXTENSIONS,
@@ -160,6 +169,7 @@ export function inferAssetTypeFromPath(path: string): AssetType | null {
   if (SOUND_EXTENSIONS.has(ext)) return "sound";
   if (MATERIAL_EXTENSIONS.has(compoundExtensionOf(lower))) return "material";
   if (LEVEL_EXTENSIONS.has(compoundExtensionOf(lower))) return "level";
+  if (PREFAB_EXTENSIONS.has(compoundExtensionOf(lower))) return "prefab";
   return null;
 }
 
@@ -238,11 +248,19 @@ export function defaultPlacementForAsset(type: AssetType): AssetPlacementRules {
       allowScale: true,
     };
   }
+  if (type === "staticMesh") {
+    return {
+      surface: "floor",
+      snapToWall: false,
+      allowRotation: true,
+      allowScale: true,
+    };
+  }
   return {
     surface: "floor",
     snapToWall: false,
-    allowRotation: true,
-    allowScale: true,
+    allowRotation: false,
+    allowScale: false,
   };
 }
 
@@ -579,6 +597,7 @@ function isHealthCheckAssetFile(path: string): boolean {
   if (lower.endsWith("/metadata-schema.json")) return false;
   if (lower.endsWith(".collision.json")) return false;
   if (lower.endsWith(".materials.json")) return false;
+  if (lower.endsWith(".uvw.json")) return false;
   return ASSET_FILE_EXTENSIONS.has(extensionOf(lower));
 }
 

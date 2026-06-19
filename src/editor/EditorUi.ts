@@ -918,7 +918,14 @@ export class EditorUi {
   private shouldDisplayAssetFile(file: ProjectDirNode): boolean {
     if (file.type !== "file") return false;
     const name = file.name.toLocaleLowerCase();
-    return !(name === "manifest.json" || name === "catalog.json");
+    return !(
+      name === "manifest.json" ||
+      name === "catalog.json" ||
+      name === "metadata-schema.json" ||
+      name.endsWith(".collision.json") ||
+      name.endsWith(".materials.json") ||
+      name.endsWith(".uvw.json")
+    );
   }
 
   private toBrowserAssetItem(file: ProjectDirNode): BrowserAssetItem {
@@ -1538,6 +1545,13 @@ export class EditorUi {
         ...(parentClass ? { parentClass } : {}),
       });
       this.setStatus(`Created ${result.path}`, "success");
+      if (result.registeredId) {
+        try {
+          this.editableAssets = await this.app.reloadEditableAssets();
+        } catch {
+          // Keep the stale list; the tree refresh below still shows the new file.
+        }
+      }
       await this.refreshAssetTree({ quiet: false });
     } catch (error) {
       this.setStatus(error instanceof Error ? error.message : String(error), "error");
