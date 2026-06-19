@@ -143,6 +143,8 @@ import {
   validatePlacement,
   validateSaveActorPayload,
   validateSaveCollisionPayload,
+  validateForgeMaterialDef,
+  validateSaveMaterialPayload,
   validateSaveMaterialSlotsPayload,
   validateSaveUvwPayload,
 } from "./saveValidator";
@@ -150,6 +152,7 @@ import {
   defaultActorScriptDef,
   normalizeActorScriptDef,
 } from "../engine/scene/actorScript";
+import { normalizeForgeMaterialDef } from "../engine/assets/material";
 import {
   actorInstanceEntityId,
   actorInstanceToEntity,
@@ -4465,6 +4468,88 @@ check("material slots save payload requires a .materials.json path", () => {
   );
 });
 
+check("material save payload requires a material path and canonical fields", () => {
+  const payload = validateSaveMaterialPayload({
+    path: "assets/materials/Stone.material.json",
+    material: {
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Stone",
+      baseColor: "#808080",
+      baseColorTexture: "tex-stone-d",
+      normalTexture: null,
+      maskTexture: "tex-stone-m",
+      roughness: 0.72,
+      metalness: 0,
+      opacity: 1,
+      alphaMode: "opaque",
+      alphaTest: 0.5,
+      side: "front",
+      emissive: "#000000",
+      emissiveIntensity: 0,
+    },
+  });
+  assert.equal(payload.path, "assets/materials/Stone.material.json");
+  assert.deepEqual(payload.material, {
+    schema: 1,
+    type: "material",
+    materialType: "standard",
+    name: "Stone",
+    baseColor: "#808080",
+    baseColorTexture: "tex-stone-d",
+    normalTexture: null,
+    maskTexture: "tex-stone-m",
+    roughness: 0.72,
+    metalness: 0,
+    opacity: 1,
+    alphaMode: "opaque",
+    alphaTest: 0.5,
+    side: "front",
+    emissive: "#000000",
+    emissiveIntensity: 0,
+  });
+  assert.throws(() =>
+    validateSaveMaterialPayload({ path: "assets/materials/Stone.json", material: {} }),
+  );
+  assert.throws(() =>
+    validateSaveMaterialPayload({ path: "../secret.material.json", material: {} }),
+  );
+  assert.throws(() =>
+    validateForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Bad",
+      baseColor: "red",
+    }),
+  );
+  assert.throws(() =>
+    validateForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Bad",
+      roughness: 2,
+    }),
+  );
+});
+
+check("starter material assets normalize to the canonical material shape", () => {
+  const materialDir = "public/assets/starter-content/Materials";
+  for (const fileName of readdirSync(materialDir)) {
+    if (!fileName.endsWith(".material.json")) continue;
+    const data = JSON.parse(readFileSync(`${materialDir}/${fileName}`, "utf8")) as unknown;
+    const material = normalizeForgeMaterialDef(data, fileName.replace(/\.material\.json$/, ""));
+    assert.equal(material.schema, 1);
+    assert.equal(material.type, "material");
+    assert.ok(material.name.length > 0);
+    assert.ok(material.roughness >= 0 && material.roughness <= 1);
+    assert.ok(material.metalness >= 0 && material.metalness <= 1);
+    assert.ok(material.opacity >= 0 && material.opacity <= 1);
+  }
+});
+
 check("uvw save payload requires a .uvw.json path and valid map type", () => {
   const payload = validateSaveUvwPayload({
     path: "assets/props/chair.uvw.json",
@@ -4504,6 +4589,24 @@ check("content-new payload validates kind/name and rejects unsafe names", () => 
   assert.equal(level.name, "Giris");
   // Turkish letters are allowed.
   assert.equal(validateContentNewPayload({ kind: "material", dir: "", name: "Işık" }).name, "Işık");
+  assert.equal(
+    validateContentNewPayload({
+      kind: "material",
+      dir: "",
+      name: "Metal",
+      materialPreset: "metal",
+    }).materialPreset,
+    "metal",
+  );
+  assert.equal(
+    validateContentNewPayload({
+      kind: "material",
+      dir: "",
+      name: "Fallback",
+      materialPreset: "unknown",
+    }).materialPreset,
+    "standard",
+  );
   assert.throws(() => validateContentNewPayload({ kind: "bogus", dir: "", name: "x" }));
   assert.throws(() => validateContentNewPayload({ kind: "level", dir: "", name: "" }));
   assert.throws(() => validateContentNewPayload({ kind: "level", dir: "", name: "a/b" }));
@@ -4517,7 +4620,49 @@ check("content-new resolves to typed stub files and folders", () => {
 
   const material = resolveContentNewFile({ kind: "material", dir: "assets/materials", name: "Tas" });
   assert.equal(material.path, "assets/materials/Tas.material.json");
-  assert.deepEqual(JSON.parse(material.content ?? ""), { schema: 1, type: "material", name: "Tas" });
+  assert.deepEqual(JSON.parse(material.content ?? ""), {
+    schema: 1,
+    type: "material",
+    materialType: "standard",
+    name: "Tas",
+    baseColor: "#ffffff",
+    baseColorTexture: null,
+    normalTexture: null,
+    maskTexture: null,
+    roughness: 0.8,
+    metalness: 0,
+    opacity: 1,
+    alphaMode: "opaque",
+    alphaTest: 0.5,
+    side: "front",
+    emissive: "#000000",
+    emissiveIntensity: 0,
+  });
+  const metal = resolveContentNewFile({
+    kind: "material",
+    dir: "assets/materials",
+    name: "Steel",
+    materialPreset: "metal",
+  });
+  assert.equal(metal.path, "assets/materials/Steel.material.json");
+  assert.deepEqual(JSON.parse(metal.content ?? ""), {
+    schema: 1,
+    type: "material",
+    materialType: "standard",
+    name: "Steel",
+    baseColor: "#b9c0c7",
+    baseColorTexture: null,
+    normalTexture: null,
+    maskTexture: null,
+    roughness: 0.3,
+    metalness: 1,
+    opacity: 1,
+    alphaMode: "opaque",
+    alphaTest: 0.5,
+    side: "front",
+    emissive: "#000000",
+    emissiveIntensity: 0,
+  });
 
   const level = resolveContentNewFile({ kind: "level", dir: "", name: "Main" });
   assert.equal(level.path, "Main.level.json");

@@ -1,14 +1,18 @@
 {
   "schema": 1,
+  "type": "material",
   "materialType": "standard",
   "name": "Brick Clay Beveled Material",
   "baseColor": "#ffffff",
   "baseColorTexture": "starter-tex-brick-clay-beveled-d",
-  "maskTexture": "starter-tex-brick-clay-beveled-m",
   "normalTexture": "starter-tex-brick-clay-beveled-n",
-  "roughness": 0.78,
+  "maskTexture": "starter-tex-brick-clay-beveled-m",
+  "roughness": 0.3,
   "metalness": 0,
   "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
   "emissive": "#000000",
   "emissiveIntensity": 0
 }

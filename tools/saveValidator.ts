@@ -26,6 +26,14 @@ import {
   type AssetType,
 } from "../engine/assets/manifest";
 import {
+  defaultForgeMaterialDef,
+  isForgeMaterialPreset,
+  isForgeMaterialAlphaMode,
+  isForgeMaterialSide,
+  isForgeMaterialType,
+  type ForgeMaterialPreset,
+} from "../engine/assets/material";
+import {
   isParentClass,
   normalizeActorScriptDef,
   type ParentClass,
@@ -793,6 +801,94 @@ export function validateSaveMaterialSlotsPayload(value: unknown): {
   };
 }
 
+function validateColorHex(value: unknown, label: string): string {
+  if (typeof value !== "string" || !/^#[0-9a-fA-F]{6}$/.test(value)) {
+    throw new Error(`${label} must be a #rrggbb color`);
+  }
+  return value;
+}
+
+function validateTextureRef(value: unknown, label: string): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") throw new Error(`${label} must be a texture asset id or null`);
+  return value;
+}
+
+export function validateForgeMaterialDef(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("material def must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (input.schema !== 1) throw new Error("material schema must be 1");
+  if (input.type !== undefined && input.type !== "material") {
+    throw new Error('material type must be "material"');
+  }
+  if (!isForgeMaterialType(input.materialType)) {
+    throw new Error("material.materialType must be standard or basic");
+  }
+  if (typeof input.name !== "string" || input.name.trim().length === 0) {
+    throw new Error("material.name must be a non-empty string");
+  }
+  if (input.name.length > 120) throw new Error("material.name too long");
+
+  const opacity = validateOptionalNumber(input.opacity, "material.opacity", 0, 1);
+  const alphaMode = input.alphaMode === undefined
+    ? opacity !== undefined && opacity < 1
+      ? "blend"
+      : "opaque"
+    : input.alphaMode;
+  if (!isForgeMaterialAlphaMode(alphaMode)) {
+    throw new Error("material.alphaMode must be opaque, blend, or mask");
+  }
+  const side = input.side === undefined ? "front" : input.side;
+  if (!isForgeMaterialSide(side)) {
+    throw new Error("material.side must be front, back, or double");
+  }
+
+  return {
+    schema: 1,
+    type: "material",
+    materialType: input.materialType,
+    name: input.name.trim(),
+    baseColor: validateColorHex(input.baseColor ?? "#ffffff", "material.baseColor"),
+    baseColorTexture: validateTextureRef(input.baseColorTexture, "material.baseColorTexture"),
+    normalTexture: validateTextureRef(input.normalTexture, "material.normalTexture"),
+    maskTexture: validateTextureRef(input.maskTexture, "material.maskTexture"),
+    roughness: validateOptionalNumber(input.roughness, "material.roughness", 0, 1) ?? 0.8,
+    metalness: validateOptionalNumber(input.metalness, "material.metalness", 0, 1) ?? 0,
+    opacity: opacity ?? 1,
+    alphaMode,
+    alphaTest: validateOptionalNumber(input.alphaTest, "material.alphaTest", 0, 1) ?? 0.5,
+    side,
+    emissive: validateColorHex(input.emissive ?? "#000000", "material.emissive"),
+    emissiveIntensity:
+      validateOptionalNumber(input.emissiveIntensity, "material.emissiveIntensity", 0, 20) ?? 0,
+  };
+}
+
+export function validateSaveMaterialPayload(value: unknown): {
+  path: string;
+  material: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("material payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (
+    typeof input.path !== "string" ||
+    (!input.path.endsWith(".material.json") && !input.path.endsWith(".mat.json"))
+  ) {
+    throw new Error("material payload path must end with .material.json or .mat.json");
+  }
+  if (input.path.includes("..")) {
+    throw new Error("material payload path must not contain ..");
+  }
+  return {
+    path: input.path,
+    material: validateForgeMaterialDef(input.material),
+  };
+}
+
 export function validateAssetUvwDef(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("uvw def must be an object");
@@ -854,6 +950,8 @@ export interface ContentNewPayload {
   name: string;
   /** For `kind: "script"`, the picked Actor Script parent class. */
   parentClass?: ParentClass;
+  /** For `kind: "material"`, the initial material template. */
+  materialPreset?: ForgeMaterialPreset;
 }
 
 function isContentNewKind(value: unknown): value is ContentNewKind {
@@ -891,6 +989,10 @@ export function validateContentNewPayload(value: unknown): ContentNewPayload {
   };
   if (input.kind === "script") {
     payload.parentClass = isParentClass(input.parentClass) ? input.parentClass : "actor";
+  } else if (input.kind === "material") {
+    payload.materialPreset = isForgeMaterialPreset(input.materialPreset)
+      ? input.materialPreset
+      : "standard";
   }
   return payload;
 }
@@ -935,6 +1037,8 @@ function contentStubJson(payload: ContentNewPayload): string {
     body = { schema: 1, type: "sound", name, clip: "" };
   } else if (kind === "ui") {
     body = { schema: 1, type: "ui", name, root: {} };
+  } else if (kind === "material") {
+    body = { ...defaultForgeMaterialDef(name, payload.materialPreset ?? "standard") };
   } else {
     body = { schema: 1, type: kind, name };
   }

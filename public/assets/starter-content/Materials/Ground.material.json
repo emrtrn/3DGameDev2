@@ -1,5 +1,18 @@
 {
   "schema": 1,
   "type": "material",
-  "name": "Ground"
+  "materialType": "standard",
+  "name": "Ground",
+  "baseColor": "#e03e3e",
+  "baseColorTexture": null,
+  "normalTexture": null,
+  "maskTexture": null,
+  "roughness": 0.8,
+  "metalness": 0,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0
 }

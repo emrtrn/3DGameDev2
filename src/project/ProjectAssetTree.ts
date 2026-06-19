@@ -1,3 +1,5 @@
+import type { ForgeMaterialPreset } from "@engine/assets/material";
+
 export interface ProjectDirNode {
   name: string;
   path: string;
@@ -82,6 +84,8 @@ export interface ContentNewRequest {
   name: string;
   /** For `kind: "script"`, the picked Actor Script parent class. */
   parentClass?: ScriptParentClass;
+  /** For `kind: "material"`, the initial material template. */
+  materialPreset?: ForgeMaterialPreset;
 }
 
 /**

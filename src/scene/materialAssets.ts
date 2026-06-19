@@ -1,5 +1,9 @@
 import {
+  BackSide,
   Color,
+  DoubleSide,
+  FrontSide,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   RepeatWrapping,
   SRGBColorSpace,
@@ -7,27 +11,17 @@ import {
 } from "three";
 
 import { assetPath, assetRecordById, assetType, type AssetManifest } from "@engine/assets/manifest";
+import {
+  normalizeForgeMaterialDef,
+  type ForgeMaterialSide,
+} from "@engine/assets/material";
 import { projectFileUrl } from "@/project/ProjectSystem";
-
-export interface ForgeMaterialDef {
-  schema: 1;
-  materialType: "standard";
-  name?: string;
-  baseColor?: string;
-  baseColorTexture?: string;
-  normalTexture?: string;
-  roughness?: number;
-  metalness?: number;
-  opacity?: number;
-  emissive?: string;
-  emissiveIntensity?: number;
-}
 
 export async function loadForgeMaterial(
   manifest: AssetManifest,
   materialId: string,
   textureLoader = new TextureLoader(),
-): Promise<MeshStandardMaterial> {
+): Promise<MeshStandardMaterial | MeshBasicMaterial> {
   const materialRecord = assetRecordById(manifest, materialId);
   if (!materialRecord || assetType(materialRecord) !== "material") {
     throw new Error(`Material asset not found: ${materialId}`);
@@ -36,23 +30,31 @@ export async function loadForgeMaterial(
   if (!response.ok) {
     throw new Error(`Material asset failed: ${response.status} ${response.statusText}`);
   }
-  const def = (await response.json()) as ForgeMaterialDef;
-  const material = new MeshStandardMaterial({
-    name: def.name ?? materialRecord.name,
+  const def = normalizeForgeMaterialDef(await response.json(), materialRecord.name);
+  const shared = {
+    name: def.name,
     color: new Color(def.baseColor ?? "#ffffff"),
-    roughness: clamp01(def.roughness ?? 0.8),
-    metalness: clamp01(def.metalness ?? 0),
-    transparent: def.opacity !== undefined && def.opacity < 1,
-    opacity: clamp01(def.opacity ?? 1),
-    emissive: new Color(def.emissive ?? "#000000"),
-    emissiveIntensity: Math.max(0, def.emissiveIntensity ?? 0),
-  });
+    transparent: def.alphaMode === "blend" || def.opacity < 1,
+    opacity: def.opacity,
+    alphaTest: def.alphaMode === "mask" ? def.alphaTest : 0,
+    side: materialSide(def.side),
+  };
+  const material =
+    def.materialType === "basic"
+      ? new MeshBasicMaterial(shared)
+      : new MeshStandardMaterial({
+          ...shared,
+          roughness: def.roughness,
+          metalness: def.metalness,
+          emissive: new Color(def.emissive),
+          emissiveIntensity: def.emissiveIntensity,
+        });
   if (def.baseColorTexture) {
     const texture = await loadTextureByAssetId(manifest, def.baseColorTexture, textureLoader);
     texture.colorSpace = SRGBColorSpace;
     material.map = texture;
   }
-  if (def.normalTexture) {
+  if (def.normalTexture && material instanceof MeshStandardMaterial) {
     material.normalMap = await loadTextureByAssetId(manifest, def.normalTexture, textureLoader);
   }
   material.needsUpdate = true;
@@ -74,7 +76,8 @@ async function loadTextureByAssetId(
   return texture;
 }
 
-function clamp01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.min(Math.max(value, 0), 1);
+function materialSide(side: ForgeMaterialSide): typeof FrontSide | typeof BackSide | typeof DoubleSide {
+  if (side === "back") return BackSide;
+  if (side === "double") return DoubleSide;
+  return FrontSide;
 }

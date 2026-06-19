@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "mapType": "cylinder",
+  "position": [
+    0,
+    0,
+    0
+  ],
+  "rotation": [
+    0,
+    0,
+    0
+  ],
+  "scale": [
+    0.7,
+    3,
+    0.7
+  ]
+}

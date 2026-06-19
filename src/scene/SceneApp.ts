@@ -361,8 +361,8 @@ export class SceneApp {
   private instanceMeshes = new Map<string, InstancedMesh[]>();
   private instanceOverrideObjects = new Map<string, Object3D[]>();
   private readonly textureLoader = new TextureLoader();
-  private readonly materialCache = new Map<string, MeshStandardMaterial>();
-  private readonly materialLoads = new Map<string, Promise<MeshStandardMaterial>>();
+  private readonly materialCache = new Map<string, Material>();
+  private readonly materialLoads = new Map<string, Promise<Material>>();
   private characterObjects: Object3D[] = [];
   /** Render object per placed actor instance, index-aligned with `layout.actors`. */
   private actorObjects: Object3D[] = [];
@@ -3271,6 +3271,26 @@ export class SceneApp {
     if (rebuild) {
       for (const assetId of new Set(ids)) this.rebuildInstanceGroup(assetId);
     }
+  }
+
+  async refreshMaterialAsset(materialId: string): Promise<void> {
+    if (!this.layout) return;
+    this.materialCache.delete(materialId);
+    this.materialLoads.delete(materialId);
+    const affectedAssetIds = new Set<string>();
+    for (const instance of this.layout.instances) {
+      const defaultSlots = this.assetMaterialSlots.get(instance.assetId)?.slots ?? [];
+      if (defaultSlots.includes(materialId)) {
+        affectedAssetIds.add(instance.assetId);
+        continue;
+      }
+      if (instance.placements.some((placement) => placement.materialSlot === materialId)) {
+        affectedAssetIds.add(instance.assetId);
+      }
+    }
+    if (affectedAssetIds.size === 0) return;
+    await this.ensureMaterialLoaded(materialId);
+    for (const assetId of affectedAssetIds) this.rebuildInstanceGroup(assetId);
   }
 
   async refreshAssetUvwMapping(

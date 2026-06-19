@@ -10,6 +10,7 @@
  */
 import {
   AmbientLight,
+  BackSide,
   Box3,
   BoxGeometry,
   CapsuleGeometry,
@@ -17,7 +18,9 @@ import {
   ConeGeometry,
   CylinderGeometry,
   DirectionalLight,
+  DoubleSide,
   EdgesGeometry,
+  FrontSide,
   GridHelper,
   Group,
   LineBasicMaterial,
@@ -72,6 +75,10 @@ import {
   saveAssetMaterialSlots,
   type AssetMaterialSlotsDef,
 } from "@/editor/assetMaterialSlotsStore";
+import {
+  normalizeForgeMaterialDef,
+  type ForgeMaterialSide,
+} from "@engine/assets/material";
 
 export interface StaticMeshEditorOptions {
   /** Public-relative path to the model file (e.g. `assets/props/chair.glb`). */
@@ -1183,19 +1190,16 @@ export class StaticMeshEditor {
     try {
       const response = await fetch(projectFileUrl(record.path));
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-      const def = (await response.json()) as {
-        name?: string;
-        baseColor?: string;
-        baseColorTexture?: string;
-        normalTexture?: string;
-        roughness?: number;
-        metalness?: number;
-      };
+      const def = normalizeForgeMaterialDef(await response.json(), record.name);
       const material = new MeshStandardMaterial({
-        name: def.name ?? record.name,
-        color: new Color(def.baseColor ?? "#ffffff"),
-        roughness: def.roughness ?? 0.8,
-        metalness: def.metalness ?? 0,
+        name: def.name,
+        color: new Color(def.baseColor),
+        roughness: def.roughness,
+        metalness: def.metalness,
+        transparent: def.alphaMode === "blend" || def.opacity < 1,
+        opacity: def.opacity,
+        alphaTest: def.alphaMode === "mask" ? def.alphaTest : 0,
+        side: materialSide(def.side),
       });
       if (def.baseColorTexture) {
         const texture = await this.loadTextureAsset(def.baseColorTexture);
@@ -1457,6 +1461,12 @@ function escapeHtml(value: string): string {
 
 function formatVec3(value: Vec3): string {
   return value.map((axis) => axis.toFixed(2)).join(", ");
+}
+
+function materialSide(side: ForgeMaterialSide): typeof FrontSide | typeof BackSide | typeof DoubleSide {
+  if (side === "back") return BackSide;
+  if (side === "double") return DoubleSide;
+  return FrontSide;
 }
 
 function describeError(error: unknown): string {

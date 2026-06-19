@@ -64,6 +64,10 @@ import {
   PARENT_CLASS_LABELS,
   type ParentClass,
 } from "@engine/scene/actorScript";
+import {
+  FORGE_MATERIAL_PRESETS,
+  type ForgeMaterialPreset,
+} from "@engine/assets/material";
 import { COLLISION_PRESET_IDS, type CollisionPresetId } from "@engine/scene/collision";
 import {
   nextTransformTool,
@@ -86,6 +90,24 @@ const CONTENT_NEW_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string }> 
   { kind: "sound", label: "Sound" },
   { kind: "ui", label: "UI" },
 ];
+
+const MATERIAL_PRESET_LABELS: Record<ForgeMaterialPreset, string> = {
+  standard: "Standard Surface",
+  textured: "Textured Surface",
+  metal: "Metal",
+  glass: "Glass",
+  emissive: "Emissive",
+  basic: "Unlit Basic",
+};
+
+const MATERIAL_PRESET_DESCRIPTIONS: Record<ForgeMaterialPreset, string> = {
+  standard: "General lit PBR material with neutral roughness.",
+  textured: "Standard material prepared for texture slots.",
+  metal: "Reflective metal starter values.",
+  glass: "Simple transparent glass-like starter values.",
+  emissive: "Self-lit surface for signs, screens, and glow accents.",
+  basic: "Unlit material for simple debug or UI-like surfaces.",
+};
 
 /** A context-menu entry: a clickable item or a visual separator. */
 type ContextMenuItem =
@@ -1075,6 +1097,12 @@ export class EditorUi {
         void this.openActorScriptEditor(item);
       });
     }
+    if (item.type === "material") {
+      card.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        void this.openMaterialEditor(item);
+      });
+    }
     const thumb = card.querySelector<HTMLElement>("[data-asset-thumb]");
     if (thumb && isActorScriptItem(item)) thumb.textContent = "BP";
     if (thumb && item.type !== "file" && isModelAssetType(item.type)) {
@@ -1222,6 +1250,43 @@ export class EditorUi {
     } catch (error) {
       this.setStatus(
         `Could not open Static Mesh editor: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
+  }
+
+  /**
+   * Opens the form-based Material Editor for a `*.material.json` asset.
+   * Kept behind a dynamic import like the other asset editors.
+   */
+  private async openMaterialEditor(item: BrowserAssetItem): Promise<void> {
+    try {
+      const { MaterialEditor } = await import("@/editor/MaterialEditor");
+      await MaterialEditor.open({
+        path: item.path,
+        label: item.label.replace(/\.(material|mat)\.json$/i, ""),
+        ...(item.editable ? { materialId: item.editable.id } : {}),
+        assets: this.editableAssets.map((asset) => ({
+          id: asset.id,
+          name: asset.displayName ?? asset.name,
+          assetType: assetType(asset),
+          path: assetPath(asset),
+        })),
+        onStatus: (message, tone) => this.setStatus(message, tone),
+        onSaved: () => {
+          const key = item.editable?.id ?? item.path;
+          this.materialTexturePreviewCache.delete(key);
+          this.modelMaterialPreviewCache.clear();
+          this.thumbnailRenderer.clearCache();
+          this.renderContentAssets();
+          if (item.editable) void this.app.refreshMaterialAsset(item.editable.id);
+        },
+        onApplyToSelected: (materialId) => this.app.setSelectionMaterialSlot(materialId),
+        onBrowse: () => this.setStatus(`In Content Browser: ${item.path}`),
+      });
+    } catch (error) {
+      this.setStatus(
+        `Could not open Material Editor: ${error instanceof Error ? error.message : String(error)}`,
         "error",
       );
     }
@@ -1529,10 +1594,15 @@ export class EditorUi {
     // A "Script" is an Actor Script class-asset: pick its parent class first
     // (Unreal's Pick Parent Class dialog), like creating a Blueprint Class.
     let parentClass: ParentClass | undefined;
+    let materialPreset: ForgeMaterialPreset | undefined;
     if (kind === "script") {
       const picked = await this.pickParentClass();
       if (!picked) return;
       parentClass = picked;
+    } else if (kind === "material") {
+      const picked = await this.pickMaterialPreset();
+      if (!picked) return;
+      materialPreset = picked;
     }
     const label = kind === "folder" ? "folder" : kind === "script" ? "Actor Script" : `${kind} asset`;
     const name = window.prompt(`New ${label} name`, "");
@@ -1543,6 +1613,7 @@ export class EditorUi {
         dir,
         name: name.trim(),
         ...(parentClass ? { parentClass } : {}),
+        ...(materialPreset ? { materialPreset } : {}),
       });
       this.setStatus(`Created ${result.path}`, "success");
       if (result.registeredId) {
@@ -1604,6 +1675,55 @@ export class EditorUi {
         }
         const option = target.closest<HTMLElement>("[data-parent-class]");
         if (option) finish(option.dataset.parentClass as ParentClass);
+      });
+    });
+  }
+
+  /**
+   * Material creation starts with a small preset picker. The preset only seeds
+   * the JSON defaults; the upcoming Material Editor remains free to change them.
+   */
+  private pickMaterialPreset(): Promise<ForgeMaterialPreset | null> {
+    return new Promise((resolvePick) => {
+      const overlay = document.createElement("div");
+      overlay.className = "parent-class-overlay";
+      const options = FORGE_MATERIAL_PRESETS.map(
+        (preset) => `
+        <button type="button" class="parent-class-option" data-material-preset="${preset}">
+          <span class="parent-class-name">${escapeHtml(MATERIAL_PRESET_LABELS[preset])}</span>
+          <span class="parent-class-desc">${escapeHtml(MATERIAL_PRESET_DESCRIPTIONS[preset])}</span>
+        </button>`,
+      ).join("");
+      overlay.innerHTML = `
+        <div class="parent-class-dialog" role="dialog" aria-label="Pick Material Preset">
+          <header class="parent-class-head">Pick Material Preset</header>
+          <div class="parent-class-list">${options}</div>
+          <footer class="parent-class-foot">
+            <button type="button" class="parent-class-cancel" data-material-preset-cancel>Cancel</button>
+          </footer>
+        </div>
+      `;
+      document.body.append(overlay);
+      const finish = (value: ForgeMaterialPreset | null): void => {
+        cleanup();
+        resolvePick(value);
+      };
+      const onKey = (event: KeyboardEvent): void => {
+        if (event.key === "Escape") finish(null);
+      };
+      const cleanup = (): void => {
+        window.removeEventListener("keydown", onKey, true);
+        overlay.remove();
+      };
+      window.addEventListener("keydown", onKey, true);
+      overlay.addEventListener("click", (event) => {
+        const target = event.target as HTMLElement;
+        if (target === overlay || target.closest("[data-material-preset-cancel]")) {
+          finish(null);
+          return;
+        }
+        const option = target.closest<HTMLElement>("[data-material-preset]");
+        if (option) finish(option.dataset.materialPreset as ForgeMaterialPreset);
       });
     });
   }

@@ -62,6 +62,10 @@ export class ThumbnailRenderer {
     this.cache.clear();
   }
 
+  clearCache(): void {
+    this.cache.clear();
+  }
+
   private async renderModelUncached(url: string, materialTextureUrl?: string): Promise<string> {
     const gltf = await this.loader.loadAsync(url);
     const model = gltf.scene.clone(true);
