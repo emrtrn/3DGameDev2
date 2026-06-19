@@ -401,12 +401,34 @@ npm run build           # başarılı
 
 ### Faz 7 — Instance/Spawn katmanı (sınıf → level)
 
-- [ ] Level/layout instance şeması: `{ classRef, transform, overrides? }`
+Runtime yarısı (veri modeli + spawn/render/behavior) **bitti ve gate yeşil**
+(tsc temiz · 179 engine check · build başarılı). Editör-içi yerleştirme (sürükle/
+yerleştir + seç + gizmo) bir sonraki oturuma bırakıldı — kapsam kararı (tam vs.
+minimal) açık.
+
+- [x] Level/layout instance şeması: `LayoutActorInstance { classRef, transform,
+      hierarchy/flags }` (`engine/scene/layout.ts`) + `RoomLayout.actors?`.
+      `overrides` ertelendi.
 - [ ] Content'ten `*.actor.json` sürükle/yerleştir → level'a class instance
-- [ ] Runtime spawn: sınıfı çöz → component'ler + event binding'leri → entity;
-      `BehaviorSubsystem.setEntities` ile bağla
-- [ ] Save validator allowlist: `classRef`/`overrides` alanlarını ekle (yoksa düşer)
+      (**Slice 3, bekliyor** — drop pipeline `editor/input/bindings.ts:onAssetDrop`
+      desenini izleyip yeni `application/x-forge-actor-class` payload'ı + editör
+      seçim union'ına `actor` türü ekler)
+- [x] Runtime spawn: sınıfı çöz → component'ler + event binding'leri → entity
+      (saf `actorInstanceToEntity`, `engine/scene/actorInstance.ts`);
+      `RuntimeSceneApp` classRef'leri çözer (cache'li), mesh modellerini yükler,
+      tek-Object3D (character) render yolunu yeniden kullanır, entity'leri sahne
+      dokümanına ekleyip `physics`/`behavior.setEntities` ile bağlar; `actor:<i>`
+      transform-sync render yoluna eklendi.
+- [x] Save validator allowlist: `classRef` + transform alanları (`validateActorInstance`)
+      + `validateLayout`'ta `actors[]` (`tools/saveValidator.ts`). `overrides` ertelendi.
 - [ ] (ertele) per-instance `overrides` (variable/component override) UI'si
+
+**v1 collapse kararları (dokümante, gözden kaçma değil):** Forge entity'leri düz
+(tip başına tek component) → actor component *ağacı* tek entity'ye çöker (her
+türden ilk node kazanır); instance world transform'u otoriter (root Transform
+node props'u yok sayılır); event binding'ler tek Behavior'a çöker (ilk binding,
+yoksa bir `Behavior` component node'u). Çoklu-behavior / çoklu-node hiyerarşi +
+procedural `shape:<type>` actor mesh'i + actor parent hiyerarşisi → B4/sonraki.
 
 ### Faz 8 — AI kod yolu (behavior stub)
 

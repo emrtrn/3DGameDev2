@@ -67,20 +67,28 @@ import {
   roomLayoutToSceneDocument,
   type ColliderTransformSource,
 } from "@engine/scene/legacyRoomLayoutAdapter";
+import {
+  actorInstanceToEntity,
+  parseActorInstanceEntityIndex,
+} from "@engine/scene/actorInstance";
+import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
+import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
 import { isPlayerStartAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
 import {
   applyAssetUvwMapping,
   loadAssetUvw,
 } from "@/scene/assetUvwLoader";
-import { assetPath, assetType } from "@engine/assets/manifest";
+import { assetPath, assetType, isModelAssetType } from "@engine/assets/manifest";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   readAudioComponent,
+  readMeshRendererComponent,
   readParticleEmitterComponent,
   readTransformComponent,
 } from "@engine/scene/components";
 import type { TransformComponent } from "@engine/scene/components";
+import type { Entity } from "@engine/scene/entity";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 import {
   ParticleEffect,
@@ -143,6 +151,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private characterObjects: Object3D[] = [];
   private characterRefs: RuntimeCharacterRef[] = [];
   private lightObjects: LightObjectRecord[] = [];
+  /** Entities flattened from placed Actor Script instances (`layout.actors`). */
+  private actorEntities: Entity[] = [];
+  /** Rendered object per actor instance index (absent for mesh-less logic actors). */
+  private readonly actorObjects = new Map<number, Object3D>();
+  /** Resolved `*.actor.json` classes, cached by classRef across instances. */
+  private readonly actorClassCache = new Map<string, ActorScriptDef>();
   private localBounds = new Map<string, Box3>();
   private sun: DirectionalLight | null = null;
   private ambientLight: AmbientLight | null = null;
@@ -162,6 +176,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const instance = parseInstanceEntityId(entityId);
     if (instance) {
       this.syncInstanceTransform(instance.assetId, instance.placementIndex, transform);
+      return;
+    }
+
+    const actorIndex = parseActorInstanceEntityIndex(entityId);
+    if (actorIndex !== null) {
+      const actorObject = this.actorObjects.get(actorIndex);
+      if (!actorObject) return;
+      actorObject.position.set(transform.position[0], transform.position[1], transform.position[2]);
+      applyEulerDegrees(actorObject, transform.rotation);
+      actorObject.scale.set(transform.scale[0], transform.scale[1], transform.scale[2]);
       return;
     }
 
@@ -281,8 +305,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.physicsSubsystem.setGravity(resolveSceneWorldSettings(this.layout).gravity);
     this.applyPlayerStartSpawn();
     this.ensureDefaultLights();
+    // Resolve placed Actor Script classes -> entities before models load, so their
+    // mesh assets join the load list (loadActorMeshModels reads these entities).
+    await this.resolveActorClasses();
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
     await this.loadMissingSceneModels();
+    await this.loadActorMeshModels();
     const convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);
     this.localBounds = computeModelLocalBounds(this.models);
     // Shape actors persist as `shape:<type>` instances whose synthetic models are
@@ -302,6 +330,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       addCharacter: (assetId, character) => this.addCharacter(this.models.get(assetId), character),
       addLight: (light) => this.addLight(light),
     });
+    this.addActorObjects();
 
     this.fitSunShadowToScene();
     this.applyBackgroundAndAmbient();
@@ -321,10 +350,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
     await this.loadCollisionDefs();
     await this.populateAssetUrls();
-    const sceneDocument = roomLayoutToSceneDocument(this.layout, {
+    const baseDocument = roomLayoutToSceneDocument(this.layout, {
       colliderBox: (assetId, source) => this.colliderBoxFor(assetId, source),
       collisionDefs: this.collisionDefs,
     });
+    // Append flattened actor-instance entities so physics + behavior derive them
+    // alongside the legacy instances/characters/lights.
+    const sceneDocument: SceneDocument = {
+      ...baseDocument,
+      entities: [...baseDocument.entities, ...this.actorEntities],
+    };
     await startSceneRuntime({
       sceneDocument,
       physics: this.physicsSubsystem,
@@ -565,6 +600,85 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (missing.length === 0) return;
     const models = await this.assetLoader.loadModels(missing);
     for (const [assetId, model] of models) this.models.set(assetId, model);
+  }
+
+  /**
+   * Resolves every placed Actor Script class (`layout.actors[].classRef`) and
+   * flattens each instance into an entity. Classes are cached by classRef, so the
+   * same blueprint placed N times is fetched once. Missing/malformed files
+   * normalize to an empty `actor` class (loadActorClass never throws), so one bad
+   * reference cannot abort scene construction.
+   */
+  private async resolveActorClasses(): Promise<void> {
+    const actors = this.layout?.actors ?? [];
+    this.actorEntities = await Promise.all(
+      actors.map(async (instance, index) => {
+        const def = await this.loadActorClass(instance.classRef);
+        return actorInstanceToEntity(def, instance, index);
+      }),
+    );
+  }
+
+  /** Fetches + normalizes an `*.actor.json` class, caching by classRef (never throws). */
+  private async loadActorClass(classRef: string): Promise<ActorScriptDef> {
+    const cached = this.actorClassCache.get(classRef);
+    if (cached) return cached;
+    let def: ActorScriptDef;
+    try {
+      const response = await fetch(projectFileUrl(classRef), { cache: "no-cache" });
+      def = normalizeActorScriptDef(response.ok ? await response.json() : {}, classRef);
+    } catch {
+      def = normalizeActorScriptDef({}, classRef);
+    }
+    this.actorClassCache.set(classRef, def);
+    return def;
+  }
+
+  /**
+   * Loads the mesh assets referenced by actor classes' MeshRenderer components.
+   * Guards against ids that are absent from the manifest or are not loadable
+   * meshes (a malformed class reference is logged + skipped, not thrown, so it
+   * can't abort the scene). Procedural `shape:<type>` meshes in actors are not
+   * supported in this version (manifest assets only).
+   */
+  private async loadActorMeshModels(): Promise<void> {
+    if (!this.assetLoader) return;
+    const needed = new Set<string>();
+    for (const entity of this.actorEntities) {
+      const renderer = readMeshRendererComponent(entity);
+      if (renderer && !this.models.has(renderer.assetId)) needed.add(renderer.assetId);
+    }
+    if (needed.size === 0) return;
+    const manifest = await this.assetLoader.loadManifest();
+    const loadable: string[] = [];
+    for (const id of needed) {
+      const record = manifest.assets.find((asset) => asset.id === id);
+      if (record && isModelAssetType(assetType(record))) loadable.push(id);
+      else console.warn("[runtime] actor mesh asset missing or not a mesh:", id);
+    }
+    if (loadable.length === 0) return;
+    const models = await this.assetLoader.loadModels(loadable);
+    for (const [id, model] of models) this.models.set(id, model);
+  }
+
+  /**
+   * Adds a renderable object for each actor entity that carries a MeshRenderer,
+   * reusing the single-object (character) render path. Mesh-less logic/trigger
+   * actors get no object but still run as entities (behavior + collider). The
+   * object is tracked by instance index so behavior/physics transform syncs find
+   * it (see applyEntityTransformToRender).
+   */
+  private addActorObjects(): void {
+    this.actorEntities.forEach((entity, index) => {
+      const renderer = readMeshRendererComponent(entity);
+      if (!renderer) return;
+      const gltf = this.models.get(renderer.assetId);
+      if (!gltf) return;
+      const object = createCharacterSceneObject(gltf, entityCharacterItem(entity));
+      object.userData.actorIndex = index;
+      this.scene.add(object);
+      this.actorObjects.set(index, object);
+    });
   }
 
   private async applyAssetUvwMappings(): Promise<void> {

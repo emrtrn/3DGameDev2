@@ -136,6 +136,38 @@ export interface LayoutModelInstances {
   placements: LayoutPlacement[];
 }
 
+/**
+ * A placed instance of an Actor Script class (`*.actor.json`). Unlike a
+ * {@link LayoutPlacement} (which references a mesh asset directly), an actor
+ * instance references a reusable *class* via `classRef` and carries only its
+ * world transform + hierarchy/flags. The runtime resolves the class and spawns
+ * its component template + event bindings (see `engine/scene/actorInstance.ts`).
+ *
+ * Sınıf ≠ Instance: the class is authored once and placed many times. Per-instance
+ * variable/component `overrides` are a deferred phase (kept off the type for now).
+ */
+export interface LayoutActorInstance {
+  /** Path to the `*.actor.json` class-asset, relative to the public root. */
+  classRef: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  groupId?: string;
+  /** Stable id assigned when this object becomes a parent (referenced by children). */
+  nodeId?: string;
+  /** This object's parent, referencing the parent's `nodeId`. */
+  parentId?: string;
+  position: Vec3;
+  /** Legacy Y-only rotation in degrees. Read as a fallback when `rotation` is absent. */
+  rotationYDeg?: number;
+  /** Full Euler rotation (XYZ order) in degrees. Preferred over `rotationYDeg`. */
+  rotation?: Vec3;
+  /** Uniform scalar (legacy) or per-axis scale. */
+  scale?: number | Vec3;
+  /** Editor hint: keep scale axes proportional when editing. */
+  scaleLocked?: boolean;
+}
+
 export interface LayoutCharacter {
   assetId: string;
   name?: string;
@@ -240,4 +272,6 @@ export interface RoomLayout {
   lights?: LayoutLightActor[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];
+  /** Placed Actor Script class instances (resolved + spawned at runtime). */
+  actors?: LayoutActorInstance[];
 }

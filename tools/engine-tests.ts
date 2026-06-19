@@ -137,6 +137,7 @@ import {
   validateAssetCollisionDef,
   validateContentNewPayload,
   validateImportAssetMeta,
+  validateActorInstance,
   validateLayout,
   validateLightActor,
   validatePlacement,
@@ -149,6 +150,11 @@ import {
   defaultActorScriptDef,
   normalizeActorScriptDef,
 } from "../engine/scene/actorScript";
+import {
+  actorInstanceEntityId,
+  actorInstanceToEntity,
+  parseActorInstanceEntityIndex,
+} from "../engine/scene/actorInstance";
 import {
   assetByteSize,
   assetLoadGroup,
@@ -4598,6 +4604,111 @@ check("actor save payload requires a .actor.json path and normalizes the body", 
   assert.throws(() =>
     validateSaveActorPayload({ path: "../secret.actor.json", actor: {} }),
   );
+});
+
+check("actorInstanceToEntity flattens a class + placement into one entity", () => {
+  const def = normalizeActorScriptDef({
+    name: "DoorBP",
+    parentClass: "actor",
+    components: [
+      { id: "root", component: "Transform", props: { position: [9, 9, 9] } },
+      { id: "mesh", parent: "root", component: "MeshRenderer", props: { assetId: "door_01" } },
+      {
+        id: "trig",
+        parent: "root",
+        component: "Collider",
+        props: { shape: "box", size: [1, 2, 1], isStatic: true, isSensor: true },
+      },
+      // Second MeshRenderer is ignored: first node of each kind wins (flat entity).
+      { id: "mesh2", parent: "root", component: "MeshRenderer", props: { assetId: "ignored" } },
+    ],
+    eventBindings: [{ event: "tick", scriptId: "spin", params: { speedDeg: 45 } }],
+  });
+  const entity = actorInstanceToEntity(
+    def,
+    { classRef: "blueprints/DoorBP.actor.json", position: [1, 2, 3], rotationYDeg: 90, scale: 2 },
+    4,
+  );
+
+  assert.equal(entity.id, "actor:4");
+  assert.equal(entity.name, "DoorBP");
+  // Instance transform is authoritative (the root Transform node's props are ignored).
+  const transform = readTransformComponent(entity);
+  assert.deepEqual(transform?.position, [1, 2, 3]);
+  assert.deepEqual(transform?.rotation, [0, 90, 0]);
+  assert.deepEqual(transform?.scale, [2, 2, 2]);
+  // First MeshRenderer wins.
+  assert.equal(readMeshRendererComponent(entity)?.assetId, "door_01");
+  const collider = readColliderComponent(entity);
+  assert.equal(collider?.isSensor, true);
+  // The first event binding compiles to the single Behavior.
+  const behavior = readBehaviorComponent(entity);
+  assert.equal(behavior?.scriptId, "spin");
+  assert.deepEqual(behavior?.params, { speedDeg: 45 });
+
+  // Instance name + hidden flag override the class name and tag the entity.
+  const named = actorInstanceToEntity(
+    def,
+    { classRef: "x.actor.json", position: [0, 0, 0], name: "Front Door", hidden: true },
+    0,
+  );
+  assert.equal(named.name, "Front Door");
+  assert.deepEqual(named.tags, ["hidden"]);
+
+  // Round-trips through the entity-id helpers.
+  assert.equal(parseActorInstanceEntityIndex(actorInstanceEntityId(7)), 7);
+  assert.equal(parseActorInstanceEntityIndex("character:7"), null);
+});
+
+check("actorInstanceToEntity falls back to a Behavior component node when no bindings", () => {
+  const def = normalizeActorScriptDef({
+    name: "Spinner",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "logic", parent: "root", component: "Behavior", props: { scriptId: "spin" } },
+    ],
+    eventBindings: [],
+  });
+  const entity = actorInstanceToEntity(def, { classRef: "s.actor.json", position: [0, 0, 0] }, 1);
+  assert.equal(readBehaviorComponent(entity)?.scriptId, "spin");
+});
+
+check("validateActorInstance allowlists classRef + transform and rejects bad refs", () => {
+  const actor = validateActorInstance({
+    classRef: "blueprints/DoorBP.actor.json",
+    position: [1.23456, 0, -2],
+    name: "Door",
+    rotation: [0, 45, 0],
+    scale: 1.5,
+    sensor: true, // not an instance field → dropped
+  });
+  assert.equal(actor.classRef, "blueprints/DoorBP.actor.json");
+  assert.deepEqual(actor.position, [1.235, 0, -2]);
+  assert.equal(actor.name, "Door");
+  assert.deepEqual(actor.rotation, [0, 45, 0]);
+  assert.equal(actor.scale, 1.5);
+  assert.equal("sensor" in actor, false);
+
+  assert.throws(() => validateActorInstance({ classRef: "DoorBP.json", position: [0, 0, 0] }));
+  assert.throws(() => validateActorInstance({ classRef: "../x.actor.json", position: [0, 0, 0] }));
+  assert.throws(() => validateActorInstance({ classRef: "x.actor.json", position: [0, 0] }));
+});
+
+check("validateLayout round-trips an actors[] array", () => {
+  const layout = validateLayout({
+    schema: 1,
+    name: "WithActors",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    actors: [
+      { classRef: "blueprints/DoorBP.actor.json", position: [1, 0, 1], name: "Door A" },
+    ],
+  }) as RoomLayout;
+  assert.equal(layout.actors?.length, 1);
+  assert.equal(layout.actors?.[0]?.classRef, "blueprints/DoorBP.actor.json");
+  // Idempotent: validating the output again yields the same shape.
+  assert.deepEqual(validateLayout(layout), layout);
 });
 
 check("import asset meta allowlists extensions and rejects unsafe names/types", () => {

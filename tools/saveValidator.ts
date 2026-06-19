@@ -354,6 +354,56 @@ export function validatePlacement(value: unknown): Record<string, unknown> {
   return placement;
 }
 
+/**
+ * Validates one placed Actor Script instance (`{ classRef, transform, ... }`).
+ * Allowlist: a non-empty `.actor.json` `classRef`, position, and the shared
+ * transform/hierarchy/flag fields. Component/behavior data lives in the class,
+ * not the instance, so the rich placement fields (collision, audio, ...) do not
+ * apply here. Per-instance overrides are a deferred phase.
+ */
+export function validateActorInstance(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") {
+    throw new Error("actor instance must be an object");
+  }
+  const entry = value as Record<string, unknown>;
+  if (
+    typeof entry.classRef !== "string" ||
+    entry.classRef.length === 0 ||
+    !entry.classRef.endsWith(".actor.json")
+  ) {
+    throw new Error("actor instance classRef must be a .actor.json path");
+  }
+  if (entry.classRef.includes("..")) throw new Error("actor instance classRef must not contain ..");
+  if (!isNumberTuple(entry.position)) throw new Error("invalid actor instance position");
+
+  const actor: Record<string, unknown> = {
+    classRef: entry.classRef,
+    position: entry.position.map((item) => Number(item.toFixed(3))),
+  };
+  if (typeof entry.name === "string") actor.name = entry.name;
+  if (entry.hidden === true) actor.hidden = true;
+  if (entry.locked === true) actor.locked = true;
+  if (entry.scaleLocked === true) actor.scaleLocked = true;
+  if (typeof entry.groupId === "string") actor.groupId = entry.groupId;
+  if (typeof entry.nodeId === "string") actor.nodeId = entry.nodeId;
+  if (typeof entry.parentId === "string") actor.parentId = entry.parentId;
+  if (entry.rotationYDeg !== undefined) {
+    actor.rotationYDeg = validateRotationDeg(entry.rotationYDeg, "actor rotationYDeg");
+  }
+  if (entry.rotation !== undefined) {
+    if (!isNumberTuple(entry.rotation)) throw new Error("invalid actor rotation");
+    actor.rotation = entry.rotation.map((axis) =>
+      validateRotationDeg(axis, "actor rotation component"),
+    );
+  }
+  if (entry.scale !== undefined) {
+    actor.scale = isNumberTuple(entry.scale)
+      ? entry.scale.map((axis) => validateScaleValue(axis, "actor scale component"))
+      : validateScaleValue(entry.scale, "actor scale");
+  }
+  return actor;
+}
+
 function validateHexColor(value: unknown, label: string): string {
   if (typeof value !== "string" || !/^#[0-9a-fA-F]{6}$/.test(value)) {
     throw new Error(`invalid ${label}: ${value}`);
@@ -516,6 +566,15 @@ export function validateLayout(value: unknown): unknown {
     return entry;
   });
 
+  const actors =
+    layout.actors === undefined
+      ? null
+      : Array.isArray(layout.actors)
+        ? layout.actors.map(validateActorInstance)
+        : (() => {
+            throw new Error("actors must be an array");
+          })();
+
   const output: Record<string, unknown> = {
     schema: 1,
     name: layout.name,
@@ -525,6 +584,7 @@ export function validateLayout(value: unknown): unknown {
   };
   if (worldSettings) output.worldSettings = worldSettings;
   if (lights) output.lights = lights;
+  if (actors) output.actors = actors;
   return output;
 }
 

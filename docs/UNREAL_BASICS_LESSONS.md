@@ -269,6 +269,32 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-19* — **Actor Script Faz 7 — Instance/Spawn katmanı (runtime yarısı).**
+  Placed Actor Script class → runtime spawn dikey kesiti kuruldu (checklist:
+  `docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 7). **Veri modeli:**
+  `LayoutActorInstance { classRef, transform, hierarchy/flags }` +
+  `RoomLayout.actors?` (`engine/scene/layout.ts`); `overrides` ertelendi (Sınıf ≠
+  Instance korunur). **Saf spawn çekirdeği:** yeni `engine/scene/actorInstance.ts`
+  — `actorInstanceToEntity(def, instance, index)` sınıf component-ağacı + instance
+  transform'unu **tek** entity'ye çöker (headless test), `actor:<i>` id
+  helper'ları. **v1 collapse (dokümante):** düz entity = tip başına tek component
+  → her türden ilk node kazanır; instance transform otoriter (root Transform node
+  yok sayılır); event binding'ler tek Behavior'a çöker (ilk binding, yoksa Behavior
+  node). **Runtime:** `RuntimeSceneApp` classRef'leri çözer (cache'li, hatada boş
+  `actor` sınıfına düşer — sahne kurulmasını bozmaz), actor mesh asset'lerini
+  manifest'e karşı guard'lı yükler, tek-Object3D (character) render yolunu yeniden
+  kullanır, entity'leri sahne dokümanına ekleyip `physics`/`behavior.setEntities`
+  ile bağlar; `actor:<i>` transform-sync render yoluna eklendi (behavior-sürücülü
+  hareket/spin objeyi günceller). **Save:** `validateActorInstance` + `validateLayout`
+  `actors[]` allowlist (`tools/saveValidator.ts`) → `/__save-layout` actor'ları
+  korur. **Gate:** tsc temiz · engine 175 → **179** · build başarılı (game bundle
+  79.2→84.0 kB, editör sızıntısı yok). **Nerede durdu / karar:** Slice 3 = editör-içi
+  yerleştirme (content'ten sürükle-bırak + seç + gizmo + outliner) **bir sonraki
+  oturuma bırakıldı**; kapsam (tam birinci-sınıf nesne vs. minimal "Place in Level")
+  açık. Drop pipeline: `editor/input/bindings.ts:onAssetDrop` desenini izle, yeni
+  `application/x-forge-actor-class` payload'ı + editör seçim union'ına (`editor/core/
+  selection.ts`) `actor` türü ekle. Kullanıcı başka bilgisayardan devam edecek.
+
 - *2026-06-19* — **Actor Script (Blueprint) sistemi — authoring dikey kesiti.**
   Unreal Actor Blueprint'in Forge'a uygun, **veri-odaklı** versiyonu kuruldu
   (rapor + checklist: `docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md`). **Karar:** görsel
