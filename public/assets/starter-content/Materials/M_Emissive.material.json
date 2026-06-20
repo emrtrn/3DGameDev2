@@ -13,6 +13,6 @@
   "alphaMode": "opaque",
   "alphaTest": 0.5,
   "side": "front",
-  "emissive": "#46b5ff",
-  "emissiveIntensity": 6.1
+  "emissive": "#ffffff",
+  "emissiveIntensity": 10
 }

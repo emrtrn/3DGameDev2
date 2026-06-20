@@ -321,6 +321,57 @@ export interface LayoutCloudLayer {
   speed?: number;
 }
 
+/**
+ * Singleton environment actor: a Reflection Environment (à la Unreal's Sky Light
+ * static capture). Snapshots the Sky Atmosphere into a prefiltered environment
+ * map that drives image-based reflections + ambient bounce on every PBR surface.
+ * All fields are optional; absent reads the defaults in
+ * `engine/scene/reflection.ts`. Faz 1 captures only the sky (`source: "sky"`); a
+ * positional Sphere Reflection Capture is intentionally out of scope.
+ */
+export interface LayoutReflection {
+  /** Display name in the Outliner. Absent means "Reflection Environment". */
+  name?: string;
+  /** Hidden/disabled in editor + runtime (no environment). Absent means false. */
+  hidden?: boolean;
+  /** Capture source. Faz 1 only supports `"sky"`. */
+  source?: "sky";
+  /** Reflection + ambient bounce strength (maps to `scene.environmentIntensity`). */
+  intensity?: number;
+}
+
+/**
+ * Singleton environment actor: global Post Process settings. Faz 1 is limited to
+ * renderer-property exposure + tone mapping; pass-based effects arrive later.
+ */
+export interface LayoutPostProcess {
+  /** Display name in the Outliner. Absent means "Post Process". */
+  name?: string;
+  /** Hidden/disabled in editor + runtime. Absent means false. */
+  hidden?: boolean;
+  /** Manual exposure multiplier mapped to `renderer.toneMappingExposure`. */
+  exposure?: number;
+  /** Renderer tone mapper. Absent means ACES filmic. */
+  toneMapping?: "aces" | "neutral" | "none";
+  /** Bloom full-screen pass settings. */
+  bloom?: {
+    enabled?: boolean;
+    threshold?: number;
+    intensity?: number;
+    radius?: number;
+  };
+  /** Vignette full-screen pass settings. */
+  vignette?: {
+    enabled?: boolean;
+    intensity?: number;
+    offset?: number;
+  };
+  /** Global color saturation multiplier; 1 is neutral. */
+  saturation?: number;
+  /** Global contrast multiplier; 1 is neutral. */
+  contrast?: number;
+}
+
 export interface LayoutLightActor {
   id: string;
   type: LayoutLightType;
@@ -356,6 +407,10 @@ export interface RoomLayout {
   heightFog?: LayoutHeightFog;
   /** Optional singleton static Cloud Layer environment actor. */
   cloudLayer?: LayoutCloudLayer;
+  /** Optional singleton Reflection Environment (Sky Light) actor. */
+  reflection?: LayoutReflection;
+  /** Optional singleton global Post Process settings actor. */
+  postProcess?: LayoutPostProcess;
   lights?: LayoutLightActor[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];

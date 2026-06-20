@@ -1,13 +1,18 @@
 {
   "schema": 1,
+  "type": "material",
   "materialType": "standard",
   "name": "Metal Material",
-  "baseColor": "#b9c0c7",
+  "baseColor": "#ffffff",
   "baseColorTexture": "starter-tex-roughness-mid",
   "normalTexture": "starter-tex-flat-normal",
+  "maskTexture": null,
   "roughness": 0.32,
   "metalness": 1,
   "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
   "emissive": "#000000",
   "emissiveIntensity": 0
 }

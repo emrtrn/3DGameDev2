@@ -10,14 +10,11 @@ import type {
   Material,
   Object3D,
   Scene,
-  WebGLRenderer,
 } from "three";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { OutlinePass } from "three/examples/jsm/postprocessing/OutlinePass.js";
-import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 
 import { isRenderableMesh } from "@engine/render-three/materials";
+import type { PostProcessPipeline } from "@engine/render-three/postProcess";
 
 const OUTLINE_COLOR = new Color(0xff9a1f);
 
@@ -28,9 +25,7 @@ const OUTLINE_COLOR = new Color(0xff9a1f);
  */
 export class EditorSelectionOutline {
   private readonly scene: Scene;
-  private readonly composer: EffectComposer;
   private readonly outlinePass: OutlinePass;
-  private readonly outputPass: OutputPass;
   private readonly proxyRoot = new Group();
   private readonly invisibleMaterial = new MeshBasicMaterial({
     colorWrite: false,
@@ -38,18 +33,15 @@ export class EditorSelectionOutline {
   });
 
   constructor(options: {
-    renderer: WebGLRenderer;
     scene: Scene;
     camera: Camera;
+    pipeline: PostProcessPipeline;
     width: number;
     height: number;
   }) {
     this.scene = options.scene;
     this.proxyRoot.name = "editor-selection-outline-proxies";
     this.scene.add(this.proxyRoot);
-
-    this.composer = new EffectComposer(options.renderer);
-    this.composer.addPass(new RenderPass(options.scene, options.camera));
 
     this.outlinePass = new OutlinePass(
       new Vector2(options.width, options.height),
@@ -63,21 +55,7 @@ export class EditorSelectionOutline {
     this.outlinePass.edgeThickness = 1.5;
     this.outlinePass.edgeGlow = 0;
     this.outlinePass.pulsePeriod = 0;
-    this.composer.addPass(this.outlinePass);
-    // Final pass: encode the linear composite to the renderer's outputColorSpace
-    // (sRGB) + apply tone mapping. Without it the EffectComposer's linear buffers
-    // are written to the sRGB canvas unconverted, so the scene looks dark.
-    this.outputPass = new OutputPass();
-    this.composer.addPass(this.outputPass);
-    this.composer.setSize(options.width, options.height);
-  }
-
-  render(deltaSeconds: number): void {
-    this.composer.render(deltaSeconds);
-  }
-
-  setSize(width: number, height: number): void {
-    this.composer.setSize(width, height);
+    options.pipeline.addPassBeforeOutput(this.outlinePass);
   }
 
   setTargets(targets: Object3D[]): void {
@@ -92,9 +70,6 @@ export class EditorSelectionOutline {
     this.clearTargets();
     this.proxyRoot.removeFromParent();
     this.invisibleMaterial.dispose();
-    this.outlinePass.dispose();
-    this.outputPass.dispose();
-    this.composer.dispose();
   }
 
   cloneRenderableMeshes(source: Object3D): Object3D | null {

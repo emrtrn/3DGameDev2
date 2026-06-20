@@ -157,8 +157,14 @@ export class ScenePicker {
       const actor = findParentActor(hit.object);
       return actor ? Number(actor.userData.actorIndex) === selection.index : false;
     }
-    // The Sky Atmosphere + Height Fog + Cloud Layer have no pickable geometry (scene-wide backdrops/effects).
-    if (selection.kind === "sky" || selection.kind === "fog" || selection.kind === "cloud") {
+    // Environment singletons have no pickable geometry.
+    if (
+      selection.kind === "sky" ||
+      selection.kind === "fog" ||
+      selection.kind === "cloud" ||
+      selection.kind === "reflection" ||
+      selection.kind === "post"
+    ) {
       return false;
     }
     const character = findParentCharacter(hit.object);

@@ -288,64 +288,64 @@ singleton aktör. Composer **gerekmez** — yalnızca `renderer.toneMapping` /
 
 #### F1.1 — Model (render-agnostik)
 
-- [ ] `engine/scene/postProcess.ts`: `ResolvedPostProcess` (`name`, `hidden`,
+- [x] `engine/scene/postProcess.ts`: `ResolvedPostProcess` (`name`, `hidden`,
       `exposure`, `toneMapping`)
-- [ ] `POST_PROCESS_DEFAULTS` (nötr: `exposure:1`, `toneMapping:"aces"`)
-- [ ] `resolvePostProcess(actor)` — `resolveSkyAtmosphere` ikizi
+- [x] `POST_PROCESS_DEFAULTS` (nötr: `exposure:1`, `toneMapping:"aces"`)
+- [x] `resolvePostProcess(actor)` — `resolveSkyAtmosphere` ikizi
 
 #### F1.2 — Render bağlama
 
-- [ ] `engine/render-three/postProcess.ts`: `applyPostProcessToneMapping(
+- [x] `engine/render-three/postProcess.ts`: `applyPostProcessToneMapping(
       renderer, resolved | null)` → enum'a göre `toneMapping` + `exposure`; null/
       hidden'da bir şey yapmaz (sahiplik koordinasyonu Bölüm D.5)
-- [ ] Model + defaults re-export (Sky'ın render modülü deseni)
+- [x] Model + defaults re-export (Sky'ın render modülü deseni)
 
 #### F1.3 — Layout tipi & persistans
 
-- [ ] `engine/scene/layout.ts`: `LayoutPostProcess` + `RoomLayout.postProcess?`
-- [ ] `tools/saveValidator.ts`: `validatePostProcess` (allowlist, exposure aralık
+- [x] `engine/scene/layout.ts`: `LayoutPostProcess` + `RoomLayout.postProcess?`
+- [x] `tools/saveValidator.ts`: `validatePostProcess` (allowlist, exposure aralık
       reddi, `toneMapping` enum reddi, round-trip — `validateCloudLayer` deseni)
-- [ ] `validateLayout`'a `postProcess` bağlı (`vite.config.ts` zaten import eder)
-- [ ] CLAUDE.md allowlist gotcha notuna `postProcess` eklendi
+- [x] `validateLayout`'a `postProcess` bağlı (`vite.config.ts` zaten import eder)
+- [x] CLAUDE.md allowlist gotcha notuna `postProcess` eklendi
 
 #### F1.4 — Seçim & Outliner/Details VM
 
-- [ ] `editor/core/selection.ts`: `kind: "post"` (clone/encode/parse/equals +
+- [x] `editor/core/selection.ts`: `kind: "post"` (clone/encode/parse/equals +
       `PostSelection`)
-- [ ] `editor/core/sceneObjects.ts`: `POST_PROCESS_ASSET_ID`,
+- [x] `editor/core/sceneObjects.ts`: `POST_PROCESS_ASSET_ID`,
       `buildPostEditableSelection` (`category: "visual-effects"`, transform'suz)
-- [ ] `EditableSelection`'a `post?: EditablePostProcess` (+ tip)
+- [x] `EditableSelection`'a `post?: EditablePostProcess` (+ tip)
 
 #### F1.5 — SceneApp orkestrasyon (editör + ortak)
 
-- [ ] `applyPostProcess()` — `layout.postProcess` → tone mapping (Sky'dan **sonra**
+- [x] `applyPostProcess()` — `layout.postProcess` → tone mapping (Sky'dan **sonra**
       çağrılır; PP aktifse Sky'ın `applySkyToneMapping` sonucunu ezer, Bölüm D.5)
-- [ ] `addPostProcess()` / `removePostProcess()` / `setPostProcess(patch, label)`
-- [ ] `commitPostProcess(next, label)` — tek undoable mutasyon (`commitSky` ikizi)
-- [ ] `rename`/`setHidden`/`deleteSelected` + singleton dalları `kind: "post"`
+- [x] `addPostProcess()` / `removePostProcess()` / `setPostProcess(patch, label)`
+- [x] `commitPostProcess(next, label)` — tek undoable mutasyon (`commitSky` ikizi)
+- [x] `rename`/`setHidden`/`deleteSelected` + singleton dalları `kind: "post"`
 
 #### F1.6 — Runtime bağlama
 
-- [ ] `RuntimeSceneApp.applyRuntimePostProcess()` yükleme yolunda tone mapping'i
+- [x] `RuntimeSceneApp.applyRuntimePostProcess()` yükleme yolunda tone mapping'i
       uyguluyor; Play editörle birebir aynı (Sky çakışması çözülmüş)
 
 #### F1.7 — Editör UI
 
-- [ ] "Visual Effects" başlığına `<button data-add-post-process>Post Process</button>`
-- [ ] Tıkla-ekle bağlaması (`addPostProcess()`), Sky handler ikizi — drag yok
-- [ ] `renderPostDetails(selection)`: name, exposure, tonemapper (aces/neutral/
+- [x] "Visual Effects" başlığına `<button data-add-post-process>Post Process</button>`
+- [x] Tıkla-ekle bağlaması (`addPostProcess()`), Sky handler ikizi — drag yok
+- [x] `renderPostDetails(selection)`: name, exposure, tonemapper (aces/neutral/
       none) + `setPostProcess` bağlamaları
-- [ ] `renderDetails` içinde `selection.kind === "post"` dalı
-- [ ] Outliner harfi `kind === "post"` → "P"
+- [x] `renderDetails` içinde `selection.kind === "post"` dalı
+- [x] Outliner harfi `kind === "post"` → "P"
 
 #### F1.8 — Test & doğrulama
 
-- [ ] `tools/engine-tests.ts`: `resolvePostProcess` defaults; tone mapping/
+- [x] `tools/engine-tests.ts`: `resolvePostProcess` defaults; tone mapping/
       exposure sahipliği — **PP varken Sky'ı ezer, PP yokken Sky yönetir** testi
-- [ ] Save round-trip testi (`validatePostProcess` + `validateLayout`; alanlar
+- [x] Save round-trip testi (`validatePostProcess` + `validateLayout`; alanlar
       düşmüyor, enum dışı `toneMapping` reddediliyor)
-- [ ] `npx tsc --noEmit` temiz; `node tools/run-engine-tests.mjs` yeşil
-- [ ] Manuel akış (tarayıcı): Add → Details (exposure/tonemapper) → Play'de aynı →
+- [x] `npx tsc --noEmit` temiz; `node tools/run-engine-tests.mjs` yeşil
+- [x] Manuel akış (tarayıcı): Add → Details (exposure/tonemapper) → Play'de aynı →
       Save/Reload → Undo/Redo → Delete *(dev sunucusu playground.json'u autosave
       ile yeniden yazdığından elle test kullanıcıya bırakılır)*
 
@@ -359,23 +359,23 @@ Film Grain, AO, opsiyonel SMAA. Faz 1 yeşil geçtikten sonra; istenmezse iptal.
 
 #### F2.0 — Paylaşılan composer boru hattı (Bölüm E — önce bu)
 
-- [ ] `engine/render-three/postProcess.ts`'e composer kurucu: `RenderPass …
+- [x] `engine/render-three/postProcess.ts`'e composer kurucu: `RenderPass …
       OutputPass`, efekt `enabled` set'ine göre ara pass ekleme
-- [ ] `EditorSelectionOutline` paylaşılan boru hattına OutlinePass enjekte edecek
+- [x] `EditorSelectionOutline` paylaşılan boru hattına OutlinePass enjekte edecek
       şekilde refaktör (editörde tek composer)
-- [ ] `RuntimeSceneApp.start`: composer'lı efekt aktifse `pipeline.render`, değilse
+- [x] `RuntimeSceneApp.start`: composer'lı efekt aktifse `pipeline.render`, değilse
       düz render
-- [ ] Resize yolu: editör + runtime `setSize` boru hattına bağlı
-- [ ] Composer'lı efekt yokken davranış birebir korunuyor (editör outline + Faz 1
+- [x] Resize yolu: editör + runtime `setSize` boru hattına bağlı
+- [x] Composer'lı efekt yokken davranış birebir korunuyor (editör outline + Faz 1
       tone mapping yolu)
 
 #### F2.1 — İlk pass efektleri (onaylı set: Bloom, Vignette, Saturation/Contrast)
 
-- [ ] **Bloom** (`UnrealBloomPass`): `bloom{enabled,threshold,intensity,radius}`,
+- [x] **Bloom** (`UnrealBloomPass`): `bloom{enabled,threshold,intensity,radius}`,
       100u ölçeğine ayarlı + Details + validator
-- [ ] **Vignette** (`ShaderPass`+`VignetteShader`): `vignette{enabled,intensity,
+- [x] **Vignette** (`ShaderPass`+`VignetteShader`): `vignette{enabled,intensity,
       offset}` + Details + validator
-- [ ] **Saturation/Contrast** (ColorCorrection tarzı grading shader):
+- [x] **Saturation/Contrast** (ColorCorrection tarzı grading shader):
       `saturation`, `contrast` + Details + validator
 
 #### F2.2 — İleri pass efektleri (opsiyonel)

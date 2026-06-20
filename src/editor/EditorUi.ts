@@ -36,6 +36,8 @@ import type {
   LayoutHeightFog,
   LayoutParticleEmitter,
   LayoutPhysics,
+  LayoutPostProcess,
+  LayoutReflection,
   LayoutSkyAtmosphere,
   MetadataValue,
 } from "@engine/scene/layout";
@@ -309,6 +311,8 @@ export class EditorUi {
               <button type="button" data-add-sky-atmosphere>Sky Atmosphere</button>
               <button type="button" data-add-height-fog>Exponential Height Fog</button>
               <button type="button" data-add-cloud-layer>Cloud Layer</button>
+              <button type="button" data-add-reflection>Reflection Environment</button>
+              <button type="button" data-add-post-process>Post Process</button>
               <div class="add-actor-section-title">Gameplay</div>
               <button type="button" data-add-player-start>Player Start</button>
             </div>
@@ -590,6 +594,20 @@ export class EditorUi {
       .querySelector<HTMLButtonElement>("[data-add-cloud-layer]")
       ?.addEventListener("click", () => {
         this.app.addCloudLayer();
+      });
+
+    // Reflection Environment (Sky Light) is a transform-less singleton actor.
+    this.root
+      .querySelector<HTMLButtonElement>("[data-add-reflection]")
+      ?.addEventListener("click", () => {
+        this.app.addReflection();
+      });
+
+    // Post Process is a transform-less singleton environment actor.
+    this.root
+      .querySelector<HTMLButtonElement>("[data-add-post-process]")
+      ?.addEventListener("click", () => {
+        this.app.addPostProcess();
       });
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
@@ -2202,6 +2220,14 @@ export class EditorUi {
       this.renderCloudDetails(selection);
       return;
     }
+    if (selection.kind === "reflection" && selection.reflection) {
+      this.renderReflectionDetails(selection);
+      return;
+    }
+    if (selection.kind === "post" && selection.post) {
+      this.renderPostDetails(selection);
+      return;
+    }
 
     this.detailsScale = [...selection.scale];
 
@@ -2771,8 +2797,14 @@ export class EditorUi {
    * core stays generic: groups/fields come from the project's metadata schema.
    */
   private renderMetadataSections(selection: EditableSelection): string {
-    // The Sky Atmosphere + Height Fog + Cloud Layer carry no schema-driven gameplay metadata.
-    if (selection.kind === "sky" || selection.kind === "fog" || selection.kind === "cloud") {
+    // Environment singletons carry no schema-driven gameplay metadata.
+    if (
+      selection.kind === "sky" ||
+      selection.kind === "fog" ||
+      selection.kind === "cloud" ||
+      selection.kind === "reflection" ||
+      selection.kind === "post"
+    ) {
       return "";
     }
     const groups = metadataGroupsForTarget(this.metadataSchema, {
@@ -2951,7 +2983,9 @@ export class EditorUi {
       !this.selected ||
       this.selected.kind === "sky" ||
       this.selected.kind === "fog" ||
-      this.selected.kind === "cloud"
+      this.selected.kind === "cloud" ||
+      this.selected.kind === "reflection" ||
+      this.selected.kind === "post"
     ) {
       return null;
     }
@@ -3336,6 +3370,256 @@ export class EditorUi {
     });
   }
 
+  /**
+   * Details panel for the singleton Reflection Environment (Sky Light). The
+   * environment is captured from the Sky Atmosphere; Intensity scales the
+   * reflection + ambient bounce, and Recapture re-bakes from the current sun.
+   */
+  private renderReflectionDetails(selection: EditableSelection): void {
+    const reflection = selection.reflection;
+    if (!reflection) return;
+    this.detailsScale = [1, 1, 1];
+    this.detailsBody.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>visual effect / reflection environment</span>
+      </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-reflection-name type="text" value="${escapeHtml(reflection.name)}" placeholder="Reflection Environment" />
+      </label>
+      <div class="detail-section">
+        <div class="detail-section-title">Sky Light Capture</div>
+        <label class="detail-row">
+          <span>Source</span>
+          <select data-reflection-source>
+            <option value="sky" ${reflection.source === "sky" ? "selected" : ""}>Sky Atmosphere</option>
+          </select>
+        </label>
+        <label class="detail-row">
+          <span>Intensity</span>
+          <input data-reflection-intensity type="number" step="0.05" min="0" max="4"
+            value="${reflection.intensity}" />
+        </label>
+        <button type="button" data-reflection-recapture class="detail-button">Recapture from Sky</button>
+        <div class="detail-hint">Static capture: reflections refresh on sky edits — press Recapture after rotating the Sun.</div>
+      </div>
+    `;
+
+    const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-reflection-name]");
+    nameInput?.addEventListener("change", () => {
+      const value = nameInput.value.trim();
+      this.app.setReflection(
+        { name: value.length > 0 ? value : undefined },
+        "Rename Reflection Environment",
+      );
+    });
+
+    this.detailsBody.querySelector<HTMLSelectElement>("[data-reflection-source]")?.addEventListener(
+      "change",
+      (event) => {
+        const value = (event.currentTarget as HTMLSelectElement).value;
+        if (value !== "sky") return;
+        this.app.setReflection(
+          { source: value as LayoutReflection["source"] },
+          "Edit Reflection Environment",
+        );
+      },
+    );
+
+    this.detailsBody
+      .querySelector<HTMLInputElement>("[data-reflection-intensity]")
+      ?.addEventListener("change", (event) => {
+        const value = Number((event.currentTarget as HTMLInputElement).value);
+        if (!Number.isFinite(value)) return;
+        this.app.setReflection({ intensity: value }, "Edit Reflection Environment");
+      });
+
+    this.detailsBody
+      .querySelector<HTMLButtonElement>("[data-reflection-recapture]")
+      ?.addEventListener("click", () => {
+        this.app.recaptureReflection();
+      });
+  }
+
+  /** Details panel for the singleton global Post Process actor (Faz 1). */
+  private renderPostDetails(selection: EditableSelection): void {
+    const post = selection.post;
+    if (!post) return;
+    this.detailsScale = [1, 1, 1];
+    this.detailsBody.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>visual effect / post process</span>
+      </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-post-name type="text" value="${escapeHtml(post.name)}" placeholder="Post Process" />
+      </label>
+      <div class="detail-section">
+        <div class="detail-section-title">Exposure & Tone Mapping</div>
+        <label class="detail-row">
+          <span>Exposure</span>
+          <input data-post-exposure type="number" step="0.05" min="0" max="4"
+            value="${post.exposure}" />
+        </label>
+        <label class="detail-row">
+          <span>Tonemapper</span>
+          <select data-post-tone-mapping>
+            <option value="aces" ${post.toneMapping === "aces" ? "selected" : ""}>ACES Filmic</option>
+            <option value="neutral" ${post.toneMapping === "neutral" ? "selected" : ""}>Neutral</option>
+            <option value="none" ${post.toneMapping === "none" ? "selected" : ""}>None</option>
+          </select>
+        </label>
+        <div class="detail-hint">Active Post Process overrides Sky exposure/tone mapping.</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Bloom</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-post-bloom-enabled ${post.bloom.enabled ? "checked" : ""} />
+          <span>Enabled</span>
+        </label>
+        <label class="detail-row">
+          <span>Threshold</span>
+          <input data-post-bloom-number="threshold" type="number" step="0.05" min="0" max="2"
+            value="${post.bloom.threshold}" />
+        </label>
+        <label class="detail-row">
+          <span>Intensity</span>
+          <input data-post-bloom-number="intensity" type="number" step="0.05" min="0" max="5"
+            value="${post.bloom.intensity}" />
+        </label>
+        <label class="detail-row">
+          <span>Radius</span>
+          <input data-post-bloom-number="radius" type="number" step="0.05" min="0" max="2"
+            value="${post.bloom.radius}" />
+        </label>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Color Grading</div>
+        <label class="detail-row">
+          <span>Saturation</span>
+          <input data-post-number="saturation" type="number" step="0.05" min="0" max="2"
+            value="${post.saturation}" />
+        </label>
+        <label class="detail-row">
+          <span>Contrast</span>
+          <input data-post-number="contrast" type="number" step="0.05" min="0" max="2"
+            value="${post.contrast}" />
+        </label>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Vignette</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-post-vignette-enabled ${post.vignette.enabled ? "checked" : ""} />
+          <span>Enabled</span>
+        </label>
+        <label class="detail-row">
+          <span>Intensity</span>
+          <input data-post-vignette-number="intensity" type="number" step="0.05" min="0" max="2"
+            value="${post.vignette.intensity}" />
+        </label>
+        <label class="detail-row">
+          <span>Offset</span>
+          <input data-post-vignette-number="offset" type="number" step="0.05" min="0" max="2"
+            value="${post.vignette.offset}" />
+        </label>
+      </div>
+    `;
+
+    const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-post-name]");
+    nameInput?.addEventListener("change", () => {
+      const value = nameInput.value.trim();
+      this.app.setPostProcess(
+        { name: value.length > 0 ? value : undefined },
+        "Rename Post Process",
+      );
+    });
+
+    this.detailsBody.querySelector<HTMLInputElement>("[data-post-exposure]")?.addEventListener(
+      "change",
+      (event) => {
+        const value = Number((event.currentTarget as HTMLInputElement).value);
+        if (!Number.isFinite(value)) return;
+        this.app.setPostProcess({ exposure: value }, "Edit Post Process");
+      },
+    );
+
+    this.detailsBody.querySelector<HTMLSelectElement>("[data-post-tone-mapping]")?.addEventListener(
+      "change",
+      (event) => {
+        const value = (event.currentTarget as HTMLSelectElement).value;
+        if (value !== "aces" && value !== "neutral" && value !== "none") return;
+        this.app.setPostProcess(
+          { toneMapping: value as LayoutPostProcess["toneMapping"] },
+          "Edit Post Process",
+        );
+      },
+    );
+
+    this.detailsBody.querySelector<HTMLInputElement>("[data-post-bloom-enabled]")?.addEventListener(
+      "change",
+      (event) => {
+        this.app.setPostProcess(
+          { bloom: { ...post.bloom, enabled: (event.currentTarget as HTMLInputElement).checked } },
+          "Edit Post Process Bloom",
+        );
+      },
+    );
+
+    this.detailsBody.querySelectorAll<HTMLInputElement>("[data-post-bloom-number]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.postBloomNumber as keyof LayoutPostProcess["bloom"] | undefined;
+        const value = Number(input.value);
+        if (!key || !Number.isFinite(value)) return;
+        this.app.setPostProcess(
+          { bloom: { ...post.bloom, [key]: value } },
+          "Edit Post Process Bloom",
+        );
+      });
+    });
+
+    this.detailsBody.querySelectorAll<HTMLInputElement>("[data-post-number]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.postNumber as "saturation" | "contrast" | undefined;
+        const value = Number(input.value);
+        if (!key || !Number.isFinite(value)) return;
+        this.app.setPostProcess({ [key]: value }, "Edit Post Process Color Grading");
+      });
+    });
+
+    this.detailsBody.querySelector<HTMLInputElement>("[data-post-vignette-enabled]")?.addEventListener(
+      "change",
+      (event) => {
+        this.app.setPostProcess(
+          {
+            vignette: {
+              ...post.vignette,
+              enabled: (event.currentTarget as HTMLInputElement).checked,
+            },
+          },
+          "Edit Post Process Vignette",
+        );
+      },
+    );
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>("[data-post-vignette-number]")
+      .forEach((input) => {
+        input.addEventListener("change", () => {
+          const key = input.dataset.postVignetteNumber as
+            | keyof LayoutPostProcess["vignette"]
+            | undefined;
+          const value = Number(input.value);
+          if (!key || !Number.isFinite(value)) return;
+          this.app.setPostProcess(
+            { vignette: { ...post.vignette, [key]: value } },
+            "Edit Post Process Vignette",
+          );
+        });
+      });
+  }
+
   private handleDetailAction(action: string): void {
     switch (action) {
       case "reset":
@@ -3696,6 +3980,8 @@ function outlinerKindLabel(kind: EditableSceneObject["kind"]): string {
   if (kind === "sky") return "S";
   if (kind === "fog") return "F";
   if (kind === "cloud") return "K";
+  if (kind === "reflection") return "R";
+  if (kind === "post") return "P";
   return "I";
 }
 

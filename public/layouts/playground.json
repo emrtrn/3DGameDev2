@@ -244,27 +244,53 @@
           "scale": 1
         }
       ]
+    },
+    {
+      "assetId": "starter-sm-sphere",
+      "placements": [
+        {
+          "position": [
+            3.01,
+            0.75,
+            -1.81
+          ],
+          "materialSlot": "starter-mat-emissive",
+          "rotationYDeg": 0,
+          "scale": 0.29
+        }
+      ]
     }
   ],
   "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true,
-    "backgroundColor": "#ffffff",
+    "backgroundColor": "#000000",
     "ambientIntensity": 1,
     "gameMode": "forge.tpsCharacter"
   },
   "skyAtmosphere": {
     "rayleigh": 1,
-    "turbidity": 2,
+    "turbidity": 1,
     "mie": 0.001,
-    "mieDirectionalG": 0.9,
-    "exposure": 0.3
+    "mieDirectionalG": 0.7,
+    "exposure": 0.1
   },
   "cloudLayer": {
+    "color": "#ffffff",
     "density": 0.8,
     "softness": 0.5,
     "scale": 2,
     "speed": 0.05
+  },
+  "postProcess": {
+    "toneMapping": "aces",
+    "exposure": 0.8,
+    "bloom": {
+      "enabled": true,
+      "threshold": 0,
+      "intensity": 0.01,
+      "radius": 1
+    }
   },
   "lights": [
     {
@@ -282,7 +308,7 @@
         3.3
       ],
       "color": "#fef2d2",
-      "intensity": 2,
+      "intensity": 1,
       "castShadow": true
     }
   ],

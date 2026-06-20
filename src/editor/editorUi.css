@@ -644,6 +644,13 @@ body.editor-mode #debug-stats {
   color: #9aa4a9;
 }
 
+/* Full-width action button inside a detail section (e.g. Recapture from Sky). */
+.editor-shell .detail-button {
+  width: 100%;
+  padding: 6px 10px;
+  justify-content: center;
+}
+
 /* Component section title with an inline action (e.g. Remove Component). */
 .detail-component-title {
   display: flex;

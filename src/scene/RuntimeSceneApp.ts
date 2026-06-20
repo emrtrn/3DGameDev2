@@ -75,6 +75,13 @@ import {
   resolveCloudLayer,
   type CloudDome,
 } from "@engine/render-three/cloudLayer";
+import {
+  applyPostProcessToneMapping,
+  createPostProcessEffectPasses,
+  hasPostProcessEffectPasses,
+  PostProcessPipeline,
+  resolvePostProcess,
+} from "@engine/render-three/postProcess";
 import { readRotation } from "@engine/scene/transform";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
@@ -207,6 +214,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Sky Atmosphere dome (singleton); null when no sky actor is in the layout. */
   private skyObject: Sky | null = null;
   private cloudObject: CloudDome | null = null;
+  private postProcessPipeline: PostProcessPipeline | null = null;
   private cameraViewTouched = false;
   /** Latest per-entity locomotion snapshot a behavior reported (read by the Game Mode). */
   private readonly locomotionReports = new Map<string, LocomotionInput>();
@@ -311,7 +319,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         followCameraWithClouds(this.cloudObject, this.camera);
         advanceCloudTime(this.cloudObject, deltaMs / 1000);
       }
-      this.renderer.render(this.scene, this.camera);
+      if (this.postProcessPipeline) this.postProcessPipeline.render(deltaMs / 1000);
+      else this.renderer.render(this.scene, this.camera);
       this.onFrame?.(deltaMs);
     };
     this.frameHandle = requestAnimationFrame(loop);
@@ -328,6 +337,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.particleEffects = [];
     this.gameModeSession?.dispose();
+    this.postProcessPipeline?.dispose();
+    this.postProcessPipeline = null;
     void this.engineApp.dispose();
     this.renderer.dispose();
   }
@@ -391,6 +402,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.fitSunShadowToScene();
     this.applyBackgroundAndAmbient();
     this.applyRuntimeSky();
+    this.applyRuntimePostProcess();
     this.applyRuntimeFog();
     this.applyRuntimeClouds();
 
@@ -1037,6 +1049,31 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     followCameraWithClouds(this.cloudObject, this.camera);
   }
 
+  /** Applies global Post Process renderer properties after Sky tone mapping. */
+  private applyRuntimePostProcess(): void {
+    const actor = this.layout?.postProcess ?? null;
+    const resolved = actor ? resolvePostProcess(actor) : null;
+    applyPostProcessToneMapping(this.renderer, resolved);
+    if (!hasPostProcessEffectPasses(resolved)) {
+      this.postProcessPipeline?.dispose();
+      this.postProcessPipeline = null;
+      return;
+    }
+    this.postProcessPipeline ??= new PostProcessPipeline({
+      renderer: this.renderer,
+      scene: this.scene,
+      camera: this.camera,
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
+    this.postProcessPipeline.setEffectPasses(
+      createPostProcessEffectPasses(resolved, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }),
+    );
+  }
+
   /** The scene's Sun light actor (preferred id, else the first directional light). */
   private sunLightActor(): LayoutLightActor | null {
     const lights = this.layout?.lights;
@@ -1065,6 +1102,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       viewTouched: this.cameraViewTouched,
     });
     if (resetView) this.cameraViewTouched = false;
+    this.postProcessPipeline?.setSize(window.innerWidth, window.innerHeight);
   };
 }
 

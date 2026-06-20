@@ -158,6 +158,8 @@ import {
   validateSkyAtmosphere,
   validateHeightFog,
   validateCloudLayer,
+  validateReflection,
+  validatePostProcess,
   validateSaveActorPayload,
   validateNewBehaviorPayload,
   resolveBehaviorStub,
@@ -202,7 +204,10 @@ import {
 import { colliderBoxFromBounds } from "../engine/render-three/transforms";
 import { collisionWireboxes } from "../engine/render-three/collisionView";
 import { attachActorLight } from "../engine/render-three/lights";
-import { sunDirectionFromLightRotation } from "../engine/render-three/skyAtmosphere";
+import {
+  applySkyToneMapping,
+  sunDirectionFromLightRotation,
+} from "../engine/render-three/skyAtmosphere";
 import {
   applySceneFog,
   resolveHeightFog,
@@ -214,6 +219,17 @@ import {
   resolveCloudLayer,
   CLOUD_LAYER_DEFAULTS,
 } from "../engine/render-three/cloudLayer";
+import {
+  applyPostProcessToneMapping,
+  hasPostProcessEffectPasses,
+  resolvePostProcess,
+  POST_PROCESS_DEFAULTS,
+} from "../engine/render-three/postProcess";
+import {
+  applyReflectionEnvironment,
+  resolveReflection,
+  REFLECTION_DEFAULTS,
+} from "../engine/render-three/reflection";
 import {
   COLLISION_CHANNELS,
   COLLISION_OBJECT_CHANNEL_BITS,
@@ -241,6 +257,7 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
   AmbientLight,
   AnimationClip,
+  ACESFilmicToneMapping,
   Box3,
   BoxGeometry,
   Color,
@@ -248,6 +265,8 @@ import {
   Fog,
   FogExp2,
   Mesh,
+  NeutralToneMapping,
+  NoToneMapping,
   Object3D,
   PerspectiveCamera,
   Scene,
@@ -5402,6 +5421,222 @@ check("validateCloudLayer allowlists fields and round-trips through validateLayo
     cloudLayer: { coverage: 0.6, density: 0.7 },
   }) as RoomLayout;
   assert.deepEqual(layout.cloudLayer, { coverage: 0.6, density: 0.7 });
+  assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("resolveReflection fills defaults and overrides per field", () => {
+  assert.deepEqual(resolveReflection(null), REFLECTION_DEFAULTS);
+  assert.deepEqual(resolveReflection(undefined), REFLECTION_DEFAULTS);
+  const resolved = resolveReflection({ intensity: 2, name: "Sky IBL" });
+  assert.equal(resolved.intensity, 2);
+  assert.equal(resolved.name, "Sky IBL");
+  // Unset fields fall back to defaults.
+  assert.equal(resolved.source, REFLECTION_DEFAULTS.source);
+  assert.equal(resolved.hidden, REFLECTION_DEFAULTS.hidden);
+});
+
+check("applyReflectionEnvironment hangs/clears the captured environment", () => {
+  const texture = new Texture();
+  const target = { texture } as unknown as import("three").WebGLRenderTarget;
+  const scene = {
+    environment: null,
+    environmentIntensity: 1,
+  } as unknown as import("three").Scene;
+
+  applyReflectionEnvironment(scene, target, resolveReflection({ intensity: 1.5 }));
+  assert.equal(scene.environment, texture);
+  assert.equal(scene.environmentIntensity, 1.5);
+
+  // A hidden reflection clears the environment.
+  applyReflectionEnvironment(scene, target, resolveReflection({ hidden: true }));
+  assert.equal(scene.environment, null);
+
+  // A missing capture target clears too, even when visible.
+  scene.environment = texture;
+  applyReflectionEnvironment(scene, null, resolveReflection({}));
+  assert.equal(scene.environment, null);
+});
+
+check("validateReflection allowlists fields and round-trips through validateLayout", () => {
+  // A present reflection with all-defaults still round-trips as `{}` so it is never lost.
+  assert.deepEqual(validateReflection({}), {});
+  assert.equal(validateReflection(undefined), null);
+
+  const reflection = validateReflection({
+    name: "Sky Light",
+    hidden: true,
+    source: "sky",
+    intensity: 2.5,
+    bogusField: "dropped",
+  });
+  assert.deepEqual(reflection, {
+    name: "Sky Light",
+    hidden: true,
+    source: "sky",
+    intensity: 2.5,
+  });
+  // Unknown source rejects; out-of-range intensity rejects the save.
+  assert.throws(() => validateReflection({ source: "scene" }));
+  assert.throws(() => validateReflection({ intensity: 99 }));
+
+  const layout = validateLayout({
+    schema: 1,
+    name: "WithReflection",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    reflection: { intensity: 1.5 },
+  }) as RoomLayout;
+  assert.deepEqual(layout.reflection, { intensity: 1.5 });
+  assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("resolvePostProcess fills defaults and overrides per field", () => {
+  assert.deepEqual(resolvePostProcess(null), POST_PROCESS_DEFAULTS);
+  assert.deepEqual(resolvePostProcess(undefined), POST_PROCESS_DEFAULTS);
+  const resolved = resolvePostProcess({ exposure: 1.5, toneMapping: "neutral" });
+  assert.equal(resolved.exposure, 1.5);
+  assert.equal(resolved.toneMapping, "neutral");
+  assert.equal(resolved.bloom.enabled, POST_PROCESS_DEFAULTS.bloom.enabled);
+  assert.equal(resolved.vignette.intensity, POST_PROCESS_DEFAULTS.vignette.intensity);
+  assert.equal(resolved.name, POST_PROCESS_DEFAULTS.name);
+  assert.equal(resolved.hidden, POST_PROCESS_DEFAULTS.hidden);
+
+  const effects = resolvePostProcess({
+    bloom: { enabled: true, intensity: 1.2 },
+    vignette: { enabled: true, offset: 0.8 },
+    saturation: 1.25,
+    contrast: 0.9,
+  });
+  assert.equal(effects.bloom.enabled, true);
+  assert.equal(effects.bloom.intensity, 1.2);
+  assert.equal(effects.bloom.threshold, POST_PROCESS_DEFAULTS.bloom.threshold);
+  assert.equal(effects.vignette.enabled, true);
+  assert.equal(effects.vignette.offset, 0.8);
+  assert.equal(effects.saturation, 1.25);
+  assert.equal(effects.contrast, 0.9);
+});
+
+check("applyPostProcessToneMapping maps tonemapper enum and ignores hidden/null", () => {
+  const renderer = {
+    toneMapping: NoToneMapping,
+    toneMappingExposure: 1,
+  } as unknown as import("three").WebGLRenderer;
+
+  applyPostProcessToneMapping(renderer, resolvePostProcess({ toneMapping: "aces", exposure: 1.25 }));
+  assert.equal(renderer.toneMapping, ACESFilmicToneMapping);
+  assert.equal(renderer.toneMappingExposure, 1.25);
+
+  applyPostProcessToneMapping(renderer, resolvePostProcess({ toneMapping: "neutral", exposure: 0.8 }));
+  assert.equal(renderer.toneMapping, NeutralToneMapping);
+  assert.equal(renderer.toneMappingExposure, 0.8);
+
+  applyPostProcessToneMapping(renderer, resolvePostProcess({ toneMapping: "none", exposure: 2 }));
+  assert.equal(renderer.toneMapping, NoToneMapping);
+  assert.equal(renderer.toneMappingExposure, 2);
+
+  applyPostProcessToneMapping(renderer, resolvePostProcess({ hidden: true, exposure: 3 }));
+  assert.equal(renderer.toneMapping, NoToneMapping);
+  assert.equal(renderer.toneMappingExposure, 2);
+  applyPostProcessToneMapping(renderer, null);
+  assert.equal(renderer.toneMappingExposure, 2);
+});
+
+check("post process tone mapping overrides sky when present", () => {
+  const renderer = {
+    toneMapping: NoToneMapping,
+    toneMappingExposure: 1,
+  } as unknown as import("three").WebGLRenderer;
+
+  applySkyToneMapping(renderer, {
+    name: "Sky",
+    hidden: false,
+    rayleigh: 2,
+    turbidity: 10,
+    mie: 0.005,
+    mieDirectionalG: 0.8,
+    exposure: 0.4,
+  });
+  assert.equal(renderer.toneMapping, ACESFilmicToneMapping);
+  assert.equal(renderer.toneMappingExposure, 0.4);
+
+  applyPostProcessToneMapping(renderer, resolvePostProcess({ toneMapping: "neutral", exposure: 1.7 }));
+  assert.equal(renderer.toneMapping, NeutralToneMapping);
+  assert.equal(renderer.toneMappingExposure, 1.7);
+
+  applySkyToneMapping(renderer, {
+    name: "Sky",
+    hidden: false,
+    rayleigh: 2,
+    turbidity: 10,
+    mie: 0.005,
+    mieDirectionalG: 0.8,
+    exposure: 0.6,
+  });
+  applyPostProcessToneMapping(renderer, null);
+  assert.equal(renderer.toneMapping, ACESFilmicToneMapping);
+  assert.equal(renderer.toneMappingExposure, 0.6);
+});
+
+check("hasPostProcessEffectPasses tracks enabled pass effects only", () => {
+  assert.equal(hasPostProcessEffectPasses(null), false);
+  assert.equal(hasPostProcessEffectPasses(resolvePostProcess({})), false);
+  assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ hidden: true, bloom: { enabled: true } })), false);
+  assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ bloom: { enabled: true } })), true);
+  assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ vignette: { enabled: true } })), true);
+  assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ saturation: 1.1 })), true);
+  assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ contrast: 0.9 })), true);
+});
+
+check("validatePostProcess allowlists fields and round-trips through validateLayout", () => {
+  assert.deepEqual(validatePostProcess({}), {});
+  assert.equal(validatePostProcess(undefined), null);
+
+  const post = validatePostProcess({
+    name: "Cinematic",
+    hidden: true,
+    exposure: 1.35,
+    toneMapping: "neutral",
+    bloom: { enabled: true, threshold: 0.7, intensity: 1.1, radius: 0.3 },
+    vignette: { enabled: true, intensity: 0.45, offset: 0.9 },
+    saturation: 1.2,
+    contrast: 0.85,
+    bogusField: "dropped",
+  });
+  assert.deepEqual(post, {
+    name: "Cinematic",
+    hidden: true,
+    exposure: 1.35,
+    toneMapping: "neutral",
+    bloom: { enabled: true, threshold: 0.7, intensity: 1.1, radius: 0.3 },
+    vignette: { enabled: true, intensity: 0.45, offset: 0.9 },
+    saturation: 1.2,
+    contrast: 0.85,
+  });
+  assert.throws(() => validatePostProcess({ exposure: 99 }));
+  assert.throws(() => validatePostProcess({ toneMapping: "filmic" }));
+  assert.throws(() => validatePostProcess({ bloom: { enabled: "yes" } }));
+  assert.throws(() => validatePostProcess({ vignette: { intensity: 99 } }));
+
+  const layout = validateLayout({
+    schema: 1,
+    name: "WithPost",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    postProcess: {
+      exposure: 1.2,
+      toneMapping: "none",
+      bloom: { enabled: true, intensity: 0.6 },
+      saturation: 1.1,
+    },
+  }) as RoomLayout;
+  assert.deepEqual(layout.postProcess, {
+    exposure: 1.2,
+    toneMapping: "none",
+    bloom: { enabled: true, intensity: 0.6 },
+    saturation: 1.1,
+  });
   assert.deepEqual(validateLayout(layout), layout);
 });
 

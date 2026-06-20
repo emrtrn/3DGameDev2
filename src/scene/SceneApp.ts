@@ -24,7 +24,15 @@ import {
   TextureLoader,
   Vector3,
 } from "three";
-import type { AmbientLight, InstancedMesh, Material, PerspectiveCamera, Scene, WebGLRenderer } from "three";
+import type {
+  AmbientLight,
+  InstancedMesh,
+  Material,
+  PerspectiveCamera,
+  Scene,
+  WebGLRenderer,
+  WebGLRenderTarget,
+} from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
@@ -90,6 +98,17 @@ import {
   resolveCloudLayer,
   type CloudDome,
 } from "@engine/render-three/cloudLayer";
+import {
+  applyPostProcessToneMapping,
+  createPostProcessEffectPasses,
+  PostProcessPipeline,
+  resolvePostProcess,
+} from "@engine/render-three/postProcess";
+import {
+  applyReflectionEnvironment,
+  captureSkyEnvironment,
+  resolveReflection,
+} from "@engine/render-three/reflection";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
   applySceneBackgroundAndAmbient,
@@ -153,6 +172,8 @@ import type {
   LayoutParticleEmitter,
   LayoutPlacement,
   LayoutPhysics,
+  LayoutPostProcess,
+  LayoutReflection,
   LayoutSkyAtmosphere,
   LayoutWorldSettings,
   MetadataValue,
@@ -330,6 +351,9 @@ export class SceneApp {
   /** Sky Atmosphere dome (singleton); null when no sky actor is placed. */
   private skyObject: Sky | null = null;
   private cloudObject: CloudDome | null = null;
+  /** Captured Sky Light environment (PMREM) backing `scene.environment`; null when none. */
+  private reflectionTarget: WebGLRenderTarget | null = null;
+  private postProcessPipeline: PostProcessPipeline | null = null;
   private autoSaveTimer = 0;
   private frameHandle = 0;
   private lastTime = 0;
@@ -541,10 +565,17 @@ export class SceneApp {
     });
 
     if (this.editorEnabled) {
-      this.selectionOutline = new EditorSelectionOutline({
+      this.postProcessPipeline = new PostProcessPipeline({
         renderer: this.renderer,
         scene: this.scene,
         camera: this.camera,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+      this.selectionOutline = new EditorSelectionOutline({
+        scene: this.scene,
+        camera: this.camera,
+        pipeline: this.postProcessPipeline,
         width: window.innerWidth,
         height: window.innerHeight,
       });
@@ -613,7 +644,7 @@ export class SceneApp {
         advanceCloudTime(this.cloudObject, deltaSeconds);
       }
 
-      if (this.selectionOutline) this.selectionOutline.render(deltaSeconds);
+      if (this.postProcessPipeline) this.postProcessPipeline.render(deltaSeconds);
       else this.renderer.render(this.scene, this.camera);
       this.onFrame?.(deltaMs);
     };
@@ -641,6 +672,8 @@ export class SceneApp {
     this.keyboardInput.detach();
     this.selectionOutline?.dispose();
     this.selectionOutline = null;
+    this.postProcessPipeline?.dispose();
+    this.postProcessPipeline = null;
     this.lightOutlineGeometry.dispose();
     // EngineApp.dispose() is async (subsystems may release async resources);
     // SceneApp.dispose() is sync, so fire-and-forget like the renderer teardown.
@@ -774,6 +807,19 @@ export class SceneApp {
       this.setCloudLayer({ name: next.length > 0 ? next : undefined }, "Rename Cloud Layer");
       return;
     }
+    if (selection.kind === "reflection") {
+      const next = name.trim();
+      this.setReflection(
+        { name: next.length > 0 ? next : undefined },
+        "Rename Reflection Environment",
+      );
+      return;
+    }
+    if (selection.kind === "post") {
+      const next = name.trim();
+      this.setPostProcess({ name: next.length > 0 ? next : undefined }, "Rename Post Process");
+      return;
+    }
     this.renameSelection(selection, name);
   }
 
@@ -793,6 +839,17 @@ export class SceneApp {
     }
     if (selection.kind === "cloud") {
       this.setCloudLayer({ hidden }, hidden ? "Hide Cloud Layer" : "Show Cloud Layer");
+      return;
+    }
+    if (selection.kind === "reflection") {
+      this.setReflection(
+        { hidden },
+        hidden ? "Hide Reflection Environment" : "Show Reflection Environment",
+      );
+      return;
+    }
+    if (selection.kind === "post") {
+      this.setPostProcess({ hidden }, hidden ? "Hide Post Process" : "Show Post Process");
       return;
     }
     if (this.editorSceneController.selectedCount > 1 && this.isSelectionSelected(selection)) {
@@ -1410,7 +1467,7 @@ export class SceneApp {
   }
 
   deleteSelected(): void {
-    // The Sky Atmosphere + Height Fog are singletons outside the transform/
+    // Environment singletons are outside the transform/
     // multi-select stack; route their deletes through the dedicated (undoable)
     // commands.
     if (this.selection?.kind === "sky" && this.editorSceneController.selectedCount <= 1) {
@@ -1423,6 +1480,14 @@ export class SceneApp {
     }
     if (this.selection?.kind === "cloud" && this.editorSceneController.selectedCount <= 1) {
       this.removeCloudLayer();
+      return;
+    }
+    if (this.selection?.kind === "reflection" && this.editorSceneController.selectedCount <= 1) {
+      this.removeReflection();
+      return;
+    }
+    if (this.selection?.kind === "post" && this.editorSceneController.selectedCount <= 1) {
+      this.removePostProcess();
       return;
     }
     this.editorSceneController.deleteSelected();
@@ -1869,8 +1934,10 @@ export class SceneApp {
     this.fitSunShadowToScene();
     this.applyBackgroundAndAmbient();
     this.applySkyAtmosphere();
+    this.applyPostProcess();
     this.applyHeightFog();
     this.applyCloudLayer();
+    this.applyReflection(true);
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();
     this.emitHistoryChanged();
@@ -2083,8 +2150,14 @@ export class SceneApp {
       this.rebuildInstanceGroup(selection.assetId);
       return;
     }
-    // The Sky Atmosphere + Height Fog + Cloud Layer have no scene object to re-sync from a transform.
-    if (selection.kind === "sky" || selection.kind === "fog" || selection.kind === "cloud") return;
+    // Environment singletons have no scene object to re-sync from a transform.
+    if (
+      selection.kind === "sky" ||
+      selection.kind === "fog" ||
+      selection.kind === "cloud" ||
+      selection.kind === "reflection" ||
+      selection.kind === "post"
+    ) return;
 
     if (selection.kind === "light") {
       this.refreshLightObject(selection.index);
@@ -2731,6 +2804,9 @@ export class SceneApp {
       if (sky) this.layout.skyAtmosphere = { ...sky };
       else delete this.layout.skyAtmosphere;
       this.applySkyAtmosphere();
+      this.applyPostProcess();
+      // Sky/sun scattering changed → re-bake the Sky Light capture if one exists.
+      this.applyReflection(true);
       if (!this.layout.skyAtmosphere && this.selection?.kind === "sky") this.select(null);
       else this.emitSelectionChanged();
       this.scheduleAutoSave();
@@ -2907,6 +2983,212 @@ export class SceneApp {
   }
 
   /**
+   * Captures/refreshes the Reflection Environment from the Sky Atmosphere and
+   * hangs it on `scene.environment`, so PBR materials reflect it and pick up its
+   * ambient bounce (à la Unreal's Sky Light static capture). `recapture` forces a
+   * fresh PMREM bake (first apply, or the sky/sun changed); otherwise an existing
+   * capture is reused and only the intensity is re-applied. A hidden/absent
+   * reflection — or a scene with no sky to capture from — clears the environment.
+   */
+  private applyReflection(recapture = false): void {
+    const actor = this.layout?.reflection ?? null;
+    if (!actor) {
+      this.disposeReflectionTarget();
+      applyReflectionEnvironment(this.scene, null, null);
+      return;
+    }
+    const resolved = resolveReflection(actor);
+    if (resolved.hidden) {
+      this.disposeReflectionTarget();
+      applyReflectionEnvironment(this.scene, null, resolved);
+      return;
+    }
+    if (recapture || !this.reflectionTarget) {
+      this.disposeReflectionTarget();
+      const skyActor = this.layout?.skyAtmosphere ?? null;
+      if (skyActor) {
+        const sun = this.sunLightActor();
+        const sunDirection = sun
+          ? sunDirectionFromLightRotation(readRotation(sun))
+          : new Vector3(0, 1, 0);
+        this.reflectionTarget = captureSkyEnvironment(
+          this.renderer,
+          resolveSkyAtmosphere(skyActor),
+          sunDirection,
+        );
+      }
+    }
+    applyReflectionEnvironment(this.scene, this.reflectionTarget, resolved);
+  }
+
+  /** Frees the captured PMREM render target backing `scene.environment`, if any. */
+  private disposeReflectionTarget(): void {
+    if (this.reflectionTarget) {
+      this.reflectionTarget.dispose();
+      this.reflectionTarget = null;
+    }
+  }
+
+  /** Adds the singleton Reflection Environment (or selects the existing one). */
+  addReflection(): void {
+    if (!this.layout) return;
+    if (this.layout.reflection) {
+      this.select({ kind: "reflection" });
+      this.onStatus?.("Reflection Environment already exists - selected it.", "info");
+      return;
+    }
+    this.commitReflection({}, "Add Reflection Environment");
+    this.select({ kind: "reflection" });
+    if (this.layout.skyAtmosphere) {
+      this.onStatus?.("Added Reflection Environment.", "info");
+    } else {
+      this.onStatus?.(
+        "Added Reflection Environment. Add a Sky Atmosphere to capture reflections from.",
+        "warning",
+      );
+    }
+  }
+
+  /** Removes the singleton Reflection Environment (undoable). */
+  removeReflection(): void {
+    if (!this.layout?.reflection) return;
+    this.commitReflection(undefined, "Delete Reflection Environment");
+  }
+
+  /**
+   * Applies a partial edit to the Reflection Environment as one undoable command.
+   * A patch value of `undefined` clears that field (reverts to its default).
+   */
+  setReflection(
+    patch: { [K in keyof LayoutReflection]?: LayoutReflection[K] | undefined },
+    label = "Edit Reflection Environment",
+  ): void {
+    if (!this.layout?.reflection) return;
+    const next: LayoutReflection = { ...this.layout.reflection };
+    for (const key of Object.keys(patch) as Array<keyof LayoutReflection>) {
+      const value = patch[key];
+      if (value === undefined) delete next[key];
+      else (next as Record<string, unknown>)[key] = value;
+    }
+    this.commitReflection(next, label);
+  }
+
+  /**
+   * Re-bakes the reflection capture from the current sky/sun. Not undoable: the
+   * captured environment is a derived cache, not layout data, so rotating the Sun
+   * then pressing Recapture refreshes reflections without a history entry.
+   */
+  recaptureReflection(): void {
+    if (!this.layout?.reflection) return;
+    this.applyReflection(true);
+    this.onStatus?.("Recaptured reflections from the sky.", "info");
+  }
+
+  /**
+   * Single undoable Reflection Environment mutation: swaps `layout.reflection`,
+   * recaptures/clears `scene.environment`, and re-emits panels. Selection is
+   * cleared if the actor disappears while it was the active selection.
+   */
+  private commitReflection(
+    nextReflection: LayoutReflection | undefined,
+    label: string,
+  ): void {
+    if (!this.layout) return;
+    const previousReflection = this.layout.reflection
+      ? { ...this.layout.reflection }
+      : undefined;
+
+    const apply = (reflection: LayoutReflection | undefined): void => {
+      if (!this.layout) return;
+      if (reflection) this.layout.reflection = { ...reflection };
+      else delete this.layout.reflection;
+      this.applyReflection();
+      if (!this.layout.reflection && this.selection?.kind === "reflection") this.select(null);
+      else this.emitSelectionChanged();
+      this.scheduleAutoSave();
+    };
+
+    this.executeCommand({
+      label,
+      redo: () => apply(nextReflection),
+      undo: () => apply(previousReflection),
+    });
+  }
+
+  /** Applies the global Post Process renderer properties after Sky tone mapping. */
+  private applyPostProcess(): void {
+    const actor = this.layout?.postProcess ?? null;
+    const resolved = actor ? resolvePostProcess(actor) : null;
+    applyPostProcessToneMapping(this.renderer, resolved);
+    this.postProcessPipeline?.setEffectPasses(
+      createPostProcessEffectPasses(resolved, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }),
+    );
+  }
+
+  /** Adds the singleton Post Process actor (or selects the existing one). */
+  addPostProcess(): void {
+    if (!this.layout) return;
+    if (this.layout.postProcess) {
+      this.select({ kind: "post" });
+      this.onStatus?.("Post Process already exists - selected it.", "info");
+      return;
+    }
+    this.commitPostProcess({}, "Add Post Process");
+    this.select({ kind: "post" });
+    this.onStatus?.("Added Post Process.", "info");
+  }
+
+  /** Removes the singleton Post Process actor (undoable). */
+  removePostProcess(): void {
+    if (!this.layout?.postProcess) return;
+    this.commitPostProcess(undefined, "Delete Post Process");
+  }
+
+  /** Applies a partial edit to Post Process as one undoable command. */
+  setPostProcess(
+    patch: { [K in keyof LayoutPostProcess]?: LayoutPostProcess[K] | undefined },
+    label = "Edit Post Process",
+  ): void {
+    if (!this.layout?.postProcess) return;
+    const next: LayoutPostProcess = { ...this.layout.postProcess };
+    for (const key of Object.keys(patch) as Array<keyof LayoutPostProcess>) {
+      const value = patch[key];
+      if (value === undefined) delete next[key];
+      else (next as Record<string, unknown>)[key] = value;
+    }
+    this.commitPostProcess(next, label);
+  }
+
+  /**
+   * Single undoable Post Process mutation. Sky is applied first so an active PP
+   * actor owns the final renderer tone mapping/exposure.
+   */
+  private commitPostProcess(nextPost: LayoutPostProcess | undefined, label: string): void {
+    if (!this.layout) return;
+    const previousPost = this.layout.postProcess ? { ...this.layout.postProcess } : undefined;
+
+    const apply = (post: LayoutPostProcess | undefined): void => {
+      if (!this.layout) return;
+      if (post) this.layout.postProcess = { ...post };
+      else delete this.layout.postProcess;
+      this.applySkyAtmosphere();
+      this.applyPostProcess();
+      if (!this.layout.postProcess && this.selection?.kind === "post") this.select(null);
+      else this.emitSelectionChanged();
+      this.scheduleAutoSave();
+    };
+
+    this.executeCommand({
+      label,
+      redo: () => apply(nextPost),
+      undo: () => apply(previousPost),
+    });
+  }
+
+  /**
    * World-settings edits persist immediately (debounced) so the user never has
    * to press Save for scene rendering tweaks.
    */
@@ -3001,6 +3283,16 @@ export class SceneApp {
     // The Cloud Layer's visibility is applied through applyCloudLayer().
     if (selection.kind === "cloud") {
       this.applyCloudLayer();
+      return;
+    }
+    // The Reflection Environment's visibility toggles `scene.environment`.
+    if (selection.kind === "reflection") {
+      this.applyReflection();
+      return;
+    }
+    if (selection.kind === "post") {
+      this.applySkyAtmosphere();
+      this.applyPostProcess();
       return;
     }
     const object = this.characterObjects[selection.index];
@@ -3464,6 +3756,12 @@ export class SceneApp {
     if (selection.kind === "cloud") {
       return resolveCloudLayer(this.layout?.cloudLayer ?? null).name;
     }
+    if (selection.kind === "reflection") {
+      return resolveReflection(this.layout?.reflection ?? null).name;
+    }
+    if (selection.kind === "post") {
+      return resolvePostProcess(this.layout?.postProcess ?? null).name;
+    }
     const transform = this.getMutableTransform(selection);
     if (selection.kind === "instance") {
       return transform?.name ?? selection.assetId;
@@ -3522,8 +3820,14 @@ export class SceneApp {
       const actorObject = this.actorObjects[selection.index];
       return actorObject ? new Box3().setFromObject(actorObject) : null;
     }
-    // The Sky Atmosphere + Cloud Layer are backdrops and Height Fog is a scene-wide effect; none has a bounding box.
-    if (selection.kind === "sky" || selection.kind === "fog" || selection.kind === "cloud") {
+    // Environment singletons have no transform bounds.
+    if (
+      selection.kind === "sky" ||
+      selection.kind === "fog" ||
+      selection.kind === "cloud" ||
+      selection.kind === "reflection" ||
+      selection.kind === "post"
+    ) {
       return null;
     }
     const object = this.characterObjects[selection.index];
@@ -3584,6 +3888,10 @@ export class SceneApp {
       const actor = this.layout.actors?.[selection.index];
       if (!actorObject || actor?.hidden) return null;
       return this.selectionOutline.cloneRenderableMeshes(actorObject);
+    }
+
+    if (selection.kind === "reflection" || selection.kind === "post") {
+      return null;
     }
 
     const object = this.characterObjects[selection.index];
@@ -3843,8 +4151,14 @@ export class SceneApp {
     }
     if (selection.kind === "light") return this.layout.lights?.[selection.index] ?? null;
     if (selection.kind === "actor") return this.layout.actors?.[selection.index] ?? null;
-    // The Sky Atmosphere + Height Fog + Cloud Layer are transform-less singletons (no gizmo / move target).
-    if (selection.kind === "sky" || selection.kind === "fog" || selection.kind === "cloud") {
+    // Environment singletons are transform-less (no gizmo / move target).
+    if (
+      selection.kind === "sky" ||
+      selection.kind === "fog" ||
+      selection.kind === "cloud" ||
+      selection.kind === "reflection" ||
+      selection.kind === "post"
+    ) {
       return null;
     }
     return this.layout.characters[selection.index] ?? null;
@@ -4005,6 +4319,8 @@ export class SceneApp {
     if (selection.kind === "sky") return Boolean(this.layout.skyAtmosphere);
     if (selection.kind === "fog") return Boolean(this.layout.heightFog);
     if (selection.kind === "cloud") return Boolean(this.layout.cloudLayer);
+    if (selection.kind === "reflection") return Boolean(this.layout.reflection);
+    if (selection.kind === "post") return Boolean(this.layout.postProcess);
     return Boolean(this.layout.characters[selection.index]);
   }
 
@@ -4018,7 +4334,7 @@ export class SceneApp {
       height,
       viewTouched: this.cameraController.hasTouched,
     });
-    this.selectionOutline?.setSize(width, height);
+    this.postProcessPipeline?.setSize(width, height);
     if (resetView) {
       this.cameraController.syncAnglesFromCurrentView();
     }

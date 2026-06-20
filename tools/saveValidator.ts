@@ -623,6 +623,108 @@ export function validateCloudLayer(value: unknown): Record<string, unknown> | nu
   return cloud;
 }
 
+/**
+ * Allowlist validator for the singleton Reflection Environment (Sky Light) actor.
+ * Faz 1 persists the capture source + reflection intensity. Like the other
+ * singleton environment actors, a present all-defaults actor round-trips as `{}`
+ * so its existence survives the save; only `undefined` returns null.
+ */
+export function validateReflection(value: unknown): Record<string, unknown> | null {
+  if (value === undefined) return null;
+  if (!value || typeof value !== "object") throw new Error("reflection must be an object");
+  const input = value as Record<string, unknown>;
+  const reflection: Record<string, unknown> = {};
+
+  if (typeof input.name === "string" && input.name.length > 0) reflection.name = input.name;
+  if (input.hidden === true) reflection.hidden = true;
+  if (input.source === "sky") {
+    reflection.source = input.source;
+  } else if (input.source !== undefined) {
+    throw new Error("reflection.source must be sky");
+  }
+
+  const intensity = validateOptionalNumber(input.intensity, "reflection.intensity", 0, 4);
+  if (intensity !== undefined) reflection.intensity = intensity;
+
+  return reflection;
+}
+
+/**
+ * Allowlist validator for the singleton global Post Process actor. Faz 1 only
+ * persists renderer-property exposure + tone mapping. Like the other singleton
+ * environment actors, a present all-defaults actor round-trips as `{}`.
+ */
+export function validatePostProcess(value: unknown): Record<string, unknown> | null {
+  if (value === undefined) return null;
+  if (!value || typeof value !== "object") throw new Error("postProcess must be an object");
+  const input = value as Record<string, unknown>;
+  const post: Record<string, unknown> = {};
+
+  if (typeof input.name === "string" && input.name.length > 0) post.name = input.name;
+  if (input.hidden === true) post.hidden = true;
+  if (
+    input.toneMapping === "aces" ||
+    input.toneMapping === "neutral" ||
+    input.toneMapping === "none"
+  ) {
+    post.toneMapping = input.toneMapping;
+  } else if (input.toneMapping !== undefined) {
+    throw new Error("postProcess.toneMapping must be aces, neutral, or none");
+  }
+
+  const exposure = validateOptionalNumber(input.exposure, "postProcess.exposure", 0, 4);
+  if (exposure !== undefined) post.exposure = exposure;
+
+  const bloom = validatePostProcessBloom(input.bloom);
+  if (bloom) post.bloom = bloom;
+  const vignette = validatePostProcessVignette(input.vignette);
+  if (vignette) post.vignette = vignette;
+  const saturation = validateOptionalNumber(input.saturation, "postProcess.saturation", 0, 2);
+  if (saturation !== undefined) post.saturation = saturation;
+  const contrast = validateOptionalNumber(input.contrast, "postProcess.contrast", 0, 2);
+  if (contrast !== undefined) post.contrast = contrast;
+
+  return post;
+}
+
+function validatePostProcessBloom(value: unknown): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("postProcess.bloom must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const bloom: Record<string, unknown> = {};
+  if (input.enabled !== undefined) {
+    if (typeof input.enabled !== "boolean") throw new Error("postProcess.bloom.enabled must be boolean");
+    if (input.enabled) bloom.enabled = true;
+  }
+  const threshold = validateOptionalNumber(input.threshold, "postProcess.bloom.threshold", 0, 2);
+  if (threshold !== undefined) bloom.threshold = threshold;
+  const intensity = validateOptionalNumber(input.intensity, "postProcess.bloom.intensity", 0, 5);
+  if (intensity !== undefined) bloom.intensity = intensity;
+  const radius = validateOptionalNumber(input.radius, "postProcess.bloom.radius", 0, 2);
+  if (radius !== undefined) bloom.radius = radius;
+  return Object.keys(bloom).length > 0 ? bloom : undefined;
+}
+
+function validatePostProcessVignette(value: unknown): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("postProcess.vignette must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const vignette: Record<string, unknown> = {};
+  if (input.enabled !== undefined) {
+    if (typeof input.enabled !== "boolean") throw new Error("postProcess.vignette.enabled must be boolean");
+    if (input.enabled) vignette.enabled = true;
+  }
+  const intensity = validateOptionalNumber(input.intensity, "postProcess.vignette.intensity", 0, 2);
+  if (intensity !== undefined) vignette.intensity = intensity;
+  const offset = validateOptionalNumber(input.offset, "postProcess.vignette.offset", 0, 2);
+  if (offset !== undefined) vignette.offset = offset;
+  return Object.keys(vignette).length > 0 ? vignette : undefined;
+}
+
 export function validateLayout(value: unknown): unknown {
   if (!value || typeof value !== "object") throw new Error("layout must be an object");
   const layout = value as Record<string, unknown>;
@@ -641,6 +743,8 @@ export function validateLayout(value: unknown): unknown {
   const skyAtmosphere = validateSkyAtmosphere(layout.skyAtmosphere);
   const heightFog = validateHeightFog(layout.heightFog);
   const cloudLayer = validateCloudLayer(layout.cloudLayer);
+  const reflection = validateReflection(layout.reflection);
+  const postProcess = validatePostProcess(layout.postProcess);
   const lights = layout.lights === undefined
     ? null
     : Array.isArray(layout.lights)
@@ -704,6 +808,8 @@ export function validateLayout(value: unknown): unknown {
   if (skyAtmosphere) output.skyAtmosphere = skyAtmosphere;
   if (heightFog) output.heightFog = heightFog;
   if (cloudLayer) output.cloudLayer = cloudLayer;
+  if (reflection) output.reflection = reflection;
+  if (postProcess) output.postProcess = postProcess;
   if (lights) output.lights = lights;
   if (actors) output.actors = actors;
   return output;

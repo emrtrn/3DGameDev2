@@ -6,6 +6,7 @@ import type {
   LayoutMetadata,
   LayoutParticleEmitter,
   LayoutPhysics,
+  LayoutPostProcess,
   Vec3,
 } from "@engine/scene/layout";
 import type { CollisionPresetId } from "@engine/scene/collision";
@@ -65,6 +66,39 @@ export interface EditableCloud {
   speed: number;
 }
 
+/**
+ * Resolved Reflection Environment (Sky Light) fields for the Details panel. The
+ * environment is captured from the sky; `intensity` scales the reflection +
+ * ambient bounce.
+ */
+export interface EditableReflection {
+  name: string;
+  hidden: boolean;
+  source: "sky";
+  intensity: number;
+}
+
+/** Resolved global Post Process fields for the Details panel. */
+export interface EditablePostProcess {
+  name: string;
+  hidden: boolean;
+  exposure: number;
+  toneMapping: NonNullable<LayoutPostProcess["toneMapping"]>;
+  bloom: {
+    enabled: boolean;
+    threshold: number;
+    intensity: number;
+    radius: number;
+  };
+  vignette: {
+    enabled: boolean;
+    intensity: number;
+    offset: number;
+  };
+  saturation: number;
+  contrast: number;
+}
+
 export interface EditableSelection {
   id: string;
   kind: Selection["kind"];
@@ -114,6 +148,10 @@ export interface EditableSelection {
   fog?: EditableFog;
   /** Resolved Cloud Layer settings; present only when `kind === "cloud"`. */
   cloud?: EditableCloud;
+  /** Resolved Reflection Environment settings; present only when `kind === "reflection"`. */
+  reflection?: EditableReflection;
+  /** Resolved Post Process settings; present only when `kind === "post"`. */
+  post?: EditablePostProcess;
 }
 
 export interface EditableSceneObject extends EditableSelection {
