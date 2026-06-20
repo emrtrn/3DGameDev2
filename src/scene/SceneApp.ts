@@ -66,6 +66,7 @@ import {
   isRenderableMesh,
 } from "@engine/render-three/materials";
 import {
+  attachActorLight,
   entityLightItem,
   disposeLightGizmo,
   syncLightObject,
@@ -2126,19 +2127,30 @@ export class SceneApp {
     });
   }
 
-  /** Real mesh when the class has a loadable MeshRenderer; a placeholder marker otherwise. */
+  /**
+   * Real mesh when the class has a loadable MeshRenderer; a placeholder marker
+   * otherwise. A Light component is attached as a child so a placed actor light
+   * illuminates the edit-mode scene (WYSIWYG) and tracks the object as the gizmo
+   * moves it.
+   */
   private buildActorObject(entity: Entity): Object3D {
     const renderer = readMeshRendererComponent(entity);
     const gltf = renderer ? this.models.get(renderer.assetId) : undefined;
-    if (gltf) return createCharacterSceneObject(gltf, entityCharacterItem(entity));
-    const item = entityCharacterItem(entity);
-    const mesh = new Mesh(this.actorPlaceholderGeometry, this.actorPlaceholderMaterial);
-    mesh.name = item.name;
-    mesh.position.set(...item.position);
-    applyEulerDegrees(mesh, item.rotation);
-    mesh.scale.set(...item.scale);
-    mesh.visible = !item.hidden;
-    return mesh;
+    let object: Object3D;
+    if (gltf) {
+      object = createCharacterSceneObject(gltf, entityCharacterItem(entity));
+    } else {
+      const item = entityCharacterItem(entity);
+      const mesh = new Mesh(this.actorPlaceholderGeometry, this.actorPlaceholderMaterial);
+      mesh.name = item.name;
+      mesh.position.set(...item.position);
+      applyEulerDegrees(mesh, item.rotation);
+      mesh.scale.set(...item.scale);
+      mesh.visible = !item.hidden;
+      object = mesh;
+    }
+    attachActorLight(object, entity);
+    return object;
   }
 
   private insertActorPlacement(index: number, instance: LayoutActorInstance): void {

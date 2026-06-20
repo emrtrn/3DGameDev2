@@ -14,6 +14,8 @@ import {
   DoubleSide,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  Object3D,
+  PointLight,
   RepeatWrapping,
   SRGBColorSpace,
   Texture,
@@ -154,6 +156,8 @@ import {
   validateLightActor,
   validatePlacement,
   validateSaveActorPayload,
+  validateNewBehaviorPayload,
+  resolveBehaviorStub,
   validateSaveCollisionPayload,
   validateForgeMaterialDef,
   validateSaveMaterialPayload,
@@ -194,6 +198,7 @@ import {
 } from "../editor/core/layoutSnapshots";
 import { colliderBoxFromBounds } from "../engine/render-three/transforms";
 import { collisionWireboxes } from "../engine/render-three/collisionView";
+import { attachActorLight } from "../engine/render-three/lights";
 import {
   COLLISION_CHANNELS,
   COLLISION_OBJECT_CHANNEL_BITS,
@@ -4899,6 +4904,32 @@ check("actor save payload requires a .actor.json path and normalizes the body", 
   );
 });
 
+check("resolveBehaviorStub derives a kebab path + camelCase export + signed source", () => {
+  const stub = resolveBehaviorStub("open-door");
+  assert.equal(stub.slug, "open-door");
+  assert.equal(stub.exportName, "openDoor");
+  assert.equal(stub.path, "src/game/scripts/open-door.ts");
+  // The source registers the export under its BehaviorUpdate signature.
+  assert.ok(stub.source.includes("export const openDoor: BehaviorUpdate"));
+  assert.ok(stub.source.includes('import { openDoor } from "./scripts/open-door"'));
+  assert.ok(stub.source.includes('add "open-door" to BEHAVIOR_SCRIPT_IDS'));
+
+  // Mixed separators + casing collapse to a single kebab slug / camel identifier.
+  const messy = resolveBehaviorStub("  My Custom Dash!! ");
+  assert.equal(messy.slug, "my-custom-dash");
+  assert.equal(messy.exportName, "myCustomDash");
+
+  // A digit-leading slug still yields a valid TS identifier.
+  assert.equal(resolveBehaviorStub("3d-spin").exportName, "behavior3dSpin");
+
+  // Unusable / malformed ids are rejected before any write.
+  assert.throws(() => resolveBehaviorStub("   "));
+  assert.throws(() => resolveBehaviorStub("!!!"));
+  assert.throws(() => resolveBehaviorStub(42 as unknown as string));
+  assert.throws(() => validateNewBehaviorPayload({ scriptId: "" }));
+  assert.equal(validateNewBehaviorPayload({ scriptId: "spin" }).scriptId, "spin");
+});
+
 check("actorInstanceToEntity flattens a class + placement into one entity", () => {
   const def = normalizeActorScriptDef({
     name: "DoorBP",
@@ -4951,6 +4982,45 @@ check("actorInstanceToEntity flattens a class + placement into one entity", () =
   // Round-trips through the entity-id helpers.
   assert.equal(parseActorInstanceEntityIndex(actorInstanceEntityId(7)), 7);
   assert.equal(parseActorInstanceEntityIndex("character:7"), null);
+});
+
+check("attachActorLight builds a scene light from an actor's Light component", () => {
+  const def = normalizeActorScriptDef({
+    name: "LampBP",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      {
+        id: "lamp",
+        parent: "root",
+        component: "Light",
+        props: { type: "point", intensity: 3, distance: 12 },
+      },
+    ],
+  });
+  const entity = actorInstanceToEntity(
+    def,
+    { classRef: "blueprints/LampBP.actor.json", position: [1, 2, 3] },
+    0,
+  );
+  const host = new Object3D();
+  assert.equal(attachActorLight(host, entity), true);
+  // A PointLight now lives under the host (added at local origin; the host object
+  // carries the instance world transform, so the light tracks it as it moves).
+  let pointLights = 0;
+  host.traverse((child) => {
+    if (child instanceof PointLight) pointLights += 1;
+  });
+  assert.equal(pointLights, 1);
+
+  // A light-less actor attaches nothing (and leaves the host empty).
+  const plain = actorInstanceToEntity(
+    normalizeActorScriptDef({ name: "Empty" }),
+    { classRef: "x.actor.json", position: [0, 0, 0] },
+    0,
+  );
+  const emptyHost = new Object3D();
+  assert.equal(attachActorLight(emptyHost, plain), false);
+  assert.equal(emptyHost.children.length, 0);
 });
 
 check("actorPreviewNodes keeps the whole tree with per-node local transforms", () => {

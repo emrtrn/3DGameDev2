@@ -55,6 +55,7 @@ import {
   tagSceneLightRecordIndex,
 } from "./SceneRuntimeCore";
 import type { LightObjectRecord } from "@engine/render-three/lights";
+import { attachActorLight } from "@engine/render-three/lights";
 import { collectMaterialStats, convertUnlitModelMaterialsToLit } from "@engine/render-three/materials";
 import {
   applyEulerDegrees,
@@ -83,6 +84,7 @@ import { assetPath, assetType, isModelAssetType } from "@engine/assets/manifest"
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   readAudioComponent,
+  readLightComponent,
   readMeshRendererComponent,
   readParticleEmitterComponent,
   readTransformComponent,
@@ -662,23 +664,49 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Adds a renderable object for each actor entity that carries a MeshRenderer,
-   * reusing the single-object (character) render path. Mesh-less logic/trigger
+   * Adds a renderable object for each actor entity that carries a MeshRenderer or
+   * a Light, reusing the single-object (character) render path for meshes and an
+   * empty host group for light-only actors. Mesh-less, light-less logic/trigger
    * actors get no object but still run as entities (behavior + collider). The
    * object is tracked by instance index so behavior/physics transform syncs find
-   * it (see applyEntityTransformToRender).
+   * it (see applyEntityTransformToRender); an attached actor light is a child, so
+   * it tracks the host as it moves.
    */
   private addActorObjects(): void {
     this.actorEntities.forEach((entity, index) => {
-      const renderer = readMeshRendererComponent(entity);
-      if (!renderer) return;
-      const gltf = this.models.get(renderer.assetId);
-      if (!gltf) return;
-      const object = createCharacterSceneObject(gltf, entityCharacterItem(entity));
+      const object = this.buildActorHostObject(entity);
+      if (!object) return;
       object.userData.actorIndex = index;
       this.scene.add(object);
       this.actorObjects.set(index, object);
     });
+  }
+
+  /**
+   * The host object for an actor instance: its mesh (when a MeshRenderer resolves
+   * to a loaded model), else an empty group positioned at the instance transform
+   * when the actor carries a Light. Returns null for logic-only actors. Any Light
+   * component is attached as a child so it illuminates and tracks the host.
+   */
+  private buildActorHostObject(entity: Entity): Object3D | null {
+    const renderer = readMeshRendererComponent(entity);
+    const gltf = renderer ? this.models.get(renderer.assetId) : undefined;
+    const hasLight = readLightComponent(entity) !== undefined;
+    let object: Object3D | null = null;
+    if (gltf) {
+      object = createCharacterSceneObject(gltf, entityCharacterItem(entity));
+    } else if (hasLight) {
+      const item = entityCharacterItem(entity);
+      const group = new Group();
+      group.name = item.name;
+      group.position.set(item.position[0], item.position[1], item.position[2]);
+      applyEulerDegrees(group, item.rotation);
+      group.scale.set(item.scale[0], item.scale[1], item.scale[2]);
+      group.visible = !item.hidden;
+      object = group;
+    }
+    if (object) attachActorLight(object, entity);
+    return object;
   }
 
   private async applyAssetUvwMappings(): Promise<void> {

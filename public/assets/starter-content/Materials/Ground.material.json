@@ -7,7 +7,7 @@
   "baseColorTexture": "starter-tex-checker",
   "normalTexture": null,
   "maskTexture": null,
-  "roughness": 0.8,
+  "roughness": 0.36,
   "metalness": 0,
   "opacity": 1,
   "alphaMode": "opaque",

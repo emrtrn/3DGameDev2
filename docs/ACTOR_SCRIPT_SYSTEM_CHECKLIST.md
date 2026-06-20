@@ -292,6 +292,47 @@ Bu, "Unreal mimarisi kullanıp AI ile serbest kod yazma" hedefinin somut halidir
 
 ---
 
+## Bölüm E — AI ile Behavior Yazma Akışı (uçtan uca)
+
+> Eklendi: 2026-06-20 (Faz 8 — "Yeni Behavior" stub üretimi). Bu, Bölüm C/D.4'teki
+> "Unreal mimarisi + AI ile serbest kod" hedefinin somut, uçtan uca akışıdır.
+
+Editör **veri** üretir (`*.actor.json`); davranış **mantığı** TypeScript'tir ve
+AI (Claude/Codex) tarafından `src/game/` altında yazılır. "Yeni Behavior" butonu
+bu iki dünyayı köprüler: bir `scriptId` için imzalı bir **stub dosyası** üretir,
+gerisini AI doldurur.
+
+**Adımlar:**
+
+1. **Event Binding ekle.** Actor Script editöründe `+ Binding` → Details'ta bir
+   `event` (beginPlay/tick/overlap/hit/interact) seç ve bir `scriptId` yaz
+   (örn. `dash`). Registry'de olmayan id serbesttir; Compile'da yalnızca **uyarı**
+   verir.
+2. **"✎ New Behavior stub" tıkla.** Editör `/__new-behavior` (localhost-only dev
+   endpoint) ile `src/game/scripts/<slug>.ts` dosyasını üretir:
+   - `scriptId` → kebab dosya adı + camelCase export (örn. `open-door` →
+     `src/game/scripts/open-door.ts`, `export const openDoor`).
+   - Dosya `BehaviorUpdate` imzasıyla, registry'ye nasıl kaydedileceğini anlatan
+     yorumla gelir. **Var olan dosya asla ezilmez** (409 → "already exists").
+3. **AI ile mantığı yaz.** VS Code'da "bu `dash` behavior'ını yaz" de → AI,
+   `context` (engine tick, input actions, physics/audio, `params`, mutable
+   `transform`) sözleşmesini (`engine/behavior/behaviorSubsystem.ts`) kullanarak
+   gövdeyi doldurur ve gerekirse param şemasını ortaya koyar.
+4. **Registry'ye kaydet.** `src/game/behaviors.ts` içinde: `BEHAVIOR_SCRIPT_IDS`'e
+   `scriptId`'yi, `behaviors` Map'ine `[scriptId, exportFn]` girişini ekle (stub
+   dosyasının baş yorumu birebir bunu gösterir). Artık Compile uyarısı kaybolur,
+   editör öneri datalist'inde id görünür.
+5. **Parametreleri ayarla + Play.** Details'ta event'in `params` JSON'ını düzenle,
+   gerekirse sınıf değişkenlerini (My Blueprint → Variables) ekle. Toolbar →
+   **Play** sınıfı kaydeder ve runtime'ı açar; level'a yerleştirilmiş instance'lar
+   davranışı taşır.
+
+**Sözleşme sabit:** Editör koddan habersizdir; tek bildiği `scriptId` stringidir.
+Behavior fonksiyonunun imzası (`BehaviorContext → void`) değişmez, böylece AI'nin
+yazdığı kod ile editörün ürettiği veri gevşek bağlı kalır. Stub üretimi
+`tools/saveValidator.ts`'teki saf `resolveBehaviorStub`'tadır (headless test
+edilir); editör yolu `src/editor/behaviorStubStore.ts` → `/__new-behavior`.
+
 ## Kararlar (2026-06-19 netleşti)
 
 Açık sorular, kullanıcı "uygula, sorma; gerekirse öneri geliştir" dediği için
@@ -321,11 +362,17 @@ bırak yerleştirme/seçim/gizmo/sil/undo + WYSIWYG mesh. **Faz 10 tamamlandı
 (2026-06-19):** editör viewport'u artık gerçek 3D component-ağacı önizlemesi
 (orbit kamera, mesh/collider/light/marker gizmo'ları, ağaç↔viewport seçim
 senkronu, canlı rebuild, dispose hijyeni) — `src/editor/ActorScriptViewport.ts` +
-saf `engine/scene/actorPreview.ts`. Kalan: per-instance override, behavior stub
-üretimi (Faz 8).
+saf `engine/scene/actorPreview.ts`. **Faz 6 + Faz 8 tamamlandı (2026-06-20):**
+toolbar **Browse** (Content Browser'da kartı aç/seç/vurgula) + **Play** (kaydet →
+runtime) bağlandı; **"✎ New Behavior stub"** Event Binding'lerden
+`src/game/scripts/<slug>.ts`'i imzalı üretir (saf `resolveBehaviorStub` + 190
+engine check; localhost-only `/__new-behavior`); "AI ile behavior yazma" akışı
+Bölüm E olarak yazıldı. Kalan (ertelenmiş): per-instance override authoring
+(Faz 7), Add-menü roadmap kategorileri (Faz 4), Component sınıfı dalları (Faz 2),
+Construction Script (Faz 5).
 
 İlgili commit'ler: veri modeli + content/save plumbing; editör (picker, overlay,
-paneller).
+paneller); Browse/Play + behavior stub üretimi (Faz 6/8).
 
 ## Checklist
 
@@ -404,8 +451,11 @@ npm run build           # başarılı
 - [x] **Save / Ctrl+S** → `/__save-actor`
 - [x] **Compile** = validate: benzersiz id'ler, parent referansları, döngü yok,
       benzersiz değişken key, boş olmayan scriptId; sonuç toolbar'da + footer'da
-- [~] **Browse** → şimdilik statü mesajı (kart seçme/vurgu sonra)
-- [ ] **Play** → Play moduna gir (instance/spawn sonrası)
+- [x] **Browse** → Content Browser'da aç + klasöre git (ataları aç, filtreyi
+      temizle) + kartı seç ve kısa süre vurgula (`revealContentAsset`/
+      `flashContentCard`, `EditorUi.ts`)
+- [x] **Play** → kaydet, ardından runtime'ı aç (`onPlay` → `playTest`); kayıt
+      hatası launch'ı iptal eder, yerleştirilmiş instance'lar spawn olur
 
 ### Faz 7 — Instance/Spawn katmanı (sınıf → level)
 
@@ -446,9 +496,13 @@ procedural `shape:<type>` actor mesh'i + actor parent hiyerarşisi → B4/sonrak
 ### Faz 8 — AI kod yolu (behavior stub)
 
 - [x] `BEHAVIOR_SCRIPT_IDS` kataloğu export edildi (`src/game/behaviors.ts`); editör önerilerde kullanır
-- [~] Details'ta "scriptId → src/game TS behavior'ı yaz/kaydet" sözleşme notu var
-- [ ] Editörde "Yeni Behavior" → `src/game/scripts/<name>.ts` stub yolu + imza üretimi
-- [ ] Doküman: "AI ile behavior yazma" akışı (CLAUDE.md / bu doküman)
+- [x] Details'ta "scriptId → src/game TS behavior'ı yaz/kaydet" sözleşme notu +
+      **New Behavior stub** butonuna referans
+- [x] Editörde "✎ New Behavior stub" → `src/game/scripts/<slug>.ts` stub yolu +
+      `BehaviorUpdate` imza üretimi (saf `resolveBehaviorStub`, `tools/saveValidator.ts`;
+      localhost-only `/__new-behavior` endpoint; `src/editor/behaviorStubStore.ts`;
+      var olan dosya ezilmez)
+- [x] Doküman: "AI ile behavior yazma" akışı (Bölüm E, bu doküman)
 
 ### Faz 9 — Test & Doküman
 

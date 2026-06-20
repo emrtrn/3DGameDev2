@@ -13,6 +13,9 @@ import {
   validateContentNewPayload,
   validateContentRenamePayload,
   validateImportAssetMeta,
+  validateNewBehaviorPayload,
+  resolveBehaviorStub,
+  BEHAVIOR_SCRIPTS_DIR,
   validateSaveActorPayload,
   validateSaveCollisionPayload,
   validateSaveMaterialPayload,
@@ -25,6 +28,10 @@ import {
 // both the game (static fetch) and the editor (authoring middleware) read/write.
 const PUBLIC_DIR = resolve("public");
 const PROJECT_MANIFEST_PATH = resolve("public/project.3dgame.json");
+// Generated behavior stubs (Actor Script editor -> New Behavior) land here. Unlike
+// the public/ authoring endpoints this writes a source file, so it is fenced to
+// exactly this directory and to the `.ts` extension (see resolveBehaviorScriptPath).
+const BEHAVIOR_SCRIPTS_ABS = resolve(BEHAVIOR_SCRIPTS_DIR);
 
 interface ProjectManifest {
   schema: 1;
@@ -66,6 +73,27 @@ function resolvePublicPath(publicRelativePath: string): string {
   const rootWithSep = PUBLIC_DIR.endsWith(sep) ? PUBLIC_DIR : `${PUBLIC_DIR}${sep}`;
   if (resolved !== PUBLIC_DIR && !resolved.startsWith(rootWithSep)) {
     throw new Error(`path escapes public root: ${publicRelativePath}`);
+  }
+  return resolved;
+}
+
+/**
+ * Resolves a generated behavior stub's project-relative path to an absolute path,
+ * refusing anything that escapes `src/game/scripts/` or is not a `.ts` file. This
+ * is the only write endpoint that touches source outside public/, so the guard is
+ * deliberately strict.
+ */
+function resolveBehaviorScriptPath(projectRelativePath: string): string {
+  const normalized = projectRelativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalized.endsWith(".ts")) {
+    throw new Error(`behavior stub must be a .ts file: ${projectRelativePath}`);
+  }
+  const resolved = resolve(normalized);
+  const rootWithSep = BEHAVIOR_SCRIPTS_ABS.endsWith(sep)
+    ? BEHAVIOR_SCRIPTS_ABS
+    : `${BEHAVIOR_SCRIPTS_ABS}${sep}`;
+  if (!resolved.startsWith(rootWithSep)) {
+    throw new Error(`path escapes ${BEHAVIOR_SCRIPTS_DIR}: ${projectRelativePath}`);
   }
   return resolved;
 }
@@ -287,6 +315,7 @@ const PRIVILEGED_URLS = new Set([
   "/__content-rename",
   "/__content-delete",
   "/__import-asset",
+  "/__new-behavior",
 ]);
 
 // Cap a single imported asset (binary models/textures/audio are larger than the
@@ -393,6 +422,47 @@ function layoutEditorPlugin(): Plugin {
             await writeFile(filePath, next, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Actor Script editor "New Behavior": scaffolds a typed behavior stub at
+        // `src/game/scripts/<slug>.ts` for an event-binding scriptId so AI/devs can
+        // fill in the logic and register it. Localhost-only; fenced to the scripts
+        // dir; never overwrites an existing file (409). The data lives in the
+        // *.actor.json; this only generates the source signature.
+        if (req.url === "/__new-behavior") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateNewBehaviorPayload(await readJsonBody(req));
+            const stub = resolveBehaviorStub(payload.scriptId);
+            const absPath = resolveBehaviorScriptPath(stub.path);
+            const exists = await stat(absPath).then(
+              () => true,
+              () => false,
+            );
+            if (exists) {
+              res.statusCode = 409;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(
+                JSON.stringify({ ok: false, error: `already exists: ${stub.path}`, path: stub.path }),
+              );
+              return;
+            }
+            await mkdir(BEHAVIOR_SCRIPTS_ABS, { recursive: true });
+            await writeFile(absPath, stub.source, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: stub.path, exportName: stub.exportName }));
           } catch (error) {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json; charset=utf-8");

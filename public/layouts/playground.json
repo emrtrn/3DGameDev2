@@ -72,16 +72,16 @@
       "placements": [
         {
           "position": [
-            0.05,
+            -2.64,
             0.27,
-            1.73
+            -1.29
           ],
           "name": "Player Start",
           "collision": false,
           "rotationYDeg": 0,
           "rotation": [
             0,
-            180,
+            90,
             0
           ],
           "scale": 1
@@ -210,7 +210,7 @@
             0
           ],
           "scaleLocked": true,
-          "materialSlot": "ground",
+          "materialSlot": "starter-mat-brick-clay-beveled",
           "rotationYDeg": 0,
           "scale": 2
         }
@@ -271,32 +271,18 @@
       "color": "#ffffff",
       "intensity": 1,
       "castShadow": true
-    },
-    {
-      "id": "point-light-mql9v7f3-1sb",
-      "type": "point",
-      "position": [
-        -2.32,
-        1.32,
-        1.58
-      ],
-      "name": "Point Light",
-      "color": "#ffffff",
-      "intensity": 2.5,
-      "castShadow": false,
-      "distance": 8,
-      "decay": 2
     }
   ],
   "actors": [
     {
       "classRef": "assets/starter-content/Script/Script_Lamp.actor.json",
       "position": [
-        -2.5,
+        -2.27,
         0.25,
-        -1.16
+        2.31
       ],
-      "rotationYDeg": 0
+      "rotationYDeg": 0,
+      "scale": 1
     }
   ]
 }

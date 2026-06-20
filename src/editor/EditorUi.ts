@@ -759,7 +759,8 @@ export class EditorUi {
     }
   }
 
-  private setContentDrawerOpen(open: boolean): void {
+  /** Toggles the drawer's open DOM state + the periodic refresh interval (no immediate fetch). */
+  private applyContentDrawerState(open: boolean): void {
     this.contentDrawerOpen = open;
     this.contentDrawer.classList.toggle("open", open);
     this.contentDrawer.setAttribute("aria-hidden", String(!open));
@@ -769,11 +770,72 @@ export class EditorUi {
     window.clearInterval(this.contentRefreshTimer);
     this.contentRefreshTimer = 0;
     if (open) {
-      void this.refreshAssetTree({ quiet: true });
       this.contentRefreshTimer = window.setInterval(() => {
         void this.refreshAssetTree({ quiet: true });
       }, 7000);
     }
+  }
+
+  private setContentDrawerOpen(open: boolean): void {
+    this.applyContentDrawerState(open);
+    if (open) void this.refreshAssetTree({ quiet: true });
+  }
+
+  /**
+   * Reveals an asset in the Content Browser (Toolbar → Browse from an open
+   * editor): opens the drawer, navigates to the asset's folder (expanding
+   * ancestors and clearing any type/search filter that would hide it), then
+   * selects + briefly flashes the card. Best-effort — a missing folder falls
+   * back to the asset root. Uses a single authoritative refresh so the flash is
+   * never clobbered by a concurrent reload.
+   */
+  async revealContentAsset(path: string): Promise<void> {
+    this.applyContentDrawerState(true);
+    await this.refreshAssetTree({ quiet: true });
+    if (!this.assetTreeRoot) {
+      this.setStatus(`In Content Browser: ${path}`);
+      return;
+    }
+    const normalized = normalizeProjectPath(path);
+    const root = this.assetTreeRoot.path;
+    const parentDir = normalized.includes("/")
+      ? normalized.slice(0, normalized.lastIndexOf("/"))
+      : root;
+    // Pick the folder that holds the asset; fall back to the asset root.
+    const folder =
+      parentDir === root || findProjectDir(this.assetTreeRoot.children ?? [], parentDir)
+        ? parentDir
+        : root;
+    this.selectedFolder = folder;
+    // Expand every ancestor so the folder is visible in the tree.
+    const segments = folder.split("/");
+    for (let i = 1; i < segments.length; i += 1) {
+      this.collapsedFolderPaths.delete(segments.slice(0, i).join("/"));
+    }
+    // Clear any filter/search that would hide the target card.
+    this.contentType = CONTENT_FILTER_ALL;
+    this.contentTypeFilter.value = CONTENT_FILTER_ALL;
+    this.contentQuery = "";
+    this.contentSearch.value = "";
+    this.renderFolderTree();
+    this.renderContentAssets();
+    this.flashContentCard(path);
+  }
+
+  /** Selects + briefly highlights the Content Browser card for `path`, scrolling it into view. */
+  private flashContentCard(path: string): void {
+    const card = this.contentList.querySelector<HTMLElement>(
+      `.asset-card[data-asset-path="${CSS.escape(path)}"]`,
+    );
+    if (!card) {
+      this.setStatus(`In Content Browser: ${path}`);
+      return;
+    }
+    if (card.dataset.assetId) this.setSelectedAsset(card.dataset.assetId);
+    card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    card.classList.add("is-revealed");
+    window.setTimeout(() => card.classList.remove("is-revealed"), 1600);
+    this.setStatus(`Revealed in Content Browser: ${path}`, "info");
   }
 
   private async refreshAssetTree(options: { quiet?: boolean } = {}): Promise<void> {
@@ -1881,7 +1943,8 @@ export class EditorUi {
           path: assetPath(asset),
         })),
         onStatus: (message, tone) => this.setStatus(message, tone),
-        onBrowse: () => this.setStatus(`In Content Browser: ${item.path}`),
+        onBrowse: () => void this.revealContentAsset(item.path),
+        onPlay: () => void this.playTest(),
       });
     } catch (error) {
       this.setStatus(

@@ -955,6 +955,21 @@ body.editor-mode #debug-stats {
   border-color: #f59e2c;
 }
 
+/* Transient flash when an editor's Browse reveals this card. */
+.editor-shell .asset-card.is-revealed {
+  animation: as-card-reveal 1.6s ease-out;
+}
+
+@keyframes as-card-reveal {
+  0%,
+  40% {
+    box-shadow: 0 0 0 2px #62d3ff, 0 0 14px 2px rgba(98, 211, 255, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(98, 211, 255, 0);
+  }
+}
+
 .asset-issue-dot {
   position: absolute;
   top: 7px;
@@ -1903,6 +1918,7 @@ body.editor-mode #debug-stats {
 .as-field textarea { resize: vertical; font-family: ui-monospace, "Cascadia Code", monospace; }
 .as-field textarea.is-invalid { border-color: #ff7a7a; }
 .as-json-error { color: #ff9a9a; font-size: 11px; min-height: 14px; margin-top: -6px; }
+.as-field-actions { display: flex; justify-content: flex-end; margin: -2px 0 10px; }
 
 .as-section-label {
   font-size: 11px;

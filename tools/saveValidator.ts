@@ -766,6 +766,104 @@ export function validateSaveActorPayload(value: unknown): {
   };
 }
 
+/** Directory (project-root relative) generated behavior stubs are written to. */
+export const BEHAVIOR_SCRIPTS_DIR = "src/game/scripts";
+
+/** A generated behavior stub: where it lives + its TypeScript source. */
+export interface BehaviorStubFile {
+  /** Kebab-case file slug derived from the script id. */
+  slug: string;
+  /** camelCase TypeScript export identifier. */
+  exportName: string;
+  /** Project-root-relative path: `src/game/scripts/<slug>.ts`. */
+  path: string;
+  /** Full TypeScript source for the stub. */
+  source: string;
+}
+
+function behaviorSlug(scriptId: string): string {
+  return scriptId
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/** Turns a kebab slug into a camelCase identifier (digit-leading slugs get a prefix). */
+function behaviorIdentifier(slug: string): string {
+  const parts = slug.split("-").filter(Boolean);
+  if (parts.length === 0) return "";
+  let id = parts[0] + parts.slice(1).map(capitalize).join("");
+  if (/^[0-9]/.test(id)) id = `behavior${capitalize(id)}`;
+  return id;
+}
+
+/** Renders the TypeScript source for a `<scriptId>` behavior stub. */
+export function behaviorStubSource(scriptId: string, exportName: string, slug: string): string {
+  return `/**
+ * Behavior: \`${scriptId}\`
+ *
+ * Auto-generated stub (Actor Script editor -> New Behavior). Implement the
+ * per-tick update, then register it so event bindings referencing \`${scriptId}\`
+ * resolve at runtime. In \`src/game/behaviors.ts\`:
+ *
+ *   import { ${exportName} } from "./scripts/${slug}";
+ *   // 1. add "${scriptId}" to BEHAVIOR_SCRIPT_IDS
+ *   // 2. add ["${scriptId}", ${exportName}] to the behaviors map
+ *
+ * The BehaviorContext (engine tick, input actions, physics/audio queries, the
+ * authored params, and a mutable transform) is documented in
+ * engine/behavior/behaviorSubsystem.ts.
+ */
+import type { BehaviorUpdate } from "@engine/behavior/behaviorSubsystem";
+
+/** TODO: implement the \`${scriptId}\` behavior. */
+export const ${exportName}: BehaviorUpdate = (context) => {
+  // Mutate \`context.transform\` using \`context.engine.deltaSeconds\` and the
+  // authored \`context.params\`. Remove this no-op once implemented.
+  void context;
+};
+`;
+}
+
+/**
+ * Derives the behavior stub file (slug + export + path + source) for a script
+ * id, or throws if the id has no usable slug. Pure; shared by the dev endpoint
+ * and headless tests.
+ */
+export function resolveBehaviorStub(scriptId: unknown): BehaviorStubFile {
+  if (typeof scriptId !== "string") throw new Error("scriptId must be a string");
+  const trimmed = scriptId.trim();
+  if (!trimmed) throw new Error("scriptId must not be empty");
+  if (trimmed.length > 80) throw new Error("scriptId too long");
+  const slug = behaviorSlug(trimmed);
+  if (!slug) throw new Error("scriptId has no usable letters or digits");
+  const exportName = behaviorIdentifier(slug);
+  if (!exportName) throw new Error("scriptId has no usable identifier");
+  return {
+    slug,
+    exportName,
+    path: `${BEHAVIOR_SCRIPTS_DIR}/${slug}.ts`,
+    source: behaviorStubSource(trimmed, exportName, slug),
+  };
+}
+
+/** Validates the `/__new-behavior` payload (`{ scriptId }`); throws on a bad id. */
+export function validateNewBehaviorPayload(value: unknown): { scriptId: string } {
+  if (!value || typeof value !== "object") throw new Error("behavior payload must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.scriptId !== "string") {
+    throw new Error("behavior payload scriptId must be a string");
+  }
+  // Re-validate via the resolver so an unusable id is rejected before any write.
+  resolveBehaviorStub(input.scriptId);
+  return { scriptId: input.scriptId };
+}
+
 export function validateAssetMaterialSlotsDef(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("material slots def must be an object");

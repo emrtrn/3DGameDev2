@@ -29,10 +29,12 @@ import {
   type ParentClass,
 } from "@engine/scene/actorScript";
 import type { MetadataFieldDef, MetadataFieldType } from "@engine/scene/metadataSchema";
+import type { SceneLightType } from "@engine/scene/components";
 import type { SceneJsonValue } from "@engine/scene/entity";
 import type { Vec3 } from "@engine/scene/layout";
 import { isModelAssetType, type AssetType } from "@engine/assets/manifest";
 import { loadActorScript, saveActorScript } from "@/editor/actorScriptStore";
+import { createBehaviorStub } from "@/editor/behaviorStubStore";
 import { ActorScriptViewport } from "@/editor/ActorScriptViewport";
 
 type StatusTone = "info" | "success" | "warning" | "error";
@@ -51,6 +53,8 @@ export interface ActorScriptEditorOptions {
   onStatus?: (message: string, tone?: StatusTone) => void;
   /** Reveal this asset in the Content Browser (Toolbar → Browse). */
   onBrowse?: () => void;
+  /** Enter Play mode / launch the runtime (Toolbar → Play). Saves first. */
+  onPlay?: () => void;
 }
 
 type Selection =
@@ -143,7 +147,7 @@ export class ActorScriptEditor {
           <button type="button" data-as-compile title="Validate this class">▣ Compile</button>
           <button type="button" data-as-tb-save title="Save (Ctrl+S)">💾 Save</button>
           <button type="button" data-as-browse title="Reveal in Content Browser">🔎 Browse</button>
-          <button type="button" data-as-play title="Play (coming soon)" disabled>▶ Play</button>
+          <button type="button" data-as-play title="Save & launch the runtime">▶ Play</button>
           <span class="as-editor-toolbar-spacer"></span>
           <span class="as-editor-compile-status" data-as-compile-status></span>
         </div>
@@ -187,6 +191,9 @@ export class ActorScriptEditor {
     );
     this.requireEl<HTMLButtonElement>("[data-as-browse]").addEventListener("click", () =>
       this.options.onBrowse?.(),
+    );
+    this.requireEl<HTMLButtonElement>("[data-as-play]").addEventListener("click", () =>
+      void this.play(),
     );
 
     this.overlay.tabIndex = -1;
@@ -546,6 +553,7 @@ export class ActorScriptEditor {
         ),
     ].join("");
     const meshField = node.component === "MeshRenderer" ? this.meshPickerField(node) : "";
+    const lightField = node.component === "Light" ? lightFields(node) : "";
     const pos = readVec3Prop(node.props.position, [0, 0, 0]);
     const rot = readVec3Prop(node.props.rotation, [0, 0, 0]);
     const scl = readVec3Prop(node.props.scale, [1, 1, 1]);
@@ -564,6 +572,7 @@ export class ActorScriptEditor {
         <select data-as-node-parent ${isRoot ? "disabled" : ""}>${parentOptions}</select>
       </label>
       ${meshField}
+      ${lightField}
       <div class="as-section-label">Transform <small>(preview)</small></div>
       ${vec3Row("position", "Position", pos)}
       ${vec3Row("rotation", "Rotation°", rot)}
@@ -652,6 +661,7 @@ export class ActorScriptEditor {
       this.markDirty();
       this.render(); // rebuilds tree + viewport + the raw-props view
     });
+    this.bindLightDetails(node);
     this.detailsHost.querySelectorAll<HTMLElement>("[data-as-vec]").forEach((rowEl) => {
       const key = rowEl.dataset.asVec as "position" | "rotation" | "scale";
       const inputs = Array.from(rowEl.querySelectorAll<HTMLInputElement>("input"));
@@ -691,6 +701,52 @@ export class ActorScriptEditor {
         if (error) error.textContent = parsed.error;
         props.classList.add("is-invalid");
       }
+    });
+  }
+
+  /**
+   * Wires the Light Details controls (no-op when the node carries no light form):
+   * the type picker (directional/point/spot, pruning type-irrelevant props), the
+   * color swatch, and the numeric reach fields. Numeric/color edits live-update
+   * the preview; commits re-render Details so the raw-props view + visible field
+   * set track the chosen type.
+   */
+  private bindLightDetails(node: ComponentTemplateNode): void {
+    const type = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-light-type]");
+    type?.addEventListener("change", () => {
+      const next = type.value as SceneLightType;
+      node.props.type = next;
+      pruneLightProps(node.props, next);
+      this.markDirty();
+      this.render(); // type change shows/hides fields + rebuilds the preview
+    });
+    const color = this.detailsHost.querySelector<HTMLInputElement>("[data-as-light-color]");
+    color?.addEventListener("input", () => {
+      node.props.color = color.value;
+      this.markDirty();
+      this.scheduleViewportSync();
+    });
+    color?.addEventListener("change", () => {
+      this.renderDetails();
+      this.syncViewport();
+    });
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-as-light-num]").forEach((input) => {
+      const key = input.dataset.asLightNum;
+      if (!key) return;
+      const apply = (): void => {
+        const n = Number(input.value);
+        if (Number.isFinite(n)) node.props[key] = n;
+        this.markDirty();
+      };
+      input.addEventListener("input", () => {
+        apply();
+        this.scheduleViewportSync();
+      });
+      input.addEventListener("change", () => {
+        apply();
+        this.renderDetails();
+        this.syncViewport();
+      });
     });
   }
 
@@ -803,12 +859,17 @@ export class ActorScriptEditor {
         <input type="text" data-as-event-script list="as-script-ids" value="${escapeHtml(binding.scriptId)}" placeholder="e.g. spin" />
       </label>
       ${idList}
+      <div class="as-field-actions">
+        <button type="button" class="as-add-btn" data-as-new-behavior title="Scaffold src/game/scripts/<id>.ts for this script id">
+          ✎ New Behavior stub
+        </button>
+      </div>
       <label class="as-field">
         <span>Params (JSON)</span>
         <textarea data-as-event-params rows="8">${escapeHtml(JSON.stringify(binding.params ?? {}, null, 2))}</textarea>
       </label>
       <div class="as-json-error" data-as-event-params-error></div>
-      <p class="as-details-note">The script id resolves to a TypeScript behavior in <code>src/game/</code>. Author it (or ask AI) and register it in the behavior registry.</p>
+      <p class="as-details-note">The script id resolves to a TypeScript behavior in <code>src/game/</code>. Use <strong>New Behavior stub</strong> to scaffold <code>src/game/scripts/&lt;id&gt;.ts</code>, then implement it (or ask AI) and register it in the behavior registry (<code>src/game/behaviors.ts</code>).</p>
     `;
   }
 
@@ -828,6 +889,9 @@ export class ActorScriptEditor {
       this.markDirty();
     });
     script?.addEventListener("change", () => this.refreshLists());
+    this.detailsHost
+      .querySelector<HTMLButtonElement>("[data-as-new-behavior]")
+      ?.addEventListener("click", () => void this.scaffoldBehavior(binding.scriptId));
     const params = this.detailsHost.querySelector<HTMLTextAreaElement>("[data-as-event-params]");
     const error = this.detailsHost.querySelector<HTMLElement>("[data-as-event-params-error]");
     params?.addEventListener("input", () => {
@@ -1006,6 +1070,47 @@ export class ActorScriptEditor {
     }
   }
 
+  /**
+   * Play: persists the class, then hands off to the host to launch the runtime
+   * (the placed instances of this class spawn there). Save failures abort the
+   * launch so the runtime never reads a stale class.
+   */
+  private async play(): Promise<void> {
+    if (!this.options.onPlay) {
+      this.setStatus("Play is unavailable in this context.", "warning");
+      return;
+    }
+    await this.save();
+    if (this.dirty) return; // save reported an error; do not launch
+    this.options.onPlay();
+  }
+
+  /**
+   * Scaffolds a TypeScript behavior stub for an event binding's `scriptId`
+   * (`src/game/scripts/<id>.ts`). The class data is unchanged; this just generates
+   * the source signature for AI/devs to implement + register.
+   */
+  private async scaffoldBehavior(scriptId: string): Promise<void> {
+    const id = scriptId.trim();
+    if (!id) {
+      this.setStatus("Enter a script id before scaffolding a behavior.", "warning");
+      return;
+    }
+    try {
+      const result = await createBehaviorStub(id);
+      if (result.alreadyExists) {
+        this.setStatus(`Behavior already exists: ${result.path} — implement + register it.`, "info");
+      } else {
+        this.setStatus(
+          `Created ${result.path} (export ${result.exportName}). Implement it, then register it in src/game/behaviors.ts.`,
+          "success",
+        );
+      }
+    } catch (error) {
+      this.setStatus(`New behavior failed: ${describeError(error)}`, "error");
+    }
+  }
+
   private markDirty(): void {
     this.dirty = true;
   }
@@ -1084,6 +1189,90 @@ function vec3Row(key: string, label: string, value: Vec3): string {
         ${input(0)}${input(1)}${input(2)}
       </div>
     </label>
+  `;
+}
+
+const LIGHT_TYPES: readonly SceneLightType[] = ["directional", "point", "spot"];
+const LIGHT_TYPE_LABELS: Record<SceneLightType, string> = {
+  directional: "Directional",
+  point: "Point",
+  spot: "Spot",
+};
+
+/** Reads a light `type` prop, defaulting to directional (matches the preview/engine). */
+function readLightType(value: SceneJsonValue | undefined): SceneLightType {
+  return typeof value === "string" && LIGHT_TYPES.includes(value as SceneLightType)
+    ? (value as SceneLightType)
+    : "directional";
+}
+
+/** Reads a numeric prop, falling back to `fallback` when absent/malformed. */
+function readNumberProp(value: SceneJsonValue | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+/** Drops light props that do not apply to `type`, keeping the saved JSON tidy. */
+function pruneLightProps(props: Record<string, SceneJsonValue>, type: SceneLightType): void {
+  if (type === "directional") {
+    delete props.distance;
+    delete props.decay;
+    delete props.angle;
+    delete props.penumbra;
+  } else if (type === "point") {
+    delete props.angle;
+    delete props.penumbra;
+  }
+}
+
+/**
+ * The Light Details form: a type picker (directional/point/spot) plus the fields
+ * that apply to the chosen type. Distance/Decay show for point + spot; Angle°
+ * (engine reads degrees) + Penumbra show for spot. Writes to `node.props` so the
+ * preview light + reach gizmo update live.
+ */
+function lightFields(node: ComponentTemplateNode): string {
+  const props = node.props;
+  const type = readLightType(props.type);
+  const isPoint = type === "point";
+  const isSpot = type === "spot";
+  const color = typeof props.color === "string" ? props.color : "#ffffff";
+  const intensity = readNumberProp(props.intensity, 1);
+  const distance = readNumberProp(props.distance, isPoint ? 8 : 10);
+  const decay = readNumberProp(props.decay, 2);
+  const angle = readNumberProp(props.angle, 30);
+  const penumbra = readNumberProp(props.penumbra, 0.35);
+  const typeOptions = LIGHT_TYPES.map(
+    (value) =>
+      `<option value="${value}" ${value === type ? "selected" : ""}>${LIGHT_TYPE_LABELS[value]}</option>`,
+  ).join("");
+  const numberField = (key: string, label: string, value: number, attrs: string): string => `
+    <label class="as-field">
+      <span>${label}</span>
+      <input type="number" data-as-light-num="${key}" value="${value}" ${attrs} />
+    </label>`;
+  return `
+    <div class="as-section-label">Light</div>
+    <label class="as-field">
+      <span>Type</span>
+      <select data-as-light-type>${typeOptions}</select>
+    </label>
+    <label class="as-field">
+      <span>Color</span>
+      <input type="color" data-as-light-color value="${escapeHtml(color)}" />
+    </label>
+    ${numberField("intensity", "Intensity", intensity, 'step="0.1" min="0" max="20"')}
+    ${
+      isPoint || isSpot
+        ? numberField("distance", "Distance", distance, 'step="0.1" min="0" max="100"') +
+          numberField("decay", "Decay", decay, 'step="0.1" min="0" max="8"')
+        : ""
+    }
+    ${
+      isSpot
+        ? numberField("angle", "Angle°", angle, 'step="1" min="1" max="90"') +
+          numberField("penumbra", "Penumbra", penumbra, 'step="0.05" min="0" max="1"')
+        : ""
+    }
   `;
 }
 

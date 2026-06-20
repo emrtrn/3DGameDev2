@@ -1,13 +1,18 @@
 {
   "schema": 1,
+  "type": "material",
   "materialType": "standard",
   "name": "Grass Material",
   "baseColor": "#4f9a4b",
   "baseColorTexture": "starter-tex-grass",
   "normalTexture": "starter-tex-flat-normal",
+  "maskTexture": null,
   "roughness": 0.85,
   "metalness": 0,
   "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
   "emissive": "#000000",
   "emissiveIntensity": 0
 }

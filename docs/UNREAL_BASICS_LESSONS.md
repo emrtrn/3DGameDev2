@@ -279,6 +279,49 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-20* — **Actor Script — yerleştirilmiş actor'ın Light component'i sahneyi
+  aydınlatmıyordu (düzeltme).** Bir Actor Script sınıfına Light component'i eklenip
+  level'a yerleştirildiğinde ışık sahneye hiç yansımıyordu: hem editör (`SceneApp`)
+  hem runtime (`RuntimeSceneApp`) actor render yolu yalnızca **MeshRenderer**'ı
+  işliyordu; entity'deki Light component'i hiçbir Three.js ışığına dönüşmüyordu.
+  **Çözüm:** saf engine helper `attachActorLight(host, entity)`
+  (`engine/render-three/lights.ts`) — actor entity'sinde Light component'i varsa,
+  host objenin **local origin**'ine bir Three ışığı (+ directional/spot için target)
+  iliştirir; host instance world transform'unu taşıdığı için ışık actor'la birlikte
+  hareket eder (gizmo/behavior). `createLightObject`'e `gizmo:false` opt-out'u eklendi
+  (icon billboard `document`/canvas gerektiriyordu → headless-safe + yerleştirilmiş
+  actor ışığı wireframe/icon göstermez, host zaten pickable). `SceneApp.buildActorObject`
+  her actor objesine ışığı iliştirir; `RuntimeSceneApp` artık **light-only** actor için
+  (mesh yok) boş bir host Group oluşturur (logic-only actor'lar hâlâ objesiz). Işık
+  tipi (directional/point/spot) `entityLightItem` ile entity'den okunur → editör Light
+  Details formundaki tip seçici sahneye birebir yansır. **Gate:** tsc temiz · engine
+  **191** check (yeni: `attachActorLight` headless testi) · build başarılı. **Sınır
+  (v1):** flat-collapse gereği actor başına tek Light (ilk node kazanır); ışık host'un
+  local origin'inde durur (component-ağacındaki local offset'i değil).
+
+- *2026-06-20* — **Actor Script Faz 6 + Faz 8 — Browse/Play toolbar + AI behavior stub (tamam).**
+  Checklist'in deferred-olmayan kalan maddeleri kapatıldı
+  (`docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 6 + Faz 8). **Toolbar Browse:**
+  `onBrowse` artık `EditorUi.revealContentAsset` — drawer'ı açar, asset'in
+  klasörüne gider (ataları açar, tip/arama filtresini temizler), kartı seçer ve
+  `flashContentCard` ile kısa süre vurgular (`is-revealed` CSS animasyonu); tek
+  otoriter refresh (drawer-open refresh'i `applyContentDrawerState`'e ayrıldı) →
+  flash yarış koşulu yok. **Toolbar Play:** `onPlay` → `playTest`; editör önce
+  `save()` eder, kayıt hatası launch'ı iptal eder, runtime'da yerleştirilmiş
+  instance'lar spawn olur. **New Behavior stub (Faz 8):** Event Binding
+  Details'ında **"✎ New Behavior stub"** butonu → `scriptId`'den
+  `src/game/scripts/<slug>.ts`'i imzalı (`BehaviorUpdate` + registry kayıt yorumu)
+  üretir. Saf üretici `resolveBehaviorStub`/`behaviorStubSource`
+  (`tools/saveValidator.ts`, headless test); editör yolu
+  `src/editor/behaviorStubStore.ts` → localhost-only `/__new-behavior` endpoint
+  (`vite.config.ts`, `src/game/scripts/`'e fence'li, var olanı ezmez, 409). "AI
+  ile behavior yazma" akışı checklist Bölüm E olarak yazıldı. **Gate:** tsc temiz ·
+  engine **190** check · build başarılı. **Karar:** behavior **mantığı** koddur
+  (AI yazar), editör yalnızca veri + imzalı stub üretir; sözleşme
+  `BehaviorContext → void` değişmez. **Kalan (ertelenmiş):** per-instance override
+  authoring (Faz 7), Add-menü kategorileri (Faz 4), Component sınıfı (Faz 2),
+  Construction Script (Faz 5).
+
 - *2026-06-20* — **Actor Script Faz 10.7 — Mesh seçici + viewport transform gizmo'ları (tamam).**
   Kullanıcı geri bildirimi ("Content'teki modeli MeshRenderer'a nasıl alacağım?
   viewport'ta transform aracı yok") üzerine iki UX boşluğu kapatıldı (checklist:

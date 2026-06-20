@@ -148,6 +148,7 @@ function applyLightTransform(record: LightObjectRecord, item: LightRenderItem): 
 export function createLightObject(
   item: LightRenderItem,
   defaultColor: ColorRepresentation,
+  options: { gizmo?: boolean } = {},
 ): LightObjectRecord {
   const root = new Object3D();
   root.name = item.name;
@@ -177,7 +178,9 @@ export function createLightObject(
   light.castShadow = item.castShadow ?? item.type === "directional";
   configureShadowCastingLight(light);
   root.add(light);
-  const gizmo = buildLightGizmo(item, color);
+  // The gizmo (icon billboard + reach wireframe) needs a DOM canvas; skip it for
+  // headless/non-editor lights (e.g. placed actor lights) via `gizmo: false`.
+  const gizmo = options.gizmo === false ? new Object3D() : buildLightGizmo(item, color);
   root.add(gizmo);
   const record: LightObjectRecord = target
     ? { root, light, target, gizmo }
@@ -396,4 +399,31 @@ export function disposeLightGizmo(gizmo: Object3D): void {
       for (const material of materials) material.dispose();
     }
   });
+}
+
+/**
+ * Attaches a Three.js light to a placed actor instance's host object when the
+ * actor entity carries a Light component (returns false otherwise).
+ *
+ * The light is added at the host's *local* origin: the host (the actor's mesh,
+ * or an empty group for a light-only actor) already sits at the instance world
+ * transform, so the light — and, for directional/spot, its target — track the
+ * actor as behaviors or the gizmo move it. The editor wireframe/icon gizmo is
+ * discarded: a placed actor light illuminates the scene but shows no gizmo (the
+ * host object is the pickable). Mirrors how layout lights are built, but sourced
+ * from the entity's Light component instead of a `LayoutLightActor`.
+ */
+export function attachActorLight(host: Object3D, entity: Entity): boolean {
+  const light = readLightComponent(entity);
+  if (!light) return false;
+  const item = entityLightItem(entity);
+  // The host carries the instance world transform; build the light at identity.
+  item.position = [0, 0, 0];
+  item.rotation = [0, 0, 0];
+  // No editor gizmo: a placed actor light illuminates but shows no wireframe/icon
+  // (the host object is the pickable), and skipping it keeps this DOM-free.
+  const record = createLightObject(item, item.color ?? "#ffffff", { gizmo: false });
+  host.add(record.root);
+  if (record.target) host.add(record.target);
+  return true;
 }
