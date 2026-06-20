@@ -23,10 +23,24 @@
       "component": "Collider",
       "props": {
         "position": [
-          0.1,
-          0.5,
+          0,
+          0,
           0
-        ]
+        ],
+        "shape": "box",
+        "size": [
+          1.4,
+          1.6,
+          1.4
+        ],
+        "center": [
+          0.1,
+          0.7,
+          0
+        ],
+        "isStatic": true,
+        "isSensor": true,
+        "generateOverlapEvents": true
       },
       "parent": "root"
     },
@@ -45,8 +59,18 @@
           0
         ],
         "type": "point",
-        "intensity": 3,
+        "intensity": 10,
         "color": "#ff0000"
+      },
+      "parent": "root"
+    },
+    {
+      "id": "interaction",
+      "component": "Interaction",
+      "props": {
+        "action": "toggle-actor-light",
+        "prompt": "Press E Key",
+        "enabled": true
       },
       "parent": "root"
     },
@@ -55,7 +79,7 @@
       "component": "ParticleEmitter",
       "props": {
         "effectId": "starter-fx-dust-hit",
-        "autoPlay": true,
+        "autoPlay": false,
         "position": [
           0,
           0.9397,
@@ -65,6 +89,14 @@
       "parent": "root"
     }
   ],
-  "eventBindings": [],
+  "eventBindings": [
+    {
+      "event": "interact",
+      "scriptId": "interact",
+      "params": {
+        "inputAction": "interact"
+      }
+    }
+  ],
   "construction": null
 }

@@ -6600,6 +6600,29 @@
         "bytes": 361
       },
       "license": "Unknown"
+    },
+    {
+      "id": "gray-material",
+      "name": "Gray.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/Gray.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 359
+      },
+      "license": "Unknown"
     }
   ]
 }

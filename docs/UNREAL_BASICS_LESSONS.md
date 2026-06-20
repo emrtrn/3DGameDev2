@@ -92,6 +92,13 @@ tutkalı shell'lerde ince kalır.
   `parentMaterial` + yalnizca degisen alanlari tutan `overrides`. Runtime bu
   parent + overrides sonucunu normal Three.js material olarak resolve eder.
 
+- *2026-06-20* — **Script Communication System kararı.** Forge, Unreal Blueprint
+  Communication modelini görsel node VM olarak kopyalamayacak. Actor Script verisi
+  iletişim sözleşmesini taşır; behavior mantığı `src/game/` TypeScript kodunda
+  yaşar; aktörler arası haberleşme direct reference, interface/capability,
+  dispatcher/message binding ve BehaviorContext API'i üzerinden kurulacaktır.
+  Takip dokümanı: `docs/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md`.
+
 ## Mevcut runtime taban çizgisi (kanıt)
 
 - Davranışlar saf game kodu: `src/game/behaviors.ts` — `spin`, `input-move`
@@ -278,6 +285,15 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
+
+- *2026-06-20* — **Script Communication System checklist'i açıldı.** Actor
+  Script'lerin büyük projelerde hardcoded `RuntimeSceneApp` aksiyonları yerine
+  message/interface/dispatcher sözleşmesiyle haberleşmesi için ayrı takip
+  dokümanı oluşturuldu: `docs/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md`.
+  **Karar:** lamba testindeki özel `toggle-actor-light` akışı küçük test için
+  kabul edilebilir; kalıcı model, AI tarafından yazılan `src/game/` behavior
+  kodunun `BehaviorContext` içindeki `messages/world/state` API'lerini kullanması
+  olacak. **Durum:** Faz 0 dokümantasyon başladı; kod implementasyonu henüz yok.
 
 - *2026-06-20* — **Actor Script — yerleştirilmiş actor'ın Light component'i sahneyi
   aydınlatmıyordu (düzeltme).** Bir Actor Script sınıfına Light component'i eklenip
@@ -2065,6 +2081,7 @@ docs/
   ARCHITECTURE.md
   LAUNCH_WORKFLOW.md
   UNREAL_BASICS_LESSONS.md
+  SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md
   GAMEPLAY_FRAMEWORK_CHECKLIST.md
   ACTORS_COMPONENTS_CHECKLIST.md
   PACKAGING_CHECKLIST.md

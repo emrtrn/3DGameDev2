@@ -1,4 +1,4 @@
-import { Box3, DirectionalLight, Group, Matrix4, Object3D, TextureLoader, Vector3 } from "three";
+import { Box3, DirectionalLight, Group, Light as ThreeLight, Matrix4, Object3D, TextureLoader, Vector3 } from "three";
 import type {
   AmbientLight,
   InstancedMesh,
@@ -158,10 +158,13 @@ const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   ArrowLeft: "move-left",
   KeyD: "move-right",
   ArrowRight: "move-right",
+  KeyE: "interact",
   Space: "jump",
   ShiftLeft: "sprint",
   ShiftRight: "sprint",
 };
+
+const TOGGLE_ACTOR_LIGHT_ACTION = "toggle-actor-light";
 
 export interface RuntimeStatsApp {
   onFrame: ((deltaMs: number) => void) | null;
@@ -233,6 +236,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private cameraViewTouched = false;
   /** Latest per-entity locomotion snapshot a behavior reported (read by the Game Mode). */
   private readonly locomotionReports = new Map<string, LocomotionInput>();
+  private readonly interactionPromptElement: HTMLDivElement;
+  private activeInteractionPromptEntityId: string | null = null;
   /** The active Game Mode session driving camera/possession this Play boot. */
   private gameModeSession: GameModeSession | null = null;
   private gravityY = DEFAULT_SCENE_GRAVITY[1];
@@ -282,6 +287,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.scene = runtimeCore.scene;
     this.camera = runtimeCore.camera;
     this.pointerLook = new PointerLookSource(canvas);
+    this.interactionPromptElement = this.createInteractionPromptElement();
 
     this.engineApp.registerSubsystem(this.animationSubsystem);
     this.engineApp.registerSubsystem(this.inputSubsystem);
@@ -297,7 +303,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           console.info("[runtime] goal reached", entityId);
         },
         onInteraction: (entityId, action) => {
+          if (action === TOGGLE_ACTOR_LIGHT_ACTION) {
+            this.toggleActorLight(entityId);
+            void this.playActorParticleEffect(entityId);
+            return;
+          }
           console.info("[runtime] interaction", action, entityId);
+        },
+        onInteractionOverlap: (entityId, action, prompt, overlapping) => {
+          this.setInteractionPrompt(entityId, action, prompt, overlapping);
         },
         // The active Game Mode owns possession: only the pawn it possessed
         // (none, under the default camera mode) is driven by player input.
@@ -355,6 +369,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
     this.disposeReflectionTarget();
+    this.interactionPromptElement.remove();
     void this.engineApp.dispose();
     this.renderer.dispose();
   }
@@ -374,6 +389,47 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   getRenderStats(): { drawCalls: number; triangles: number } {
     return readSceneRuntimeStats(this.renderer);
+  }
+
+  private createInteractionPromptElement(): HTMLDivElement {
+    const element = document.createElement("div");
+    element.textContent = "Press E Key";
+    element.hidden = true;
+    element.style.cssText = [
+      "position:fixed",
+      "left:50%",
+      "bottom:16%",
+      "transform:translateX(-50%)",
+      "z-index:20",
+      "padding:8px 12px",
+      "border-radius:6px",
+      "background:rgba(12,16,22,0.82)",
+      "color:#ffffff",
+      "font:600 15px system-ui,sans-serif",
+      "letter-spacing:0",
+      "pointer-events:none",
+      "box-shadow:0 6px 18px rgba(0,0,0,0.24)",
+    ].join(";");
+    document.body.append(element);
+    return element;
+  }
+
+  private setInteractionPrompt(
+    entityId: string,
+    action: string,
+    prompt: string | undefined,
+    overlapping: boolean,
+  ): void {
+    if (action !== TOGGLE_ACTOR_LIGHT_ACTION) return;
+    if (overlapping) {
+      this.activeInteractionPromptEntityId = entityId;
+      this.interactionPromptElement.textContent = prompt?.trim() || "Press E Key";
+      this.interactionPromptElement.hidden = false;
+      return;
+    }
+    if (this.activeInteractionPromptEntityId !== entityId) return;
+    this.activeInteractionPromptEntityId = null;
+    this.interactionPromptElement.hidden = true;
   }
 
   private async loadActiveProjectScene(): Promise<void> {
@@ -795,6 +851,51 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return object;
   }
 
+  private toggleActorLight(entityId: string): void {
+    const actorIndex = parseActorInstanceEntityIndex(entityId);
+    if (actorIndex === null) return;
+    const object = this.actorObjects.get(actorIndex);
+    if (!object) return;
+    const lights: ThreeLight[] = [];
+    object.traverse((child) => {
+      if (child instanceof ThreeLight) lights.push(child);
+    });
+    if (lights.length === 0) return;
+
+    const enabled = !lights.some((light) => light.visible && light.intensity > 0);
+    for (const light of lights) {
+      if (typeof light.userData.forgeToggleBaseIntensity !== "number") {
+        light.userData.forgeToggleBaseIntensity = light.intensity > 0 ? light.intensity : 1;
+      }
+      light.visible = enabled;
+      light.intensity = enabled ? light.userData.forgeToggleBaseIntensity : 0;
+    }
+  }
+
+  private async playActorParticleEffect(entityId: string): Promise<void> {
+    const actorIndex = parseActorInstanceEntityIndex(entityId);
+    if (actorIndex === null) return;
+    const entity = this.actorEntities[actorIndex];
+    if (!entity) return;
+    const particle = readParticleEmitterComponent(entity);
+    if (!particle) return;
+    const url = this.effectUrlById.get(particle.effectId);
+    if (!url) return;
+    const definition = await this.loadEffect(particle.effectId, url);
+    if (!definition) return;
+    const transform = readTransformComponent(entity);
+    if (!transform) return;
+    const offset = readComponentVec3(entity.components.ParticleEmitter?.position) ?? [0, 0, 0];
+    const effect = new ParticleEffect(definition);
+    effect.setOrigin(
+      transform.position[0] + offset[0],
+      transform.position[1] + offset[1],
+      transform.position[2] + offset[2],
+    );
+    this.scene.add(effect.object3D);
+    this.particleEffects.push(effect);
+  }
+
   private async applyAssetUvwMappings(): Promise<void> {
     if (!this.assetLoader || !this.layout) return;
     const manifest = await this.assetLoader.loadManifest();
@@ -1187,4 +1288,11 @@ function parseInstanceEntityId(entityId: string): { assetId: string; placementIn
     assetId: decodeURIComponent(entityId.slice("instance:".length, separator)),
     placementIndex: index,
   };
+}
+
+function readComponentVec3(value: unknown): [number, number, number] | null {
+  if (!Array.isArray(value) || value.length !== 3) return null;
+  const [x, y, z] = value;
+  if (typeof x !== "number" || typeof y !== "number" || typeof z !== "number") return null;
+  return [x, y, z];
 }

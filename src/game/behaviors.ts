@@ -59,6 +59,16 @@ export interface BehaviorRegistryOptions {
    */
   onInteraction?: (entityId: string, action: string) => void;
   /**
+   * Fired when an interaction sensor begins/ends overlap. Runtime shells can use
+   * this for prompts without coupling UI code into the behavior layer.
+   */
+  onInteractionOverlap?: (
+    entityId: string,
+    action: string,
+    prompt: string | undefined,
+    overlapping: boolean,
+  ) => void;
+  /**
    * Whether the named entity is the player-controlled (possessed) pawn this Play
    * boot. `input-move` only reads input + moves when this is true, so a character
    * carrying the behavior stays put unless the active Game Mode possesses it
@@ -70,6 +80,10 @@ export interface BehaviorRegistryOptions {
 
 function numberParam(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function stringParam(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 /** Spins an entity around one axis at `speedDeg` degrees per second. */
@@ -143,10 +157,12 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
   const reportLocomotion = options.reportLocomotion;
   const onGoalReached = options.onGoalReached;
   const onInteraction = options.onInteraction;
+  const onInteractionOverlap = options.onInteractionOverlap;
   const isPlayerControlled = options.isPlayerControlled ?? (() => true);
   const vertical = new Map<string, PlayerVertical>();
   const reachedGoals = new Set<string>();
   const interactions = new Map<string, InteractionTriggerState>();
+  const interactionOverlaps = new Map<string, boolean>();
 
   const inputMove: BehaviorUpdate = (context) => {
     // Only the possessed pawn responds to input. An authored `input-move`
@@ -229,8 +245,19 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     if (!interaction) return;
     const prev = interactions.get(context.entityId) ?? initialInteractionState();
     const overlapping = (context.physics?.contactsForEntity(context.entityId).length ?? 0) > 0;
+    const wasOverlapping = interactionOverlaps.get(context.entityId) ?? false;
+    if (overlapping !== wasOverlapping) {
+      interactionOverlaps.set(context.entityId, overlapping);
+      onInteractionOverlap?.(
+        context.entityId,
+        interaction.action,
+        interaction.prompt,
+        overlapping,
+      );
+    }
+    const inputAction = stringParam(context.params.inputAction);
     const result = stepInteractionTrigger(prev, {
-      overlapping,
+      overlapping: inputAction ? overlapping && context.actions.pressed(inputAction) : overlapping,
       enabled: interaction.enabled ?? true,
       cooldown: interaction.cooldown ?? 0,
       dt: context.engine.deltaSeconds,

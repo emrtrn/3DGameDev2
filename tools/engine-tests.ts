@@ -1724,6 +1724,47 @@ await checkAsync("rapier physics backend reports contacts through the same contr
   }
 });
 
+await checkAsync("rapier backend reports static sensor overlap with a kinematic player", async () => {
+  const physics = new PhysicsSubsystem({ backend: "rapier" });
+  physics.setEntities([
+    {
+      id: "actor:0",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      },
+    },
+    {
+      id: "character:0",
+      components: {
+        Transform: { position: [0.25, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+      },
+    },
+  ]);
+
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (String(args[0] ?? "").includes("deprecated parameters for the initialization function")) {
+      return;
+    }
+    warn(...args);
+  };
+  try {
+    await app.init();
+    assert.equal(physics.usesRapier(), true);
+    app.update(0.016);
+    assert.deepEqual(physics.contactsForEntity("actor:0"), [
+      { a: "actor:0", b: "character:0", isSensor: true },
+    ]);
+    await app.dispose();
+  } finally {
+    console.warn = warn;
+  }
+});
+
 await checkAsync("rapier simulatePhysics body falls under configured gravity", async () => {
   const physics = new PhysicsSubsystem({ backend: "rapier" });
   physics.setGravity([0, -10, 0]);
@@ -3886,6 +3927,77 @@ check("interact behavior: fires the action + cue on a sensor enter, not while he
   assert.deepEqual(fired, [{ id: "lever:0", action: "pull-lever" }]);
   assert.deepEqual(audio.playedRequests(), [
     { clipId: "collision-chime", volume: 0.5, loop: false, spatial: false },
+  ]);
+});
+
+check("interact behavior: can require an input action while inside the sensor", () => {
+  const fired: Array<{ id: string; action: string }> = [];
+  const overlaps: Array<{ id: string; action: string; prompt: string | undefined; overlapping: boolean }> = [];
+  const registry = createBehaviorRegistry({
+    onInteraction: (id, action) => fired.push({ id, action }),
+    onInteractionOverlap: (id, action, prompt, overlapping) =>
+      overlaps.push({ id, action, prompt, overlapping }),
+  });
+  const physics = new PhysicsSubsystem();
+  const actions = new ActionMap({ KeyE: "interact" });
+  const lamp: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      Behavior: { scriptId: "interact", params: { inputAction: "interact" } },
+      Interaction: { action: "toggle-actor-light" },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([lamp, player]);
+  const behavior = new BehaviorSubsystem(registry, actions, () => undefined, physics);
+  behavior.setEntities([lamp, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(new InputSubsystem(actions));
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+
+  app.update(0.016);
+  assert.deepEqual(fired, []);
+  assert.deepEqual(overlaps, [
+    { id: "actor:0", action: "toggle-actor-light", prompt: undefined, overlapping: true },
+  ]);
+
+  physics.setEntityTransform("player:0", {
+    position: [5, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  app.update(0.016);
+  assert.deepEqual(overlaps, [
+    { id: "actor:0", action: "toggle-actor-light", prompt: undefined, overlapping: true },
+    { id: "actor:0", action: "toggle-actor-light", prompt: undefined, overlapping: false },
+  ]);
+
+  actions.handleDown("KeyE");
+  physics.setEntityTransform("player:0", {
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  app.update(0.016);
+  app.update(0.016);
+  assert.deepEqual(fired, [{ id: "actor:0", action: "toggle-actor-light" }]);
+
+  actions.handleUp("KeyE");
+  app.update(0.016);
+  actions.handleDown("KeyE");
+  app.update(0.016);
+  assert.deepEqual(fired, [
+    { id: "actor:0", action: "toggle-actor-light" },
+    { id: "actor:0", action: "toggle-actor-light" },
   ]);
 });
 

@@ -283,7 +283,32 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         });
       }
     }
+    this.addAabbSensorContacts(contacts, seen);
     this.contacts = this.reportableContacts(contacts);
+  }
+
+  private addAabbSensorContacts(contacts: PhysicsContact[], seen: Set<string>): void {
+    for (let i = 0; i < this.bodies.length; i += 1) {
+      for (let j = i + 1; j < this.bodies.length; j += 1) {
+        const a = this.bodies[i];
+        const b = this.bodies[j];
+        if (!a || !b) continue;
+        if (!a.collider.isSensor && !b.collider.isSensor) continue;
+        if (a.collider.isStatic && b.collider.isStatic) continue;
+        if (!interactionGroupsInteract(a.collider.collisionGroups, b.collider.collisionGroups)) {
+          continue;
+        }
+        if (!aabbOverlaps(bodyAabb(a), bodyAabb(b))) continue;
+        const key = contactKey(a.id, b.id);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        contacts.push({
+          a: a.id,
+          b: b.id,
+          isSensor: true,
+        });
+      }
+    }
   }
 
   private syncRapierDynamicTransforms(): void {
@@ -314,7 +339,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const b = this.rapierBodies.get(bId);
     if (!b) return;
     const [left, right] = a.id < b.id ? [a, b] : [b, a];
-    const key = `${left.id}\n${right.id}`;
+    const key = contactKey(left.id, right.id);
     if (seen.has(key)) return;
     seen.add(key);
     contacts.push({
@@ -323,6 +348,10 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       isSensor: left.isSensor || right.isSensor,
     });
   }
+}
+
+function contactKey(a: EntityId, b: EntityId): string {
+  return a < b ? `${a}\n${b}` : `${b}\n${a}`;
 }
 
 function bodyAabb(body: PhysicsBody): Aabb {

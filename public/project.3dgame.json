@@ -11,7 +11,7 @@
     "gridSize": 1,
     "gridEnabled": false,
     "snapRotationDeg": 15,
-    "snapRotationEnabled": true,
+    "snapRotationEnabled": false,
     "snapScale": 0.1,
     "snapScaleEnabled": false
   },
