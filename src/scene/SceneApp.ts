@@ -73,13 +73,13 @@ import {
   type LightObjectRecord,
 } from "@engine/render-three/lights";
 import {
+  applySkySunDirection,
   applySkyToneMapping,
   applySkyUniforms,
   createSkyObject,
   followCameraWithSky,
   resolveSkyAtmosphere,
-  sunLightRotationDeg,
-  type ResolvedSkyAtmosphere,
+  sunDirectionFromLightRotation,
 } from "@engine/render-three/skyAtmosphere";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
@@ -2351,6 +2351,9 @@ export class SceneApp {
       defaultColor: DEFAULT_SCENE_LIGHT_COLOR,
       selected: this.isLightSelected(index),
     });
+    // Sun = source of truth for the sky's sun: keep the sky disc in sync as the
+    // (directional) Sun light is rotated via gizmo or its rotation fields.
+    if (actor.type === "directional") this.updateSkySunFromLight();
   }
 
   private duplicateSelectionForDrag(selection: Selection): Selection | null {
@@ -2567,8 +2570,8 @@ export class SceneApp {
 
   /**
    * Builds/updates/removes the Sky Atmosphere dome to match `layout.skyAtmosphere`,
-   * pushes the scattering uniforms + tone mapping, and (when enabled) drives the
-   * scene's directional Sun so the sky and shadows stay in sync.
+   * pushes the scattering uniforms + tone mapping, and positions the sun disc from
+   * the directional Sun light (the source of truth — Unreal's Atmosphere Sun Light).
    */
   private applySkyAtmosphere(): void {
     const actor = this.layout?.skyAtmosphere ?? null;
@@ -2589,9 +2592,27 @@ export class SceneApp {
       this.scene.add(this.skyObject);
     }
     applySkyUniforms(this.skyObject, resolved);
+    this.updateSkySunFromLight();
     followCameraWithSky(this.skyObject, this.camera);
     applySkyToneMapping(this.renderer, resolved);
-    if (resolved.driveSunLight && !resolved.hidden) this.driveSunFromSky(resolved);
+  }
+
+  /**
+   * Re-reads the directional Sun light's rotation and repositions the sky's sun
+   * disc/horizon glow. Cheap; called from the render loop so rotating the Sun
+   * (gizmo or rotation fields) moves the sky live, plus after sky/light edits.
+   */
+  private updateSkySunFromLight(): void {
+    if (!this.skyObject) return;
+    const sun = this.sunLightActor();
+    if (!sun) return;
+    applySkySunDirection(this.skyObject, sunDirectionFromLightRotation(readRotation(sun)));
+  }
+
+  /** The scene's Sun light actor (preferred id, else the first directional light). */
+  private sunLightActor(): LayoutLightActor | null {
+    const index = this.sunLightIndex();
+    return index >= 0 ? (this.layout?.lights?.[index] ?? null) : null;
   }
 
   /** Index of the scene's Sun (preferred id) or the first directional light. */
@@ -2603,18 +2624,6 @@ export class SceneApp {
     );
     if (preferred >= 0) return preferred;
     return lights.findIndex((light) => light.type === "directional");
-  }
-
-  /** Rotates + recolors the scene's Sun directional light to match the sky. */
-  private driveSunFromSky(resolved: ResolvedSkyAtmosphere): void {
-    const index = this.sunLightIndex();
-    const sun = index >= 0 ? this.layout?.lights?.[index] : undefined;
-    if (!sun) return;
-    sun.rotation = sunLightRotationDeg(resolved.sunElevationDeg, resolved.sunAzimuthDeg);
-    sun.color = resolved.sunColor;
-    sun.intensity = resolved.sunIntensity;
-    this.refreshLightObject(index);
-    this.fitSunShadowToScene();
   }
 
   /** Adds the singleton Sky Atmosphere (or selects the existing one). */
@@ -2637,9 +2646,10 @@ export class SceneApp {
   }
 
   /**
-   * Applies a partial edit to the Sky Atmosphere as one undoable command. A patch
-   * value of `undefined` clears that field (reverts to its default); any other
-   * value overrides it.
+   * Applies a partial scattering edit to the Sky Atmosphere as one undoable
+   * command. A patch value of `undefined` clears that field (reverts to its
+   * default); any other value overrides it. (Sun direction lives on the Sun
+   * light — see {@link setSkySunDirection}.)
    */
   setSkyAtmosphere(
     patch: { [K in keyof LayoutSkyAtmosphere]?: LayoutSkyAtmosphere[K] | undefined },
@@ -2656,28 +2666,19 @@ export class SceneApp {
   }
 
   /**
-   * Single undoable Sky Atmosphere mutation: swaps `layout.skyAtmosphere`, snapshots
-   * the driven Sun so undo restores it, re-renders, and re-emits panels. Selection
-   * is cleared if the sky disappears while it was the active selection.
+   * Single undoable Sky Atmosphere mutation: swaps `layout.skyAtmosphere`,
+   * re-renders, and re-emits panels. The sky no longer touches the Sun light, so
+   * no light snapshot is needed. Selection is cleared if the sky disappears while
+   * it was the active selection.
    */
   private commitSky(nextSky: LayoutSkyAtmosphere | undefined, label: string): void {
     if (!this.layout) return;
     const previousSky = this.layout.skyAtmosphere ? { ...this.layout.skyAtmosphere } : undefined;
-    const sunIndex = this.sunLightIndex();
-    const previousSun =
-      sunIndex >= 0 && this.layout.lights?.[sunIndex]
-        ? cloneLightActor(this.layout.lights[sunIndex]!)
-        : undefined;
 
-    const apply = (sky: LayoutSkyAtmosphere | undefined, restoreSun: boolean): void => {
+    const apply = (sky: LayoutSkyAtmosphere | undefined): void => {
       if (!this.layout) return;
       if (sky) this.layout.skyAtmosphere = { ...sky };
       else delete this.layout.skyAtmosphere;
-      if (restoreSun && previousSun && sunIndex >= 0 && this.layout.lights?.[sunIndex]) {
-        this.layout.lights[sunIndex] = cloneLightActor(previousSun);
-        this.refreshLightObject(sunIndex);
-        this.fitSunShadowToScene();
-      }
       this.applySkyAtmosphere();
       if (!this.layout.skyAtmosphere && this.selection?.kind === "sky") this.select(null);
       else this.emitSelectionChanged();
@@ -2686,8 +2687,8 @@ export class SceneApp {
 
     this.executeCommand({
       label,
-      redo: () => apply(nextSky, false),
-      undo: () => apply(previousSky, true),
+      redo: () => apply(nextSky),
+      undo: () => apply(previousSky),
     });
   }
 

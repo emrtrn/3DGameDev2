@@ -18,7 +18,8 @@ export const SKY_ATMOSPHERE_ASSET_ID = "sky-atmosphere";
 /**
  * Builds the transform-less Details/Outliner view-model for the Sky Atmosphere
  * singleton. It has no position/scale, so transform fields are zeroed and the
- * resolved sky settings ride along in {@link EditableSelection.sky}.
+ * resolved scattering settings ride along in {@link EditableSelection.sky}. The
+ * sun direction is owned by the Sun light, not the sky.
  */
 function buildSkyEditableSelection(sky: LayoutSkyAtmosphere): EditableSelection {
   const resolved = resolveSkyAtmosphere(sky);
@@ -38,8 +39,8 @@ function buildSkyEditableSelection(sky: LayoutSkyAtmosphere): EditableSelection 
     collision: false,
     simulatePhysics: false,
     physics: {},
-    metadata: {},
     sky: { ...resolved },
+    metadata: {},
   };
 }
 

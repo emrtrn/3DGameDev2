@@ -2,17 +2,17 @@
   "schema": 1,
   "type": "material",
   "materialType": "standard",
-  "name": "Emissive Material",
-  "baseColor": "#46b5ff",
+  "name": "White",
+  "baseColor": "#ffffff",
   "baseColorTexture": null,
   "normalTexture": null,
   "maskTexture": null,
-  "roughness": 0.4,
+  "roughness": 0.8,
   "metalness": 0,
   "opacity": 1,
   "alphaMode": "opaque",
   "alphaTest": 0.5,
   "side": "front",
-  "emissive": "#46b5ff",
-  "emissiveIntensity": 6.1
+  "emissive": "#000000",
+  "emissiveIntensity": 0
 }

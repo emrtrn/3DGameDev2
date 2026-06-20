@@ -3,7 +3,6 @@ import {
   Euler,
   MathUtils,
   NoToneMapping,
-  Quaternion,
   Vector3,
   type PerspectiveCamera,
   type WebGLRenderer,
@@ -27,9 +26,10 @@ export {
  * culled. Instead we render a modest box that always surrounds the camera and
  * draws first (`renderOrder = -1`, no depth write/test) as a pure backdrop.
  *
- * The sky never illuminates by itself (its shader only colors the backdrop), so
- * the "sun" is realized by driving the scene's directional Sun light — see
- * {@link sunLightRotationDeg}.
+ * The sky never illuminates by itself (its shader only colors the backdrop). Like
+ * Unreal, the scene's directional Sun light is the source of truth for the sun:
+ * {@link sunDirectionFromLightRotation} derives the sun direction from that light's
+ * rotation, so rotating the Sun moves the sky. There is no sun data on the sky.
  */
 
 /** Box half-extent the camera sits inside; well within the 100u camera far plane. */
@@ -58,23 +58,17 @@ export function followCameraWithSky(sky: Sky, camera: PerspectiveCamera): void {
   sky.position.copy(camera.position);
 }
 
-/** Unit vector pointing from the ground toward the sun. */
-export function sunDirectionVector(elevationDeg: number, azimuthDeg: number): Vector3 {
-  const phi = MathUtils.degToRad(90 - elevationDeg);
-  const theta = MathUtils.degToRad(azimuthDeg);
-  return new Vector3().setFromSphericalCoords(1, phi, theta);
-}
-
-/** Pushes the resolved scattering + sun-direction settings onto the sky shader. */
+/**
+ * Pushes the resolved scattering settings onto the sky shader. The sun direction
+ * is applied separately via {@link applySkySunDirection} because it is owned by
+ * the directional Sun light, not the sky.
+ */
 export function applySkyUniforms(sky: Sky, resolved: ResolvedSkyAtmosphere): void {
   const uniforms = sky.material.uniforms;
   uniforms.turbidity!.value = resolved.turbidity;
   uniforms.rayleigh!.value = resolved.rayleigh;
   uniforms.mieCoefficient!.value = resolved.mie;
   uniforms.mieDirectionalG!.value = resolved.mieDirectionalG;
-  (uniforms.sunPosition!.value as Vector3).copy(
-    sunDirectionVector(resolved.sunElevationDeg, resolved.sunAzimuthDeg),
-  );
   // Some three builds ship a clouds-extended Sky; disable its procedural clouds so
   // this stays a pure atmosphere (clouds are a separate concern, à la UE's
   // Volumetric Clouds) and we don't need to animate the `time` uniform.
@@ -82,23 +76,27 @@ export function applySkyUniforms(sky: Sky, resolved: ResolvedSkyAtmosphere): voi
   sky.visible = !resolved.hidden;
 }
 
+/** Sets the sky's sun-disc/horizon position from a ground→sun direction. */
+export function applySkySunDirection(sky: Sky, sunDirection: Vector3): void {
+  (sky.material.uniforms.sunPosition!.value as Vector3).copy(sunDirection);
+}
+
 const LIGHT_FORWARD = new Vector3(0, 0, -1);
 
 /**
- * Euler XYZ rotation (degrees) that aims a directional light along the sky's
- * sun. The light travels FROM the sun TOWARD the scene, so its local forward
- * (-Z, see `applyLightTransform` in lights.ts) must equal the negated sun
- * direction. Lets the sky drive the scene's Sun so shadows track the sky.
+ * Ground→sun direction derived from a directional light's Euler rotation. The
+ * light travels FROM the sun TOWARD the scene (local forward -Z, see
+ * `applyLightTransform` in lights.ts), so the direction to the sun is the negated
+ * forward. This makes the Sun light the source of truth for the sky's sun.
  */
-export function sunLightRotationDeg(elevationDeg: number, azimuthDeg: number): Vec3 {
-  const travel = sunDirectionVector(elevationDeg, azimuthDeg).negate().normalize();
-  const quaternion = new Quaternion().setFromUnitVectors(LIGHT_FORWARD, travel);
-  const euler = new Euler().setFromQuaternion(quaternion, "XYZ");
-  return [
-    Number(MathUtils.radToDeg(euler.x).toFixed(3)),
-    Number(MathUtils.radToDeg(euler.y).toFixed(3)),
-    Number(MathUtils.radToDeg(euler.z).toFixed(3)),
-  ];
+export function sunDirectionFromLightRotation(rotationDeg: Vec3): Vector3 {
+  const euler = new Euler(
+    MathUtils.degToRad(rotationDeg[0]),
+    MathUtils.degToRad(rotationDeg[1]),
+    MathUtils.degToRad(rotationDeg[2]),
+    "XYZ",
+  );
+  return LIGHT_FORWARD.clone().applyEuler(euler).negate().normalize();
 }
 
 /**

@@ -6462,6 +6462,29 @@
         "bytes": 259
       },
       "license": "Unknown"
+    },
+    {
+      "id": "white-material",
+      "name": "White.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/White.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 360
+      },
+      "license": "Unknown"
     }
   ]
 }

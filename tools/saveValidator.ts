@@ -531,15 +531,9 @@ export function validateSkyAtmosphere(value: unknown): Record<string, unknown> |
 
   if (typeof input.name === "string" && input.name.length > 0) sky.name = input.name;
   if (input.hidden === true) sky.hidden = true;
-  if (input.driveSunLight === false) sky.driveSunLight = false;
-  if (typeof input.sunColor === "string" && /^#[0-9a-fA-F]{6}$/.test(input.sunColor)) {
-    sky.sunColor = input.sunColor;
-  }
 
+  // Scattering only — the sun direction lives on the directional Sun light.
   const numeric: Array<[keyof typeof input, number, number]> = [
-    ["sunElevationDeg", -10, 90],
-    ["sunAzimuthDeg", 0, 360],
-    ["sunIntensity", 0, 20],
     ["rayleigh", 0, 6],
     ["turbidity", 1, 20],
     ["mie", 0, 0.1],

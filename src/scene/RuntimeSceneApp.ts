@@ -43,6 +43,7 @@ import {
   createSceneRuntimeCore,
   DEFAULT_SCENE_BACKGROUND_COLOR,
   DEFAULT_SCENE_GRAVITY,
+  DEFAULT_SCENE_SUN_ID,
   ensureDefaultSceneLights,
   fitDirectionalShadowToBounds,
   isSceneSunLight,
@@ -57,12 +58,15 @@ import {
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import { attachActorLight } from "@engine/render-three/lights";
 import {
+  applySkySunDirection,
   applySkyToneMapping,
   applySkyUniforms,
   createSkyObject,
   followCameraWithSky,
   resolveSkyAtmosphere,
+  sunDirectionFromLightRotation,
 } from "@engine/render-three/skyAtmosphere";
+import { readRotation } from "@engine/scene/transform";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
   collectMaterialStats,
@@ -969,9 +973,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Renders the Sky Atmosphere dome at runtime. The driven Sun rotation is already
-   * baked into the saved layout's directional light (the editor persists it), so
-   * the runtime only builds the backdrop + tone mapping — it never re-drives lights.
+   * Renders the Sky Atmosphere dome at runtime. Like the editor, the directional
+   * Sun light is the source of truth for the sun: its (persisted) rotation places
+   * the sun disc. The runtime only builds the backdrop + tone mapping.
    */
   private applyRuntimeSky(): void {
     const actor = this.layout?.skyAtmosphere ?? null;
@@ -985,8 +989,21 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.scene.add(this.skyObject);
     }
     applySkyUniforms(this.skyObject, resolved);
+    const sun = this.sunLightActor();
+    if (sun) applySkySunDirection(this.skyObject, sunDirectionFromLightRotation(readRotation(sun)));
     followCameraWithSky(this.skyObject, this.camera);
     applySkyToneMapping(this.renderer, resolved);
+  }
+
+  /** The scene's Sun light actor (preferred id, else the first directional light). */
+  private sunLightActor(): LayoutLightActor | null {
+    const lights = this.layout?.lights;
+    if (!lights) return null;
+    return (
+      lights.find((light) => light.type === "directional" && light.id === DEFAULT_SCENE_SUN_ID) ??
+      lights.find((light) => light.type === "directional") ??
+      null
+    );
   }
 
   private staticObjectsCastShadow(): boolean {

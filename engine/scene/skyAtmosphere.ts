@@ -1,21 +1,18 @@
 import type { LayoutSkyAtmosphere } from "./layout";
 
 /**
- * Render-agnostic Sky Atmosphere model: resolved settings + defaults, shared by
- * the editor view-models and the three.js render binding
+ * Render-agnostic Sky Atmosphere model: resolved scattering settings + defaults,
+ * shared by the editor view-models and the three.js render binding
  * (`engine/render-three/skyAtmosphere.ts`). Kept free of three.js so editor core
  * and the save validator can read it without pulling in the renderer.
+ *
+ * The sun is NOT part of this model: like Unreal, the scene's directional Sun
+ * light is the source of truth for the sun direction (the sky reads its rotation
+ * at render time). Only scattering/exposure live here.
  */
 export interface ResolvedSkyAtmosphere {
   name: string;
   hidden: boolean;
-  /** Sun elevation above the horizon, degrees. */
-  sunElevationDeg: number;
-  /** Sun azimuth / compass angle, degrees. */
-  sunAzimuthDeg: number;
-  sunColor: string;
-  sunIntensity: number;
-  driveSunLight: boolean;
   rayleigh: number;
   turbidity: number;
   mie: number;
@@ -26,11 +23,6 @@ export interface ResolvedSkyAtmosphere {
 export const SKY_ATMOSPHERE_DEFAULTS: ResolvedSkyAtmosphere = {
   name: "Sky Atmosphere",
   hidden: false,
-  sunElevationDeg: 20,
-  sunAzimuthDeg: 180,
-  sunColor: "#fff6e8",
-  sunIntensity: 3,
-  driveSunLight: true,
   rayleigh: 2,
   turbidity: 10,
   mie: 0.005,
@@ -47,11 +39,6 @@ export function resolveSkyAtmosphere(
   return {
     name: actor.name ?? defaults.name,
     hidden: actor.hidden ?? defaults.hidden,
-    sunElevationDeg: actor.sunElevationDeg ?? defaults.sunElevationDeg,
-    sunAzimuthDeg: actor.sunAzimuthDeg ?? defaults.sunAzimuthDeg,
-    sunColor: actor.sunColor ?? defaults.sunColor,
-    sunIntensity: actor.sunIntensity ?? defaults.sunIntensity,
-    driveSunLight: actor.driveSunLight ?? defaults.driveSunLight,
     rayleigh: actor.rayleigh ?? defaults.rayleigh,
     turbidity: actor.turbidity ?? defaults.turbidity,
     mie: actor.mie ?? defaults.mie,

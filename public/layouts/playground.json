@@ -210,7 +210,7 @@
             0
           ],
           "scaleLocked": true,
-          "materialSlot": "ground",
+          "materialSlot": "white-material",
           "rotationYDeg": 0,
           "scale": 2
         }
@@ -229,7 +229,7 @@
             1.75,
             -3.11
           ],
-          "materialSlot": "ground",
+          "materialSlot": "white-material",
           "rotationYDeg": 0,
           "scale": 1
         },
@@ -239,7 +239,7 @@
             1.75,
             -3.1
           ],
-          "materialSlot": "ground",
+          "materialSlot": "white-material",
           "rotationYDeg": 0,
           "scale": 1
         }
@@ -254,15 +254,11 @@
     "gameMode": "forge.tpsCharacter"
   },
   "skyAtmosphere": {
-    "sunColor": "#fef5d2",
-    "sunElevationDeg": 1,
-    "sunAzimuthDeg": 0,
-    "sunIntensity": 3,
-    "rayleigh": 3,
-    "turbidity": 10,
-    "mie": 0.005,
-    "mieDirectionalG": 0.8,
-    "exposure": 0.5
+    "rayleigh": 1,
+    "turbidity": 1,
+    "mie": 0.001,
+    "mieDirectionalG": 0.9,
+    "exposure": 0.25
   },
   "lights": [
     {
@@ -275,12 +271,12 @@
       ],
       "name": "Sun",
       "rotation": [
-        -75,
-        0,
-        0
+        -30.8,
+        12.1,
+        3.3
       ],
       "color": "#fef5d2",
-      "intensity": 3,
+      "intensity": 1,
       "castShadow": true
     }
   ],

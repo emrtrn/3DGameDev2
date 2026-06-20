@@ -3059,7 +3059,11 @@ export class EditorUi {
       });
   }
 
-  /** Details panel for the singleton Sky Atmosphere (sun direction + scattering). */
+  /**
+   * Details panel for the singleton Sky Atmosphere (scattering only). The sun
+   * direction is controlled by rotating the scene's Directional Sun light, so it
+   * is intentionally absent here.
+   */
   private renderSkyDetails(selection: EditableSelection): void {
     const sky = selection.sky;
     if (!sky) return;
@@ -3073,33 +3077,6 @@ export class EditorUi {
         <span>Name</span>
         <input data-sky-name type="text" value="${escapeHtml(sky.name)}" placeholder="Sky Atmosphere" />
       </label>
-      <div class="detail-section">
-        <div class="detail-section-title">Sun</div>
-        <label class="detail-row">
-          <span>Elevation</span>
-          <input data-sky-number="sunElevationDeg" type="number" step="1" min="-10" max="90"
-            value="${sky.sunElevationDeg}" />
-        </label>
-        <label class="detail-row">
-          <span>Azimuth</span>
-          <input data-sky-number="sunAzimuthDeg" type="number" step="1" min="0" max="360"
-            value="${sky.sunAzimuthDeg}" />
-        </label>
-        <label class="detail-row">
-          <span>Color</span>
-          <input data-sky-color type="color" value="${escapeHtml(sky.sunColor)}" />
-        </label>
-        <label class="detail-row">
-          <span>Intensity</span>
-          <input data-sky-number="sunIntensity" type="number" step="0.1" min="0" max="20"
-            value="${sky.sunIntensity}" />
-        </label>
-        <label class="detail-toggle">
-          <input type="checkbox" data-sky-toggle="driveSunLight" ${sky.driveSunLight ? "checked" : ""} />
-          <span>Drive Sun Light</span>
-        </label>
-        <div class="detail-hint">Rotates &amp; recolors the scene's directional Sun to match.</div>
-      </div>
       <div class="detail-section">
         <div class="detail-section-title">Atmosphere</div>
         <label class="detail-row">
@@ -3127,6 +3104,7 @@ export class EditorUi {
           <input data-sky-number="exposure" type="number" step="0.05" min="0" max="1"
             value="${sky.exposure}" />
         </label>
+        <div class="detail-hint">Sun direction is set by rotating the Directional Sun light.</div>
       </div>
     `;
 
@@ -3139,16 +3117,6 @@ export class EditorUi {
       );
     });
 
-    this.detailsBody.querySelector<HTMLInputElement>("[data-sky-color]")?.addEventListener(
-      "change",
-      (event) => {
-        this.app.setSkyAtmosphere(
-          { sunColor: (event.currentTarget as HTMLInputElement).value },
-          "Set Sun Color",
-        );
-      },
-    );
-
     this.detailsBody.querySelectorAll<HTMLInputElement>("[data-sky-number]").forEach((input) => {
       input.addEventListener("change", () => {
         const key = input.dataset.skyNumber as keyof LayoutSkyAtmosphere | undefined;
@@ -3160,16 +3128,6 @@ export class EditorUi {
         );
       });
     });
-
-    this.detailsBody.querySelector<HTMLInputElement>("[data-sky-toggle]")?.addEventListener(
-      "change",
-      (event) => {
-        this.app.setSkyAtmosphere(
-          { driveSunLight: (event.currentTarget as HTMLInputElement).checked },
-          "Toggle Drive Sun Light",
-        );
-      },
-    );
   }
 
   private handleDetailAction(action: string): void {

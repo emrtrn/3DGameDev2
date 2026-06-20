@@ -19,15 +19,14 @@ export interface EditableTransform {
   scale: Vec3;
 }
 
-/** Resolved Sky Atmosphere fields for the Details panel (singleton actor). */
+/**
+ * Resolved Sky Atmosphere fields for the Details panel (singleton actor). Only
+ * scattering/exposure live here; the sun direction is owned by the directional
+ * Sun light and edited via its own transform, not this panel.
+ */
 export interface EditableSky {
   name: string;
   hidden: boolean;
-  sunElevationDeg: number;
-  sunAzimuthDeg: number;
-  sunColor: string;
-  sunIntensity: number;
-  driveSunLight: boolean;
   rayleigh: number;
   turbidity: number;
   mie: number;

@@ -243,30 +243,21 @@ export interface LayoutWorldSettings {
 /**
  * Singleton environment actor: a physically-inspired sky dome (Rayleigh + Mie
  * scattering, à la Unreal's Sky Atmosphere). Rendered with three.js's analytic
- * `Sky` shader as the scene background. The sun direction (`sunElevationDeg` /
- * `sunAzimuthDeg`) places the sun disc + horizon glow and, when `driveSunLight`
- * is set, is pushed onto the scene's directional Sun light so the sky and the
- * scene's shadows move together. All fields are optional; absent reads the
- * defaults in `engine/render-three/skyAtmosphere.ts`.
+ * `Sky` shader as the scene background.
+ *
+ * Like Unreal, the **directional Sun light is the source of truth** for the sun:
+ * the sky reads that light's rotation each frame to place the sun disc + horizon
+ * glow, so rotating the Sun (gizmo or its rotation fields) moves the sky live.
+ * The Details panel exposes elevation/azimuth as a two-way convenience that just
+ * rewrites the light's rotation; nothing about the sun is stored on the sky. Only
+ * the scattering parameters live here; all fields are optional and absent reads
+ * the defaults in `engine/scene/skyAtmosphere.ts`.
  */
 export interface LayoutSkyAtmosphere {
   /** Display name in the Outliner. Absent means "Sky Atmosphere". */
   name?: string;
-  /** Hidden in the viewport + runtime (no sky dome, no sun drive). Absent means false. */
+  /** Hidden in the viewport + runtime (no sky dome). Absent means false. */
   hidden?: boolean;
-  /** Sun elevation above the horizon, degrees (-10..90). Higher = midday. */
-  sunElevationDeg?: number;
-  /** Sun azimuth / compass angle, degrees (0..360). */
-  sunAzimuthDeg?: number;
-  /** Sun tint applied to the driven directional light (hex). */
-  sunColor?: string;
-  /** Sun intensity applied to the driven directional light. */
-  sunIntensity?: number;
-  /**
-   * When true (default), rotate + recolor the scene's directional Sun light to
-   * match the sky's sun, so the sky and the scene's shadows stay in sync.
-   */
-  driveSunLight?: boolean;
   /** Rayleigh scattering strength — controls the blueness of the sky (0..6). */
   rayleigh?: number;
   /** Atmospheric turbidity / haziness (1..20). */

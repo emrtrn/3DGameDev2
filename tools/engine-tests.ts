@@ -200,6 +200,7 @@ import {
 import { colliderBoxFromBounds } from "../engine/render-three/transforms";
 import { collisionWireboxes } from "../engine/render-three/collisionView";
 import { attachActorLight } from "../engine/render-three/lights";
+import { sunDirectionFromLightRotation } from "../engine/render-three/skyAtmosphere";
 import {
   COLLISION_CHANNELS,
   COLLISION_OBJECT_CHANNEL_BITS,
@@ -5179,7 +5180,7 @@ check("validateLayout round-trips an actors[] array", () => {
   assert.deepEqual(validateLayout(layout), layout);
 });
 
-check("validateSkyAtmosphere allowlists fields, clamps junk, and round-trips defaults", () => {
+check("validateSkyAtmosphere allowlists scattering fields and round-trips defaults", () => {
   // A present sky with all-defaults still round-trips as `{}` so it is never lost.
   assert.deepEqual(validateSkyAtmosphere({}), {});
   assert.equal(validateSkyAtmosphere(undefined), null);
@@ -5187,37 +5188,43 @@ check("validateSkyAtmosphere allowlists fields, clamps junk, and round-trips def
   const sky = validateSkyAtmosphere({
     name: "Dusk",
     hidden: true,
-    driveSunLight: false,
-    sunColor: "#ffaa33",
-    sunElevationDeg: 12,
-    sunAzimuthDeg: 210,
-    sunIntensity: 4,
     rayleigh: 3,
     turbidity: 8,
     mie: 0.01,
     mieDirectionalG: 0.9,
     exposure: 0.4,
+    // Sun fields live on the directional light now — they must NOT round-trip here.
+    sunElevationDeg: 12,
     bogusField: "dropped",
   });
   assert.deepEqual(sky, {
     name: "Dusk",
     hidden: true,
-    driveSunLight: false,
-    sunColor: "#ffaa33",
-    sunElevationDeg: 12,
-    sunAzimuthDeg: 210,
-    sunIntensity: 4,
     rayleigh: 3,
     turbidity: 8,
     mie: 0.01,
     mieDirectionalG: 0.9,
     exposure: 0.4,
   });
-  // A malformed color is silently dropped (falls back to the default sun color).
-  assert.deepEqual(validateSkyAtmosphere({ sunColor: "red" }), {});
   // Out-of-range numbers reject the save, mirroring the light-actor validator.
-  assert.throws(() => validateSkyAtmosphere({ sunElevationDeg: 999 }));
+  assert.throws(() => validateSkyAtmosphere({ rayleigh: 999 }));
   assert.throws(() => validateSkyAtmosphere({ mie: 5 }));
+});
+
+check("sky derives the sun direction from the directional-light rotation", () => {
+  // The directional Sun light is the source of truth: the sky reads its rotation
+  // (forward -Z = where the light shines) and the sun sits opposite that travel.
+  const unit = (v: { x: number; y: number; z: number }): number =>
+    Math.hypot(v.x, v.y, v.z);
+
+  // No rotation: light shines down -Z, so the sun is toward +Z.
+  const flat = sunDirectionFromLightRotation([0, 0, 0]);
+  assert.ok(Math.abs(unit(flat) - 1) < 1e-6, "unit length");
+  assert.ok(Math.abs(flat.x) < 1e-6 && Math.abs(flat.y) < 1e-6 && Math.abs(flat.z - 1) < 1e-6);
+
+  // Pitched -90° about X aims the light straight down, so the sun is at the zenith.
+  const noon = sunDirectionFromLightRotation([-90, 0, 0]);
+  assert.ok(Math.abs(noon.y - 1) < 1e-6, `zenith got ${noon.y}`);
 });
 
 check("validateLayout round-trips a skyAtmosphere singleton", () => {
@@ -5227,9 +5234,9 @@ check("validateLayout round-trips a skyAtmosphere singleton", () => {
     loadGroups: [],
     instances: [],
     characters: [],
-    skyAtmosphere: { sunElevationDeg: 30, rayleigh: 2.5 },
+    skyAtmosphere: { turbidity: 6, rayleigh: 2.5 },
   }) as RoomLayout;
-  assert.deepEqual(layout.skyAtmosphere, { sunElevationDeg: 30, rayleigh: 2.5 });
+  assert.deepEqual(layout.skyAtmosphere, { turbidity: 6, rayleigh: 2.5 });
   // Idempotent: validating the output again yields the same shape.
   assert.deepEqual(validateLayout(layout), layout);
 });
