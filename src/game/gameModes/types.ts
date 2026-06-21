@@ -90,6 +90,9 @@ export interface RuntimeCharacterRef {
   readonly object: Object3D;
   readonly gltf: GLTF;
   readonly placement: LayoutCharacter;
+  readonly classRef?: string;
+  readonly parentClass?: "character";
+  readonly hasCharacterMovement?: boolean;
 }
 
 /**

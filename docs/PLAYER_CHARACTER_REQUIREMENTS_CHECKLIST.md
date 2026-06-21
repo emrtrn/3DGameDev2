@@ -356,35 +356,35 @@ Durum: `[ ]` yapilmadi, `[~]` devam ediyor, `[x]` tamam.
 
 ### Faz 1 - Veri modeli ve validator
 
-- [ ] `engine/scene/components.ts` icine `CharacterMovementComponent` tipi ve
+- [x] `engine/scene/components.ts` icine `CharacterMovementComponent` tipi ve
       read helper ekle.
-- [ ] `engine/scene/actorScript.ts` `ACTOR_COMPONENT_KINDS` listesine
+- [x] `engine/scene/actorScript.ts` `ACTOR_COMPONENT_KINDS` listesine
       `CharacterMovement` ekle.
-- [ ] `tools/saveValidator.ts` allowlist/normalize/validate akisini guncelle.
-- [ ] Character parent class default seed'ini Transform + Capsule + MeshRenderer
+- [x] `tools/saveValidator.ts` allowlist/normalize/validate akisini guncelle.
+- [x] Character parent class default seed'ini Transform + Capsule + MeshRenderer
       + CharacterMovement yap.
-- [ ] Headless tests: normalize, save payload, invalid props fallback.
+- [x] Headless tests: normalize, save payload, invalid props fallback.
 
 ### Faz 2 - Editor UX
 
-- [ ] ActorScriptEditor Add menu altina `Movement -> Character Movement` ekle.
-- [ ] CharacterMovement Details formu: speed, sprint, jump, gravityScale,
+- [x] ActorScriptEditor Add menu altina `Movement -> Character Movement` ekle.
+- [x] CharacterMovement Details formu: speed, sprint, jump, gravityScale,
       acceleration, braking, airControl, orientRotationToMovement.
-- [ ] Character compile warnings: missing capsule, missing movement, invalid
+- [x] Character compile warnings: missing capsule, missing movement, invalid
       parent, missing mesh.
-- [ ] MeshRenderer asset picker skeletal mesh icin `character-a` gibi asset'leri
+- [x] MeshRenderer asset picker skeletal mesh icin `character-a` gibi asset'leri
       net gostermeli.
 
 ### Faz 3 - Runtime movement bridge
 
-- [ ] Actor Script character instance'lari GameMode possession adaylarina dahil
+- [x] Actor Script character instance'lari GameMode possession adaylarina dahil
       olsun (`actor:<i>` RuntimeCharacterRef/RuntimePawnRef).
-- [ ] CharacterMovement runner mevcut pure helper'lari kullanarak
+- [x] CharacterMovement runner mevcut pure helper'lari kullanarak
       possessed pawn'u hareket ettirsin.
-- [ ] Input PlayerController'dan gelsin; unpossessed CharacterMovement hareket
+- [x] Input PlayerController'dan gelsin; unpossessed CharacterMovement hareket
       etmesin.
-- [ ] Capsule collider half-extents hareket collision icin kullanilsin.
-- [ ] Runtime state `context.state` veya movement subsystem state icinde kalsin;
+- [x] Capsule collider half-extents hareket collision icin kullanilsin.
+- [x] Runtime state `context.state` veya movement subsystem state icinde kalsin;
       layout'a yazilmasin.
 
 ### Faz 4 - GameMode asset entegrasyonu
@@ -408,10 +408,10 @@ Durum: `[ ]` yapilmadi, `[~]` devam ediyor, `[x]` tamam.
 
 - [ ] Runtime debug panelde active GameMode, possessed pawn, movement mode,
       grounded, velocity gorunsun.
-- [ ] Engine tests: possession, movement, collision clamp, jump, unpossessed
+- [x] Engine tests: possession, movement, collision clamp, jump, unpossessed
       no-input.
-- [ ] `npm run build:verify`.
-- [ ] `docs/UNREAL_BASICS_LESSONS.md` progress log ve kanonik dosya listesi
+- [x] `npm run build:verify`.
+- [x] `docs/UNREAL_BASICS_LESSONS.md` progress log ve kanonik dosya listesi
       guncel kalsin.
 
 ---

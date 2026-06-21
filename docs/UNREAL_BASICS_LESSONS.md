@@ -106,6 +106,17 @@ tutkalı shell'lerde ince kalır.
   possession akisi. Takip dokumani:
   `docs/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md`.
 
+- *2026-06-21* — **CharacterMovement dikey kesiti.** Actor Script schema'sina
+  `CharacterMovement` component'i eklendi; `parentClass:"character"` yeni
+  class'lari Transform + Capsule Collider + MeshRenderer + CharacterMovement ile
+  seed eder. ActorScriptEditor bu component icin Details formu ve compile
+  uyarilari sunar. Runtime'da yeni `CharacterMovementSubsystem`, sadece
+  possessed pawn'u mevcut `playerMovement` / `verticalMotion` / `collision`
+  saf helper'lariyla hareket ettirir; Actor Script character instance'lari TPS
+  GameMode possession adaylarina girer. `Player.Actor`, capsule + movement
+  tasiyacak sekilde guncellendi. Gate: `npx tsc --noEmit` temiz, engine
+  testleri **240 check**.
+
 ## Mevcut runtime taban çizgisi (kanıt)
 
 - Davranışlar saf game kodu: `src/game/behaviors.ts` — `spin`, `input-move`

@@ -85,6 +85,7 @@ const COMPONENT_ICONS: Record<ActorComponentKind, string> = {
   Light: "☀",
   Interaction: "☞",
   Behavior: "⚙",
+  CharacterMovement: "CM",
 };
 
 function escapeHtml(value: string): string {
@@ -662,6 +663,8 @@ export class ActorScriptEditor {
     const meshField = node.component === "MeshRenderer" ? this.meshPickerField(node) : "";
     const lightField = node.component === "Light" ? lightFields(node) : "";
     const particleField = node.component === "ParticleEmitter" ? this.particleFields(node) : "";
+    const characterMovementField =
+      node.component === "CharacterMovement" ? characterMovementFields(node) : "";
     const pos = readVec3Prop(node.props.position, [0, 0, 0]);
     const rot = readVec3Prop(node.props.rotation, [0, 0, 0]);
     const scl = readVec3Prop(node.props.scale, [1, 1, 1]);
@@ -682,6 +685,7 @@ export class ActorScriptEditor {
       ${meshField}
       ${lightField}
       ${particleField}
+      ${characterMovementField}
       <div class="as-section-label">Transform <small>(preview)</small></div>
       ${vec3Row("position", "Position", pos)}
       ${vec3Row("rotation", "Rotation°", rot)}
@@ -807,6 +811,7 @@ export class ActorScriptEditor {
     });
     this.bindLightDetails(node);
     this.bindParticleDetails(node);
+    this.bindCharacterMovementDetails(node);
     this.detailsHost.querySelectorAll<HTMLElement>("[data-as-vec]").forEach((rowEl) => {
       const key = rowEl.dataset.asVec as "position" | "rotation" | "scale";
       const inputs = Array.from(rowEl.querySelectorAll<HTMLInputElement>("input"));
@@ -916,6 +921,39 @@ export class ActorScriptEditor {
       this.markDirty();
       this.renderDetails();
     });
+  }
+
+  private bindCharacterMovementDetails(node: ComponentTemplateNode): void {
+    const mode = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-character-movement-mode]");
+    mode?.addEventListener("change", () => {
+      node.props.movementMode = mode.value;
+      this.markDirty();
+      this.renderDetails();
+    });
+    const orient = this.detailsHost.querySelector<HTMLInputElement>(
+      "[data-as-character-movement-orient]",
+    );
+    orient?.addEventListener("change", () => {
+      node.props.orientRotationToMovement = orient.checked;
+      this.markDirty();
+      this.renderDetails();
+    });
+    this.detailsHost
+      .querySelectorAll<HTMLInputElement>("[data-as-character-movement-num]")
+      .forEach((input) => {
+        const key = input.dataset.asCharacterMovementNum;
+        if (!key) return;
+        const apply = (): void => {
+          const n = Number(input.value);
+          if (Number.isFinite(n)) node.props[key] = n;
+          this.markDirty();
+        };
+        input.addEventListener("input", apply);
+        input.addEventListener("change", () => {
+          apply();
+          this.renderDetails();
+        });
+      });
   }
 
   private detailsVariable(): string {
@@ -1087,7 +1125,7 @@ export class ActorScriptEditor {
   private addComponent(kind: ActorComponentKind): void {
     const root = this.def.components.find((node) => node.parent === undefined);
     const id = this.uniqueNodeId(kind);
-    const node: ComponentTemplateNode = { id, component: kind, props: {} };
+    const node: ComponentTemplateNode = { id, component: kind, props: defaultComponentProps(kind) };
     if (root) node.parent = root.id;
     this.def.components.push(node);
     this.selection = { kind: "component", id };
@@ -1247,6 +1285,33 @@ export class ActorScriptEditor {
       }
     });
 
+    const hasComponent = (kind: ActorComponentKind): boolean =>
+      this.def.components.some((node) => node.component === kind);
+    if (this.def.parentClass === "character") {
+      if (!hasComponent("CharacterMovement")) {
+        warnings.push("Character class has no CharacterMovement component.");
+      }
+      const capsule = this.def.components.find(
+        (node) =>
+          node.component === "Collider" &&
+          node.props.shape === "capsule" &&
+          node.props.isSensor !== true,
+      );
+      if (!capsule) warnings.push("Character class should have a non-sensor capsule Collider.");
+      const mesh = this.def.components.find((node) => node.component === "MeshRenderer");
+      if (!mesh) warnings.push("Character class has no MeshRenderer.");
+      else if (typeof mesh.props.assetId !== "string" || mesh.props.assetId.length === 0) {
+        warnings.push("Character MeshRenderer has no mesh asset.");
+      }
+    }
+    if (
+      this.def.parentClass !== "character" &&
+      this.def.parentClass !== "pawn" &&
+      hasComponent("CharacterMovement")
+    ) {
+      warnings.push("CharacterMovement should live on a Character or Pawn class.");
+    }
+
     if (errors.length === 0) {
       const suffix = warnings.length ? ` · ${warnings.length} warning(s)` : "";
       this.compileStatusEl.textContent = `✓ Compiled${suffix}`;
@@ -1401,6 +1466,8 @@ const LIGHT_TYPE_LABELS: Record<SceneLightType, string> = {
   spot: "Spot",
 };
 
+const CHARACTER_MOVEMENT_MODES = ["walking", "falling", "flying", "swimming", "custom"] as const;
+
 /** Reads a light `type` prop, defaulting to directional (matches the preview/engine). */
 function readLightType(value: SceneJsonValue | undefined): SceneLightType {
   return typeof value === "string" && LIGHT_TYPES.includes(value as SceneLightType)
@@ -1476,6 +1543,72 @@ function lightFields(node: ComponentTemplateNode): string {
         : ""
     }
   `;
+}
+
+function characterMovementFields(node: ComponentTemplateNode): string {
+  const props = node.props;
+  const mode =
+    typeof props.movementMode === "string" &&
+    (CHARACTER_MOVEMENT_MODES as readonly string[]).includes(props.movementMode)
+      ? props.movementMode
+      : "walking";
+  const numberField = (key: string, label: string, fallback: number, attrs: string): string => `
+    <label class="as-field">
+      <span>${label}</span>
+      <input type="number" data-as-character-movement-num="${key}" value="${readNumberProp(
+        props[key],
+        fallback,
+      )}" ${attrs} />
+    </label>`;
+  const modeOptions = CHARACTER_MOVEMENT_MODES.map(
+    (value) => `<option value="${value}" ${value === mode ? "selected" : ""}>${value}</option>`,
+  ).join("");
+  return `
+    <div class="as-section-label">Character Movement</div>
+    <label class="as-field">
+      <span>Movement Mode</span>
+      <select data-as-character-movement-mode>${modeOptions}</select>
+    </label>
+    ${numberField("maxWalkSpeed", "Max Walk Speed", 3, 'step="0.1" min="0"')}
+    ${numberField("sprintMultiplier", "Sprint Multiplier", 2, 'step="0.1" min="0"')}
+    ${numberField("jumpSpeed", "Jump Speed", 4, 'step="0.1" min="0"')}
+    ${numberField("gravityScale", "Gravity Scale", 1, 'step="0.1"')}
+    ${numberField("airControl", "Air Control", 0.25, 'step="0.05" min="0" max="1"')}
+    ${numberField("acceleration", "Acceleration", 30, 'step="1" min="0"')}
+    ${numberField("brakingDeceleration", "Braking Deceleration", 24, 'step="1" min="0"')}
+    ${numberField("groundFriction", "Ground Friction", 8, 'step="0.1" min="0"')}
+    ${numberField("capsuleRadius", "Capsule Radius", 0.3, 'step="0.05" min="0"')}
+    ${numberField("capsuleHalfHeight", "Capsule Half Height", 0.9, 'step="0.05" min="0"')}
+    <label class="as-field as-check">
+      <input type="checkbox" data-as-character-movement-orient ${
+        props.orientRotationToMovement === false ? "" : "checked"
+      } />
+      <span>Orient Rotation To Movement</span>
+    </label>
+  `;
+}
+
+function defaultComponentProps(kind: ActorComponentKind): Record<string, SceneJsonValue> {
+  if (kind === "Collider") {
+    return { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false };
+  }
+  if (kind === "CharacterMovement") {
+    return {
+      maxWalkSpeed: 3,
+      sprintMultiplier: 2,
+      jumpSpeed: 4,
+      gravityScale: 1,
+      airControl: 0.25,
+      acceleration: 30,
+      brakingDeceleration: 24,
+      groundFriction: 8,
+      orientRotationToMovement: true,
+      movementMode: "walking",
+      capsuleRadius: 0.3,
+      capsuleHalfHeight: 0.9,
+    };
+  }
+  return {};
 }
 
 function stringifyMetadataDefault(value: MetadataFieldDef["default"]): string {

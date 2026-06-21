@@ -103,6 +103,7 @@ const MARKER_GLYPHS: Record<string, string> = {
   ParticleEmitter: "✺",
   Interaction: "☞",
   Behavior: "⚙",
+  CharacterMovement: "CM",
   Metadata: "ℹ",
 };
 

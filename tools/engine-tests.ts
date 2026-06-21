@@ -34,6 +34,7 @@ import { validateSceneDocument } from "../engine/scene/sceneSerialization";
 import {
   readAudioComponent,
   readBehaviorComponent,
+  readCharacterMovementComponent,
   readColliderComponent,
   readInteractionComponent,
   readLightComponent,
@@ -69,6 +70,7 @@ import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/aud
 import { KeyboardInputSource } from "../src/input/keyboardInputSource";
 import { facingYawFromMove, planarMoveStep } from "../src/game/playerMovement";
 import { createBehaviorRegistry } from "../src/game/behaviors";
+import { CharacterMovementSubsystem } from "../src/game/characterMovementSystem";
 import type { TransformComponent } from "../engine/scene/components";
 import {
   desiredFollowPose,
@@ -4798,7 +4800,7 @@ const MOVE_BINDINGS = {
 
 function makeCharacterRef(
   index: number,
-  opts: { input?: boolean; player?: boolean } = {},
+  opts: { input?: boolean; player?: boolean; actorMovement?: boolean } = {},
 ): RuntimeCharacterRef {
   const placement: LayoutCharacter = {
     assetId: "hero",
@@ -4808,10 +4810,17 @@ function makeCharacterRef(
   if (opts.player) placement.metadata = { player: true };
   return {
     index,
-    entityId: characterEntityId(index),
+    entityId: opts.actorMovement ? actorInstanceEntityId(index) : characterEntityId(index),
     object: new Object3D(),
     gltf: { animations: [] } as unknown as GLTF,
     placement,
+    ...(opts.actorMovement
+      ? {
+          classRef: "assets/starter-content/Script/Player.actor.json",
+          parentClass: "character" as const,
+          hasCharacterMovement: true,
+        }
+      : {}),
   };
 }
 
@@ -4952,6 +4961,14 @@ check("tps mode prefers a metadata-tagged player over input-move order", () => {
   assert.equal(session.playerState.pawnEntityId, characterEntityId(1));
 });
 
+check("tps mode can possess an Actor Script character with CharacterMovement", () => {
+  const characters = [makeCharacterRef(0, { actorMovement: true })];
+  const { context } = makeGameModeContext({ characters });
+  const session = tpsCharacterGameMode.createSession(context);
+  session.spawnDefaultPawn();
+  assert.equal(session.playerState.pawnEntityId, actorInstanceEntityId(0));
+});
+
 check("input-move behavior: an unpossessed character ignores movement input", () => {
   const actions = new ActionMap({ KeyW: "move-forward" });
   actions.handleDown("KeyW");
@@ -4989,6 +5006,98 @@ check("input-move behavior: an unpossessed character ignores movement input", ()
   driven.setEntities([entity]);
   driven.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 1 });
   assert.notDeepEqual(possessed!.position, [0, 0, 0]);
+});
+
+check("CharacterMovement subsystem only moves the possessed character", () => {
+  const actions = new ActionMap({ KeyW: "move-forward" });
+  actions.handleDown("KeyW");
+  actions.advance();
+  const entity: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      CharacterMovement: {
+        maxWalkSpeed: 4,
+        sprintMultiplier: 2,
+        jumpSpeed: 5,
+        gravityScale: 1,
+        orientRotationToMovement: true,
+      },
+    },
+  };
+
+  let unpossessed: TransformComponent | null = null;
+  const idle = new CharacterMovementSubsystem(
+    actions,
+    (_id, transform) => {
+      unpossessed = transform;
+    },
+    undefined,
+    { isPlayerControlled: () => false },
+  );
+  idle.setEntities([entity]);
+  idle.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 1 });
+  assert.equal(unpossessed, null);
+
+  let possessed: TransformComponent | null = null;
+  const reports = new Map<string, LocomotionInput>();
+  const driven = new CharacterMovementSubsystem(
+    actions,
+    (_id, transform) => {
+      possessed = transform;
+    },
+    undefined,
+    {
+      isPlayerControlled: () => true,
+      reportLocomotion: (entityId, report) => reports.set(entityId, report),
+    },
+  );
+  driven.setEntities([entity]);
+  driven.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 1 });
+  assert.ok(possessed);
+  assert.ok(possessed.position[2] < 0);
+  yawApproxEqual(possessed.rotation[1], 180);
+  assert.equal(reports.get("actor:0")?.grounded, true);
+});
+
+check("CharacterMovement subsystem applies jump and gravity from component props", () => {
+  const actions = new ActionMap({ Space: "jump" });
+  actions.handleDown("Space");
+  actions.advance();
+  const entity: Entity = {
+    id: "actor:jump",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      CharacterMovement: {
+        maxWalkSpeed: 3,
+        sprintMultiplier: 2,
+        jumpSpeed: 5,
+        gravityScale: 1,
+      },
+    },
+  };
+  let transform: TransformComponent | null = null;
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      transform = next;
+    },
+    undefined,
+    { getGravityY: () => -10, isPlayerControlled: () => true },
+  );
+  movement.setEntities([entity]);
+  movement.update({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 });
+  assert.ok(transform);
+  assert.ok(transform.position[1] > 0);
+
+  actions.handleUp("Space");
+  actions.advance();
+  let landed = false;
+  for (let frame = 2; frame < 100 && !landed; frame += 1) {
+    movement.update({ deltaSeconds: 0.1, elapsedSeconds: frame / 10, frame });
+    landed = transform?.position[1] === 0;
+  }
+  assert.equal(landed, true);
 });
 
 check("applyMouseLook turns with the pointer delta and clamps pitch", () => {
@@ -5852,6 +5961,11 @@ check("normalizeActorScriptDef coerces malformed/legacy data to a valid class", 
   assert.deepEqual(messy.messageBindings, [
     { message: "Toggleable.Toggle", scriptId: "lamp-toggle", target: "self" },
   ]);
+
+  const character = defaultActorScriptDef("Player", "character");
+  assert.equal(character.components.some((node) => node.component === "Collider"), true);
+  assert.equal(character.components.some((node) => node.component === "MeshRenderer"), true);
+  assert.equal(character.components.some((node) => node.component === "CharacterMovement"), true);
 });
 
 check("actor save payload requires a .actor.json path and normalizes the body", () => {
@@ -5912,6 +6026,12 @@ check("actorInstanceToEntity flattens a class + placement into one entity", () =
         component: "Collider",
         props: { shape: "box", size: [1, 2, 1], isStatic: true, isSensor: true },
       },
+      {
+        id: "move",
+        parent: "root",
+        component: "CharacterMovement",
+        props: { maxWalkSpeed: 4, jumpSpeed: 6 },
+      },
       // Second MeshRenderer is ignored: first node of each kind wins (flat entity).
       { id: "mesh2", parent: "root", component: "MeshRenderer", props: { assetId: "ignored" } },
     ],
@@ -5948,6 +6068,9 @@ check("actorInstanceToEntity flattens a class + placement into one entity", () =
   assert.equal(readMeshRendererComponent(entity)?.assetId, "door_01");
   const collider = readColliderComponent(entity);
   assert.equal(collider?.isSensor, true);
+  const movement = readCharacterMovementComponent(entity);
+  assert.equal(movement?.maxWalkSpeed, 4);
+  assert.equal(movement?.jumpSpeed, 6);
   // The first event binding compiles to the single Behavior.
   const behavior = readBehaviorComponent(entity);
   assert.equal(behavior?.scriptId, "spin");

@@ -11,10 +11,50 @@
       "props": {}
     },
     {
+      "id": "capsule",
+      "component": "Collider",
+      "props": {
+        "shape": "capsule",
+        "size": [
+          0.6,
+          1.8,
+          0.6
+        ],
+        "center": [
+          0,
+          0.9,
+          0
+        ],
+        "isStatic": false,
+        "isSensor": false,
+        "simulatePhysics": false
+      },
+      "parent": "root"
+    },
+    {
       "id": "meshRenderer",
       "component": "MeshRenderer",
       "props": {
         "assetId": "character-a"
+      },
+      "parent": "root"
+    },
+    {
+      "id": "characterMovement",
+      "component": "CharacterMovement",
+      "props": {
+        "maxWalkSpeed": 3,
+        "sprintMultiplier": 2,
+        "jumpSpeed": 4,
+        "gravityScale": 1,
+        "airControl": 0.25,
+        "acceleration": 30,
+        "brakingDeceleration": 24,
+        "groundFriction": 8,
+        "orientRotationToMovement": true,
+        "movementMode": "walking",
+        "capsuleRadius": 0.3,
+        "capsuleHalfHeight": 0.9
       },
       "parent": "root"
     }

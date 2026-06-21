@@ -89,6 +89,7 @@ export const ACTOR_COMPONENT_KINDS = [
   "Light",
   "Interaction",
   "Behavior",
+  "CharacterMovement",
 ] as const;
 export type ActorComponentKind = (typeof ACTOR_COMPONENT_KINDS)[number];
 
@@ -161,6 +162,50 @@ export interface ActorScriptDef {
   construction: null;
 }
 
+function defaultCharacterComponents(): ComponentTemplateNode[] {
+  return [
+    { id: "root", component: "Transform", props: {} },
+    {
+      id: "capsule",
+      parent: "root",
+      component: "Collider",
+      props: {
+        shape: "capsule",
+        size: [0.6, 1.8, 0.6],
+        center: [0, 0.9, 0],
+        isStatic: false,
+        isSensor: false,
+        simulatePhysics: false,
+      },
+    },
+    {
+      id: "meshRenderer",
+      parent: "root",
+      component: "MeshRenderer",
+      props: { assetId: "character-a" },
+    },
+    {
+      id: "characterMovement",
+      parent: "root",
+      component: "CharacterMovement",
+      props: {
+        maxWalkSpeed: 3,
+        sprintMultiplier: 2,
+        jumpSpeed: 4,
+        gravityScale: 1,
+        airControl: 0.25,
+        acceleration: 30,
+        brakingDeceleration: 24,
+        groundFriction: 8,
+        orientRotationToMovement: true,
+        movementMode: "walking",
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+      },
+    },
+  ];
+}
+
 const METADATA_FIELD_TYPES: readonly MetadataFieldType[] = [
   "text",
   "number",
@@ -180,7 +225,10 @@ export function defaultActorScriptDef(
     name,
     parentClass,
     variables: [],
-    components: [{ id: "root", component: "Transform", props: {} }],
+    components:
+      parentClass === "character"
+        ? defaultCharacterComponents()
+        : [{ id: "root", component: "Transform", props: {} }],
     interfaces: [],
     references: [],
     dispatchers: [],

@@ -26,6 +26,7 @@ import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { PointerLookSource } from "@/input/pointerLookSource";
 import { consumePlayCameraPose } from "@/play/cameraHandoff";
 import { createBehaviorRegistry } from "@/game/behaviors";
+import { CharacterMovementSubsystem } from "@/game/characterMovementSystem";
 import type { LocomotionInput } from "@/game/locomotionAnimation";
 import { resolveGameMode } from "@/game/gameModes/registry";
 import { TPS_GAME_MODE_ID } from "@/game/gameModes/catalog";
@@ -167,9 +168,11 @@ import { assetPath, assetType, isModelAssetType, type AssetManifest } from "@eng
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   readAudioComponent,
+  readCharacterMovementComponent,
   readLightComponent,
   readMeshRendererComponent,
   readParticleEmitterComponent,
+  readScriptActorComponent,
   readTransformComponent,
 } from "@engine/scene/components";
 import type { TransformComponent } from "@engine/scene/components";
@@ -215,6 +218,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly inputActions = new ActionMap(DEFAULT_INPUT_BINDINGS);
   private readonly inputSubsystem = new InputSubsystem(this.inputActions);
   private readonly physicsSubsystem = new PhysicsSubsystem({ backend: "rapier" });
+  private readonly characterMovementSubsystem: CharacterMovementSubsystem;
   /** Manifest sound asset id -> fetchable file URL, filled after the manifest loads. */
   private readonly soundUrlById = new Map<string, string>();
   /** Manifest effect (`.effect.json`) asset id -> fetchable file URL. */
@@ -329,10 +333,24 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.camera = runtimeCore.camera;
     this.pointerLook = new PointerLookSource(canvas);
     this.interactionPromptElement = this.createInteractionPromptElement();
+    this.characterMovementSubsystem = new CharacterMovementSubsystem(
+      this.inputActions,
+      this.syncEntityTransform,
+      this.physicsSubsystem,
+      {
+        getGravityY: () => this.gravityY,
+        reportLocomotion: (entityId, report) => {
+          this.locomotionReports.set(entityId, report);
+        },
+        isPlayerControlled: (entityId) =>
+          this.gameModeSession?.playerState.pawnEntityId === entityId,
+      },
+    );
 
     this.engineApp.registerSubsystem(this.animationSubsystem);
     this.engineApp.registerSubsystem(this.inputSubsystem);
     this.engineApp.registerSubsystem(this.physicsSubsystem);
+    this.engineApp.registerSubsystem(this.characterMovementSubsystem);
     this.physicsSubsystem.setTransformSink(this.applyEntityTransformToRender);
     this.behaviorSubsystem = new BehaviorSubsystem(
       createBehaviorRegistry({
@@ -501,11 +519,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
     this.gravityY = resolveSceneWorldSettings(this.layout).gravity[1];
     this.physicsSubsystem.setGravity(resolveSceneWorldSettings(this.layout).gravity);
-    this.applyPlayerStartSpawn();
     this.ensureDefaultLights();
     // Resolve placed Actor Script classes -> entities before models load, so their
     // mesh assets join the load list (loadActorMeshModels reads these entities).
     await this.resolveActorClasses();
+    this.applyPlayerStartSpawn();
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
     await this.loadMissingSceneModels();
     await this.loadActorMeshModels();
@@ -575,6 +593,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     await startSceneRuntime({
       sceneDocument,
       physics: this.physicsSubsystem,
+      characterMovement: this.characterMovementSubsystem,
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
@@ -685,6 +704,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     // No authored player character: spawn the mode's default character pawn at
     // the Player Start (only when one exists — the player enters at that marker).
+    if (this.actorEntities.some((entity) => readCharacterMovementComponent(entity))) return;
     this.spawnDefaultPlayerPawn(mode.defaultPawn);
   }
 
@@ -889,6 +909,34 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       object.userData.actorIndex = index;
       this.scene.add(object);
       this.actorObjects.set(index, object);
+      this.addActorCharacterRef(entity, object);
+    });
+  }
+
+  private addActorCharacterRef(entity: Entity, object: Object3D): void {
+    const actor = readScriptActorComponent(entity);
+    if (!actor) return;
+    const def = this.actorClassCache.get(actor.classRef);
+    if (def?.parentClass !== "character") return;
+    const renderer = readMeshRendererComponent(entity);
+    const gltf = renderer ? this.models.get(renderer.assetId) : undefined;
+    const transform = readTransformComponent(entity);
+    if (!gltf) return;
+    this.characterRefs.push({
+      index: this.characterRefs.length,
+      entityId: entity.id,
+      object,
+      gltf,
+      placement: {
+        assetId: renderer?.assetId ?? "actor-character",
+        ...(entity.name ? { name: entity.name } : {}),
+        position: transform ? [...transform.position] : [0, 0, 0],
+        rotation: transform ? [...transform.rotation] : [0, 0, 0],
+        scale: transform ? [...transform.scale] : [1, 1, 1],
+      },
+      classRef: actor.classRef,
+      parentClass: "character",
+      hasCharacterMovement: readCharacterMovementComponent(entity) !== undefined,
     });
   }
 

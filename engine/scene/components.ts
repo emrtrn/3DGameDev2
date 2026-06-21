@@ -12,6 +12,7 @@ export const COLLIDER_COMPONENT = "Collider";
 export const AUDIO_COMPONENT = "Audio";
 export const PARTICLE_EMITTER_COMPONENT = "ParticleEmitter";
 export const INTERACTION_COMPONENT = "Interaction";
+export const CHARACTER_MOVEMENT_COMPONENT = "CharacterMovement";
 export const MESSAGE_BINDINGS_COMPONENT = "MessageBindings";
 export const SCRIPT_INTERFACES_COMPONENT = "ScriptInterfaces";
 export const SCRIPT_ACTOR_COMPONENT = "ScriptActor";
@@ -202,6 +203,23 @@ export interface InteractionComponent {
   enabled?: boolean;
   requires?: string;
   cooldown?: number;
+}
+
+export type CharacterMovementMode = "walking" | "falling" | "flying" | "swimming" | "custom";
+
+export interface CharacterMovementComponent {
+  maxWalkSpeed: number;
+  sprintMultiplier: number;
+  jumpSpeed: number;
+  gravityScale: number;
+  airControl: number;
+  acceleration: number;
+  brakingDeceleration: number;
+  groundFriction: number;
+  orientRotationToMovement: boolean;
+  movementMode: CharacterMovementMode;
+  capsuleRadius: number;
+  capsuleHalfHeight: number;
 }
 
 function readVec3(value: SceneJsonValue | undefined): Vec3 | undefined {
@@ -506,6 +524,51 @@ export function readInteractionComponent(entity: Entity): InteractionComponent |
   if (typeof data.requires === "string") component.requires = data.requires;
   if (typeof data.cooldown === "number") component.cooldown = data.cooldown;
   return component;
+}
+
+const CHARACTER_MOVEMENT_MODES: readonly CharacterMovementMode[] = [
+  "walking",
+  "falling",
+  "flying",
+  "swimming",
+  "custom",
+];
+
+function readFiniteNumber(
+  value: SceneJsonValue | undefined,
+  fallback: number,
+  minExclusive?: number,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  if (minExclusive !== undefined && value <= minExclusive) return fallback;
+  return value;
+}
+
+/** Reads a typed character movement component from an entity. */
+export function readCharacterMovementComponent(
+  entity: Entity,
+): CharacterMovementComponent | undefined {
+  const data = entity.components[CHARACTER_MOVEMENT_COMPONENT];
+  if (!data) return undefined;
+  const mode =
+    typeof data.movementMode === "string" &&
+    CHARACTER_MOVEMENT_MODES.includes(data.movementMode as CharacterMovementMode)
+      ? (data.movementMode as CharacterMovementMode)
+      : "walking";
+  return {
+    maxWalkSpeed: readFiniteNumber(data.maxWalkSpeed, 3, 0),
+    sprintMultiplier: readFiniteNumber(data.sprintMultiplier, 2, 0),
+    jumpSpeed: readFiniteNumber(data.jumpSpeed, 4, 0),
+    gravityScale: readFiniteNumber(data.gravityScale, 1),
+    airControl: readFiniteNumber(data.airControl, 0.25),
+    acceleration: readFiniteNumber(data.acceleration, 30, 0),
+    brakingDeceleration: readFiniteNumber(data.brakingDeceleration, 24, 0),
+    groundFriction: readFiniteNumber(data.groundFriction, 8, 0),
+    orientRotationToMovement: data.orientRotationToMovement !== false,
+    movementMode: mode,
+    capsuleRadius: readFiniteNumber(data.capsuleRadius, 0.3, 0),
+    capsuleHalfHeight: readFiniteNumber(data.capsuleHalfHeight, 0.9, 0),
+  };
 }
 
 const LIGHT_TYPES: readonly SceneLightType[] = ["directional", "point", "spot"];
