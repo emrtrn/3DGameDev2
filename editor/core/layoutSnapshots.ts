@@ -8,6 +8,7 @@ import type {
   LayoutPlacement,
   LayoutPhysics,
   LayoutReflectionPlane,
+  LayoutReflectiveSurface,
   LayoutSphereReflectionCapture,
   MetadataValue,
   Vec3,
@@ -207,6 +208,32 @@ export function cloneReflectionPlane(plane: LayoutReflectionPlane): LayoutReflec
   if (plane.scale !== undefined) clone.scale = [...plane.scale];
   if (plane.color !== undefined) clone.color = plane.color;
   if (plane.resolution !== undefined) clone.resolution = plane.resolution;
+  return clone;
+}
+
+export function cloneReflectiveSurface(
+  surface: LayoutReflectiveSurface,
+): LayoutReflectiveSurface {
+  const clone: LayoutReflectiveSurface = {
+    id: surface.id,
+    position: [...surface.position],
+  };
+  if (surface.name !== undefined) clone.name = surface.name;
+  if (surface.hidden !== undefined) clone.hidden = surface.hidden;
+  if (surface.locked !== undefined) clone.locked = surface.locked;
+  if (surface.scaleLocked !== undefined) clone.scaleLocked = surface.scaleLocked;
+  if (surface.groupId !== undefined) clone.groupId = surface.groupId;
+  if (surface.nodeId !== undefined) clone.nodeId = surface.nodeId;
+  if (surface.parentId !== undefined) clone.parentId = surface.parentId;
+  if (surface.rotation !== undefined) clone.rotation = [...surface.rotation];
+  if (surface.scale !== undefined) clone.scale = [...surface.scale];
+  if (surface.material !== undefined) clone.material = surface.material;
+  if (surface.reflectionStrength !== undefined) clone.reflectionStrength = surface.reflectionStrength;
+  if (surface.fresnelPower !== undefined) clone.fresnelPower = surface.fresnelPower;
+  if (surface.fresnelBias !== undefined) clone.fresnelBias = surface.fresnelBias;
+  if (surface.distortion !== undefined) clone.distortion = surface.distortion;
+  if (surface.tint !== undefined) clone.tint = surface.tint;
+  if (surface.resolution !== undefined) clone.resolution = surface.resolution;
   return clone;
 }
 

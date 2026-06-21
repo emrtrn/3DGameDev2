@@ -6795,9 +6795,47 @@ check("assignProbeEnvMapMaterial clones standard mats; parallax patches the shad
       "reflectVec = normalize( vCaptureWorldPos + reflectVec * captureDist - captureProbePosition )",
     ),
   );
+  // Parallax-only (no global env to fall back to): diffuse irradiance still comes
+  // from the probe envMap â€” the specular-only redirect is gated on blend.
+  assert.ok(
+    shaderA.fragmentShader.includes(
+      "vec4 envMapColor = textureCubeUV( envMap, envMapRotation * worldNormal, 1.0 );",
+    ),
+  );
 
   const shaderB = runPatch(b);
   assert.equal((shaderB.uniforms.captureProbePosition?.value as { x: number }).x, -5);
+
+  const globalEnv = new Texture();
+  const blended = assignProbeEnvMapMaterial(
+    base,
+    makeBake(false, [0, 0, 0]),
+    [],
+    globalEnv,
+    2.75,
+  ) as MeshStandardMaterial;
+  const blendShader = runPatch(blended);
+  assert.equal(blendShader.uniforms.captureGlobalEnv?.value, globalEnv);
+  assert.equal(blendShader.uniforms.captureGlobalEnvIntensity?.value, 2.75);
+  assert.ok(blendShader.fragmentShader.includes("uniform float captureGlobalEnvIntensity;"));
+  assert.ok(
+    blendShader.fragmentShader.includes(
+      "captureGlobalColor.rgb *= captureGlobalEnvIntensity / max( envMapIntensity, 0.0001 );",
+    ),
+  );
+  // Specular-only: with a global env present the probe's diffuse irradiance is
+  // redirected to the sky env (sampled along the world normal), so getIBLIrradiance
+  // no longer floods the surface with the probe's bake.
+  assert.ok(
+    blendShader.fragmentShader.includes(
+      "vec4 envMapColor = textureCubeUV( captureGlobalEnv, envMapRotation * worldNormal, 1.0 );",
+    ),
+  );
+  assert.ok(
+    !blendShader.fragmentShader.includes(
+      "vec4 envMapColor = textureCubeUV( envMap, envMapRotation * worldNormal, 1.0 );",
+    ),
+  );
 
   // The patch degrades gracefully (no-op) when the three.js shader anchors are gone.
   const noAnchors = {

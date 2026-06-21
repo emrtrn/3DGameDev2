@@ -561,6 +561,82 @@ export function validateReflectionPlane(value: unknown): Record<string, unknown>
 }
 
 /**
+ * Allowlist validator for one placed Reflective Surface actor. Mirrors
+ * {@link validateReflectionPlane}: a required `id` + `position`, the shared
+ * transform/hierarchy/flag fields, plus the material reference and the
+ * reflection-blend params (strength / fresnel / distortion / tint / resolution).
+ */
+export function validateReflectiveSurface(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") throw new Error("reflective surface must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.id !== "string" || input.id.length === 0) {
+    throw new Error("reflective surface id must be a string");
+  }
+  if (!isNumberTuple(input.position)) throw new Error("invalid reflective surface position");
+
+  const surface: Record<string, unknown> = {
+    id: input.id,
+    position: input.position.map((number) => Number(number.toFixed(3))),
+  };
+  if (typeof input.name === "string") surface.name = input.name;
+  if (input.hidden === true) surface.hidden = true;
+  if (input.locked === true) surface.locked = true;
+  if (input.scaleLocked === true) surface.scaleLocked = true;
+  if (typeof input.groupId === "string") surface.groupId = input.groupId;
+  if (typeof input.nodeId === "string") surface.nodeId = input.nodeId;
+  if (typeof input.parentId === "string") surface.parentId = input.parentId;
+  if (input.rotation !== undefined) {
+    if (!isNumberTuple(input.rotation)) throw new Error("invalid reflective surface rotation");
+    surface.rotation = input.rotation.map((axis) =>
+      validateRotationDeg(axis, "reflective surface rotation component"),
+    );
+  }
+  if (input.scale !== undefined) {
+    if (!isNumberTuple(input.scale)) throw new Error("invalid reflective surface scale");
+    surface.scale = input.scale.map((axis) =>
+      validateScaleValue(axis, "reflective surface scale component"),
+    );
+  }
+  if (typeof input.material === "string" && input.material.length > 0) {
+    surface.material = input.material;
+  }
+  const reflectionStrength = validateOptionalNumber(
+    input.reflectionStrength,
+    "reflective surface reflectionStrength",
+    0,
+    1,
+  );
+  if (reflectionStrength !== undefined) surface.reflectionStrength = reflectionStrength;
+  const fresnelPower = validateOptionalNumber(
+    input.fresnelPower,
+    "reflective surface fresnelPower",
+    0,
+    16,
+  );
+  if (fresnelPower !== undefined) surface.fresnelPower = fresnelPower;
+  const fresnelBias = validateOptionalNumber(
+    input.fresnelBias,
+    "reflective surface fresnelBias",
+    0,
+    1,
+  );
+  if (fresnelBias !== undefined) surface.fresnelBias = fresnelBias;
+  const distortion = validateOptionalNumber(input.distortion, "reflective surface distortion", 0, 1);
+  if (distortion !== undefined) surface.distortion = distortion;
+  if (typeof input.tint === "string" && /^#[0-9a-fA-F]{6}$/.test(input.tint)) {
+    surface.tint = input.tint;
+  }
+  const resolution = validateOptionalNumber(
+    input.resolution,
+    "reflective surface resolution",
+    64,
+    2048,
+  );
+  if (resolution !== undefined) surface.resolution = resolution;
+  return surface;
+}
+
+/**
  * Allowlist validator for one placed Sphere Reflection Capture (probe) actor.
  * Mirrors {@link validateReflectionPlane}: a required `id` + `position`, the
  * shared transform/hierarchy/flag fields, plus the probe-specific radius /
@@ -879,6 +955,13 @@ export function validateLayout(value: unknown): unknown {
       : (() => {
           throw new Error("reflectionPlanes must be an array");
         })();
+  const reflectiveSurfaces = layout.reflectiveSurfaces === undefined
+    ? null
+    : Array.isArray(layout.reflectiveSurfaces)
+      ? layout.reflectiveSurfaces.map(validateReflectiveSurface)
+      : (() => {
+          throw new Error("reflectiveSurfaces must be an array");
+        })();
   const reflectionCaptures = layout.reflectionCaptures === undefined
     ? null
     : Array.isArray(layout.reflectionCaptures)
@@ -954,6 +1037,7 @@ export function validateLayout(value: unknown): unknown {
   if (postProcess) output.postProcess = postProcess;
   if (lights) output.lights = lights;
   if (reflectionPlanes) output.reflectionPlanes = reflectionPlanes;
+  if (reflectiveSurfaces) output.reflectiveSurfaces = reflectiveSurfaces;
   if (reflectionCaptures) output.reflectionCaptures = reflectionCaptures;
   if (actors) output.actors = actors;
   return output;

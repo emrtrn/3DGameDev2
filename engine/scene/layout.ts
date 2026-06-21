@@ -439,6 +439,45 @@ export interface LayoutReflectionPlane {
 }
 
 /**
+ * Placed Reflective Surface actor — the textured, PBR counterpart to the pure
+ * mirror {@link LayoutReflectionPlane}. It renders a per-frame planar reflection
+ * (like `Reflector`) but composites it into a real `MeshStandardMaterial` (albedo
+ * texture + normal map + roughness), so the result reads as wet asphalt, polished
+ * marble, water, etc. — not a flat mirror. Use for roads / floors / lakes / seas.
+ * The reflective face is the plane's local +Z; the transform orients and sizes it.
+ * Optional fields read defaults from `engine/scene/reflectiveSurface.ts`.
+ */
+export interface LayoutReflectiveSurface {
+  id: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  scaleLocked?: boolean;
+  groupId?: string;
+  nodeId?: string;
+  parentId?: string;
+  position: Vec3;
+  /** Full Euler rotation (XYZ order) in degrees. */
+  rotation?: Vec3;
+  /** Per-axis scale (plane size). */
+  scale?: Vec3;
+  /** Material asset id (`*.material.json`) shading the surface; null = built-in glossy default. */
+  material?: string | null;
+  /** Overall planar-reflection contribution, 0 (none) .. 1 (full mirror at grazing). */
+  reflectionStrength?: number;
+  /** Fresnel exponent: higher = reflection concentrated at grazing angles. */
+  fresnelPower?: number;
+  /** Minimum reflection seen head-on (0 = pure fresnel, 1 = uniform mirror). */
+  fresnelBias?: number;
+  /** Normal-map-driven screen-space distortion of the reflection (0 = sharp planar). */
+  distortion?: number;
+  /** Reflection tint multiplied over the reflected image (hex `#rrggbb`). */
+  tint?: string;
+  /** Reflection render-target resolution in px (higher = sharper, costlier). */
+  resolution?: number;
+}
+
+/**
  * Placed Sphere Reflection Capture actor (à la Unreal's Sphere Reflection
  * Capture). A positional probe that bakes a static local cubemap from its own
  * position; nearby PBR surfaces sample this local capture instead of the global
@@ -494,6 +533,8 @@ export interface RoomLayout {
   lights?: LayoutLightActor[];
   /** Placed Planar Reflection (mirror) actors. */
   reflectionPlanes?: LayoutReflectionPlane[];
+  /** Placed Reflective Surface (textured glossy planar reflection) actors. */
+  reflectiveSurfaces?: LayoutReflectiveSurface[];
   /** Placed Sphere Reflection Capture (local cubemap probe) actors. */
   reflectionCaptures?: LayoutSphereReflectionCapture[];
   instances: LayoutModelInstances[];

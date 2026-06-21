@@ -3,6 +3,7 @@ import { resolveSkyAtmosphere } from "@engine/scene/skyAtmosphere";
 import { resolveHeightFog } from "@engine/scene/heightFog";
 import { resolveCloudLayer } from "@engine/scene/cloudLayer";
 import { resolveReflectionPlane } from "@engine/scene/reflectionPlane";
+import { resolveReflectiveSurface } from "@engine/scene/reflectiveSurface";
 import { resolveSphereReflectionCapture } from "@engine/scene/reflectionCapture";
 import { resolvePostProcess } from "@engine/scene/postProcess";
 import { readPivot, readRotation, readScale } from "@engine/scene/transform";
@@ -12,6 +13,7 @@ import type {
   LayoutLightActor,
   LayoutPostProcess,
   LayoutReflectionPlane,
+  LayoutReflectiveSurface,
   LayoutSkyAtmosphere,
   LayoutSphereReflectionCapture,
   RoomLayout,
@@ -177,6 +179,37 @@ function buildReflectionPlaneEditableSelection(
     physics: {},
     color: resolved.color,
     reflectionResolution: resolved.resolution,
+    metadata: {},
+  };
+}
+
+/**
+ * Builds the Details/Outliner view-model for a placed Reflective Surface actor.
+ * Like the Planar Reflection it carries a real transform; the material reference +
+ * reflection-blend settings ride along in {@link EditableSelection.reflectiveSurface}.
+ */
+function buildReflectiveSurfaceEditableSelection(
+  surface: LayoutReflectiveSurface,
+  index: number,
+): EditableSelection {
+  const resolved = resolveReflectiveSurface(surface);
+  return {
+    id: selectionId({ kind: "reflectiveSurface", index }),
+    kind: "reflectiveSurface",
+    assetId: "reflective-surface",
+    category: "reflection",
+    label: resolved.name,
+    position: [...surface.position],
+    rotation: readRotation(surface),
+    scale: readScale(surface),
+    pivot: [0, 0, 0],
+    scaleLocked: surface.scaleLocked ?? false,
+    locked: surface.locked ?? false,
+    castShadow: false,
+    collision: false,
+    simulatePhysics: false,
+    physics: {},
+    reflectiveSurface: { ...resolved },
     metadata: {},
   };
 }
@@ -407,6 +440,19 @@ export function buildSceneObjects(
     });
   });
 
+  layout.reflectiveSurfaces?.forEach((surface, index) => {
+    const selection: Selection = { kind: "reflectiveSurface", index };
+    objects.push({
+      ...buildReflectiveSurfaceEditableSelection(surface, index),
+      selected: deps.isSelected(selection),
+      hidden: surface.hidden ?? false,
+      locked: surface.locked ?? false,
+      groupId: surface.groupId,
+      nodeId: surface.nodeId,
+      parentId: surface.parentId,
+    });
+  });
+
   layout.reflectionCaptures?.forEach((capture, index) => {
     const selection: Selection = { kind: "reflectionCapture", index };
     objects.push({
@@ -522,6 +568,12 @@ export function buildEditableSelection(
     const plane = layout.reflectionPlanes?.[selection.index];
     if (!plane) return null;
     return buildReflectionPlaneEditableSelection(plane, selection.index);
+  }
+
+  if (selection.kind === "reflectiveSurface") {
+    const surface = layout.reflectiveSurfaces?.[selection.index];
+    if (!surface) return null;
+    return buildReflectiveSurfaceEditableSelection(surface, selection.index);
   }
 
   if (selection.kind === "reflectionCapture") {

@@ -7428,6 +7428,29 @@
         "bytes": 3156
       },
       "license": "Unknown"
+    },
+    {
+      "id": "red-material",
+      "name": "Red.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/Red.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 358
+      },
+      "license": "Unknown"
     }
   ]
 }

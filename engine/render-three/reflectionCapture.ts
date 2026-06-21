@@ -1,19 +1,22 @@
 import {
+  BufferGeometry,
   Color,
   CubeCamera,
+  Float32BufferAttribute,
   HalfFloatType,
+  LineBasicMaterial,
+  LineSegments,
   Mesh,
-  MeshBasicMaterial,
   MeshStandardMaterial,
   NoToneMapping,
   PMREMGenerator,
   ShaderChunk,
-  SphereGeometry,
   Vector3,
   WebGLCubeRenderTarget,
   type Material,
   type Object3D,
   type Scene,
+  type Sprite,
   type Texture,
   type WebGLRenderer,
   type WebGLRenderTarget,
@@ -21,6 +24,7 @@ import {
 
 import type { Vec3 } from "@engine/scene/layout";
 import type { ResolvedSphereReflectionCapture } from "@engine/scene/reflectionCapture";
+import { createActorBillboardIcon } from "./actorIcon";
 
 export {
   resolveSphereReflectionCapture,
@@ -33,17 +37,20 @@ export {
 } from "@engine/scene/reflectionCapture";
 
 /**
- * Sphere Reflection Capture render binding. Faz 1 renders only the editor-side
- * **influence helper**: a wireframe sphere marking the probe's radius, drawn at
- * the actor's position. There is no cubemap bake yet (that is a later phase) — the
- * helper is purely an authoring aid that is selectable and movable in the
- * viewport. The radius is applied as a uniform three.js scale on a unit-sphere
- * mesh, so a radius edit is a cheap `scale` change with no geometry rebuild; the
- * actor's layout transform never stores a scale.
+ * Sphere Reflection Capture render binding. The editor-side **influence helper**
+ * marks the probe's radius at the actor's position. It is drawn as Unreal's sphere
+ * collision shape — three orthogonal great circles (XY/XZ/YZ) rather than a
+ * triangulated wireframe sphere — for two reasons: it reads as a probe-influence
+ * gizmo, and picking it raycasts against thin lines, so clicking the hollow space
+ * between the rings does not select the probe and the helper never occludes the
+ * objects behind it (a solid sphere mesh selected anywhere inside its projected
+ * disc and blocked everything else). The radius is applied as a uniform three.js
+ * scale on the unit-circle rings, so a radius edit is a cheap `scale` change with
+ * no geometry rebuild; the actor's layout transform never stores a scale.
  */
 
-/** Editor wireframe-sphere helper backing a Sphere Reflection Capture actor. */
-export type SphereReflectionCaptureObject = Mesh<SphereGeometry, MeshBasicMaterial>;
+/** Editor line-sphere helper backing a Sphere Reflection Capture actor. */
+export type SphereReflectionCaptureObject = LineSegments<BufferGeometry, LineBasicMaterial>;
 
 /** Resolved settings + world transform the binding needs to build/sync a probe helper. */
 export interface SphereReflectionCaptureRenderItem extends ResolvedSphereReflectionCapture {
@@ -52,44 +59,81 @@ export interface SphereReflectionCaptureRenderItem extends ResolvedSphereReflect
   rotation: Vec3;
 }
 
-/** Tint of the influence-sphere wireframe helper when its bake is current. */
+/** Tint of the influence-sphere ring helper when its bake is current. */
 const CAPTURE_HELPER_COLOR = "#46c8ff";
 /** Warning tint when the cached bake is stale (probe/near/far changed since capture). */
 const CAPTURE_HELPER_STALE_COLOR = "#ffb020";
 
-/** Builds the wireframe influence-sphere helper; transform via {@link applySphereReflectionCaptureTransform}. */
+/** Segments per great circle in the influence helper (ring smoothness). */
+const CAPTURE_HELPER_CIRCLE_SEGMENTS = 48;
+
+/**
+ * Builds the unit-radius "sphere collision" wireframe: three orthogonal great
+ * circles (in the YZ, XZ and XY planes) as one {@link LineSegments} geometry. Drawn
+ * instead of a triangulated wireframe sphere so the helper reads like Unreal's
+ * sphere collision shape, and so picking only hits the ring lines — raycasting a
+ * solid sphere would select the probe anywhere inside its silhouette and occlude
+ * everything behind it. The rings are unit radius; the actor's radius is applied as
+ * a uniform scale so radius edits never rebuild this geometry.
+ */
+function createInfluenceSphereGeometry(): BufferGeometry {
+  const segments = CAPTURE_HELPER_CIRCLE_SEGMENTS;
+  const positions: number[] = [];
+  // Lay one great circle in the plane orthogonal to `axis`, emitting LineSegments
+  // endpoint pairs (each edge needs both of its endpoints).
+  const pushCircle = (axis: 0 | 1 | 2): void => {
+    for (let i = 0; i < segments; i += 1) {
+      const a0 = (i / segments) * Math.PI * 2;
+      const a1 = ((i + 1) / segments) * Math.PI * 2;
+      for (const angle of [a0, a1]) {
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+        if (axis === 0) positions.push(0, c, s); // YZ plane (ring around X)
+        else if (axis === 1) positions.push(c, 0, s); // XZ plane (ring around Y)
+        else positions.push(c, s, 0); // XY plane (ring around Z)
+      }
+    }
+  };
+  pushCircle(0);
+  pushCircle(1);
+  pushCircle(2);
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  return geometry;
+}
+
+/** Builds the line influence-sphere helper; transform via {@link applySphereReflectionCaptureTransform}. */
 export function createSphereReflectionCaptureObject(
   item: SphereReflectionCaptureRenderItem,
 ): SphereReflectionCaptureObject {
-  // Unit sphere scaled by the radius so radius edits never rebuild geometry.
-  const geometry = new SphereGeometry(1, 24, 16);
-  const material = new MeshBasicMaterial({
+  // Unit-radius rings scaled by the radius so radius edits never rebuild geometry.
+  const geometry = createInfluenceSphereGeometry();
+  const material = new LineBasicMaterial({
     color: new Color(CAPTURE_HELPER_COLOR),
-    wireframe: true,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.6,
     depthWrite: false,
   });
-  const mesh = new Mesh(geometry, material);
-  mesh.name = item.name;
-  applySphereReflectionCaptureTransform(mesh, item);
-  return mesh;
+  const lines = new LineSegments(geometry, material);
+  lines.name = item.name;
+  applySphereReflectionCaptureTransform(lines, item);
+  return lines;
 }
 
 /** Pushes the transform + visibility + radius (as scale) onto an existing helper. */
 export function applySphereReflectionCaptureTransform(
-  mesh: SphereReflectionCaptureObject,
+  helper: SphereReflectionCaptureObject,
   item: SphereReflectionCaptureRenderItem,
 ): void {
-  mesh.position.set(item.position[0], item.position[1], item.position[2]);
-  mesh.rotation.set(
+  helper.position.set(item.position[0], item.position[1], item.position[2]);
+  helper.rotation.set(
     (item.rotation[0] * Math.PI) / 180,
     (item.rotation[1] * Math.PI) / 180,
     (item.rotation[2] * Math.PI) / 180,
     "XYZ",
   );
-  mesh.scale.setScalar(Math.max(item.radius, 0.001));
-  mesh.visible = !item.hidden;
+  helper.scale.setScalar(Math.max(item.radius, 0.001));
+  helper.visible = !item.hidden;
 }
 
 /**
@@ -99,16 +143,53 @@ export function applySphereReflectionCaptureTransform(
  * reflection itself; the user presses Recapture to refresh.
  */
 export function setSphereReflectionCaptureStale(
-  mesh: SphereReflectionCaptureObject,
+  helper: SphereReflectionCaptureObject,
   stale: boolean,
 ): void {
-  mesh.material.color.set(stale ? CAPTURE_HELPER_STALE_COLOR : CAPTURE_HELPER_COLOR);
+  helper.material.color.set(stale ? CAPTURE_HELPER_STALE_COLOR : CAPTURE_HELPER_COLOR);
 }
 
 /** Frees the helper's geometry + material. */
-export function disposeSphereReflectionCaptureObject(mesh: SphereReflectionCaptureObject): void {
-  mesh.geometry.dispose();
-  mesh.material.dispose();
+export function disposeSphereReflectionCaptureObject(helper: SphereReflectionCaptureObject): void {
+  helper.geometry.dispose();
+  helper.material.dispose();
+}
+
+/**
+ * Unreal-style billboard icon marking a Sphere Reflection Capture probe's center:
+ * a small camera-facing sprite drawn over the scene. It is the probe's clickable
+ * handle — the influence-sphere helper is shown only while the probe is selected
+ * and never raycast, so the icon is what the user picks (mirrors the light-actor
+ * icons). The caller positions/tags it and toggles its visibility with `hidden`.
+ */
+export function createSphereReflectionCaptureIcon(): Sprite {
+  return createActorBillboardIcon("reflection-capture", drawProbeGlyph);
+}
+
+/** Paints a glossy reflective sphere with a specular highlight. */
+function drawProbeGlyph(ctx: CanvasRenderingContext2D, size: number): void {
+  ctx.clearRect(0, 0, size, size);
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 20;
+
+  // Glossy sphere body (offset radial gradient reads as a lit reflective ball).
+  const gradient = ctx.createRadialGradient(cx - 6, cy - 7, 2, cx, cy, r);
+  gradient.addColorStop(0, "#d6f0ff");
+  gradient.addColorStop(1, "#2a86c8");
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = gradient;
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(10,30,45,0.9)";
+  ctx.stroke();
+
+  // Specular highlight.
+  ctx.beginPath();
+  ctx.arc(cx - 7, cy - 8, 4, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.fill();
 }
 
 /**
@@ -240,6 +321,25 @@ const CAPTURE_REFLECT_LINE = "reflectVec = inverseTransformDirection( reflectVec
 /** Line inside the IBL chunk that samples the probe envMap into `envMapColor`. */
 const CAPTURE_ENVCOLOR_LINE =
   "vec4 envMapColor = textureCubeUV( envMap, envMapRotation * reflectVec, roughness );";
+/** Diffuse-IBL sample line inside `getIBLIrradiance` (probe ambient lookup). */
+const CAPTURE_IRRADIANCE_LINE =
+  "vec4 envMapColor = textureCubeUV( envMap, envMapRotation * worldNormal, 1.0 );";
+
+/**
+ * Specular-only probe: redirects the diffuse irradiance lookup from the probe envMap
+ * to the global Reflection Environment (Sky Light Capture), so a Sphere Reflection
+ * Capture behaves like Unreal's — it contributes *local specular reflection only*,
+ * while diffuse ambient stays the Sky Light's job. Pre-scales by
+ * `captureGlobalEnvIntensity / envMapIntensity` so the function's trailing
+ * `* envMapIntensity` lands the sky color at the sky's own intensity (the probe's
+ * intensity cancels out for diffuse). Without this the probe's bright bake floods
+ * rough/normal surfaces and flattens shadows, and the Sky Light's intensity/recapture
+ * has no visible effect inside a probe's coverage. Only injected when a global env is
+ * present (blend on); with no sky the probe still drives diffuse, as before.
+ */
+const CAPTURE_GLOBAL_IRRADIANCE_LINE =
+  "vec4 envMapColor = textureCubeUV( captureGlobalEnv, envMapRotation * worldNormal, 1.0 );\n" +
+  "\t\t\tenvMapColor.rgb *= captureGlobalEnvIntensity / max( envMapIntensity, 0.0001 );";
 
 /** Forwards the fragment world position the patch needs (parallax + blend score). */
 const CAPTURE_VERTEX_ASSIGN = `${CAPTURE_WORLDPOS_INCLUDE}\n\tvCaptureWorldPos = worldPosition.xyz;`;
@@ -284,6 +384,7 @@ const CAPTURE_BLEND_BLOCK = `
 				float captureScore = length( vCaptureWorldPos - captureProbePosition ) / captureProbeRadius;
 				float captureWeight = 1.0 - smoothstep( ${CAPTURE_BLEND_START.toFixed(2)}, 1.0, captureScore );
 				vec4 captureGlobalColor = textureCubeUV( captureGlobalEnv, envMapRotation * captureReflectGlobal, roughness );
+				captureGlobalColor.rgb *= captureGlobalEnvIntensity / max( envMapIntensity, 0.0001 );
 				envMapColor = mix( captureGlobalColor, envMapColor, captureWeight );
 			}`;
 
@@ -293,9 +394,12 @@ const CAPTURE_BLEND_BLOCK = `
  * position + probe uniforms:
  *
  * - **parallax**: re-aims the IBL reflection lookup at the probe sphere (Faz 4).
- * - **boundary blend**: when `globalEnv` is given, fades the probe sample toward
- *   the global Reflection Environment near the probe radius edge (Faz 5), softening
- *   the hard probe→global cut.
+ * - **boundary blend + specular-only**: when `globalEnv` is given, the probe acts as
+ *   a specular reflection probe (Faz 5). Its *specular* sample fades toward the global
+ *   Reflection Environment near the probe radius edge (softening the hard probe→global
+ *   cut), and its *diffuse* irradiance is redirected to that same global env so the
+ *   probe never contributes ambient — leaving diffuse/shadows to the Sky Light, the way
+ *   Unreal's Sphere Reflection Capture does.
  *
  * Inlines the IBL chunk from `ShaderChunk` so the patch survives three.js' (still
  * unexpanded at this point) `#include` directives, and forwards `worldPosition` from
@@ -309,6 +413,7 @@ function installCaptureShaderPatch(
   radius: number,
   parallax: boolean,
   globalEnv: Texture | null,
+  globalEnvIntensity: number,
 ): void {
   const blend = globalEnv !== null;
   if (!parallax && !blend) return;
@@ -320,13 +425,18 @@ function installCaptureShaderPatch(
       !shader.vertexShader.includes(CAPTURE_WORLDPOS_INCLUDE) ||
       !shader.fragmentShader.includes(CAPTURE_FRAGMENT_INCLUDE) ||
       !iblChunk.includes(CAPTURE_REFLECT_LINE) ||
-      (blend && !iblChunk.includes(CAPTURE_ENVCOLOR_LINE))
+      (blend &&
+        (!iblChunk.includes(CAPTURE_ENVCOLOR_LINE) ||
+          !iblChunk.includes(CAPTURE_IRRADIANCE_LINE)))
     ) {
       return;
     }
     shader.uniforms.captureProbePosition = { value: probePosition };
     shader.uniforms.captureProbeRadius = { value: probeRadius };
-    if (blend) shader.uniforms.captureGlobalEnv = { value: globalEnv };
+    if (blend) {
+      shader.uniforms.captureGlobalEnv = { value: globalEnv };
+      shader.uniforms.captureGlobalEnvIntensity = { value: globalEnvIntensity };
+    }
     shader.vertexShader = `varying vec3 vCaptureWorldPos;\n${shader.vertexShader.replace(
       CAPTURE_WORLDPOS_INCLUDE,
       CAPTURE_VERTEX_ASSIGN,
@@ -338,14 +448,14 @@ function installCaptureShaderPatch(
       `${CAPTURE_REFLECT_LINE}${blend ? CAPTURE_GLOBAL_REFLECT_SAVE : ""}${parallax ? CAPTURE_PARALLAX_BLOCK : ""}`,
     );
     if (blend) {
-      patchedChunk = patchedChunk.replace(
-        CAPTURE_ENVCOLOR_LINE,
-        `${CAPTURE_ENVCOLOR_LINE}${CAPTURE_BLEND_BLOCK}`,
-      );
+      patchedChunk = patchedChunk
+        .replace(CAPTURE_ENVCOLOR_LINE, `${CAPTURE_ENVCOLOR_LINE}${CAPTURE_BLEND_BLOCK}`)
+        // Specular-only: diffuse irradiance comes from the sky env, not the probe.
+        .replace(CAPTURE_IRRADIANCE_LINE, CAPTURE_GLOBAL_IRRADIANCE_LINE);
     }
     const decls =
       "uniform vec3 captureProbePosition;\nuniform float captureProbeRadius;\nvarying vec3 vCaptureWorldPos;\n" +
-      (blend ? "uniform sampler2D captureGlobalEnv;\n" : "");
+      (blend ? "uniform sampler2D captureGlobalEnv;\nuniform float captureGlobalEnvIntensity;\n" : "");
     shader.fragmentShader = `${decls}${shader.fragmentShader.replace(
       CAPTURE_FRAGMENT_INCLUDE,
       patchedChunk,
@@ -370,12 +480,20 @@ export function assignProbeEnvMapMaterial(
   bake: SphereReflectionCaptureBake,
   clonedMaterials: Material[],
   globalEnv: Texture | null = null,
+  globalEnvIntensity = 1,
 ): Material {
   if (!isProbeEnvMaterial(base)) return base;
   const cloned = base.clone();
   cloned.envMap = bake.target.texture;
   cloned.envMapIntensity = bake.intensity;
-  installCaptureShaderPatch(cloned, bake.position, bake.radius, bake.parallax, globalEnv);
+  installCaptureShaderPatch(
+    cloned,
+    bake.position,
+    bake.radius,
+    bake.parallax,
+    globalEnv,
+    globalEnvIntensity,
+  );
   cloned.needsUpdate = true;
   clonedMaterials.push(cloned);
   return cloned;
@@ -393,6 +511,7 @@ export function applyProbeEnvMapToObject(
   object: Object3D,
   bake: SphereReflectionCaptureBake | null,
   globalEnv: Texture | null = null,
+  globalEnvIntensity = 1,
 ): void {
   const previous = object.userData.captureMaterials as Material[] | undefined;
   if (previous) for (const material of previous) material.dispose();
@@ -409,8 +528,10 @@ export function applyProbeEnvMapToObject(
       return;
     }
     mesh.material = Array.isArray(base)
-      ? base.map((material) => assignProbeEnvMapMaterial(material, bake, cloned, globalEnv))
-      : assignProbeEnvMapMaterial(base, bake, cloned, globalEnv);
+      ? base.map((material) =>
+          assignProbeEnvMapMaterial(material, bake, cloned, globalEnv, globalEnvIntensity),
+        )
+      : assignProbeEnvMapMaterial(base, bake, cloned, globalEnv, globalEnvIntensity);
   });
   object.userData.captureMaterials = cloned;
 }

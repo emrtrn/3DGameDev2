@@ -1,8 +1,9 @@
-import { Color, PlaneGeometry, type ShaderMaterial } from "three";
+import { Color, PlaneGeometry, type ShaderMaterial, type Sprite } from "three";
 import { Reflector } from "three/examples/jsm/objects/Reflector.js";
 
 import type { Vec3 } from "@engine/scene/layout";
 import type { ResolvedReflectionPlane } from "@engine/scene/reflectionPlane";
+import { createActorBillboardIcon } from "./actorIcon";
 
 export {
   resolveReflectionPlane,
@@ -71,4 +72,49 @@ export function applyReflectionPlaneTransform(
 export function disposeReflectionPlaneObject(reflector: ReflectionPlaneObject): void {
   reflector.geometry.dispose();
   reflector.dispose();
+}
+
+/**
+ * Unreal-style billboard icon marking a Mirror Plane actor's center: a small
+ * camera-facing sprite drawn over the scene so the (otherwise flat) mirror is
+ * easy to spot and click in the viewport, like the editor's light-actor icons.
+ * The mirror surface stays independently pickable; this is an additional handle.
+ */
+export function createReflectionPlaneIcon(): Sprite {
+  return createActorBillboardIcon("reflection-plane", drawMirrorGlyph);
+}
+
+/** Paints a framed mirror panel with diagonal shine streaks. */
+function drawMirrorGlyph(ctx: CanvasRenderingContext2D, size: number): void {
+  ctx.clearRect(0, 0, size, size);
+  ctx.lineJoin = "round";
+
+  // Mirror panel (rounded rect, cool reflective tint).
+  const x = 16;
+  const y = 11;
+  const w = 32;
+  const h = 42;
+  const r = 6;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  ctx.fillStyle = "#bcd8ec";
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = "rgba(20,32,42,0.92)";
+  ctx.stroke();
+
+  // Diagonal shine streaks.
+  ctx.strokeStyle = "rgba(255,255,255,0.85)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x + 5, y + h - 10);
+  ctx.lineTo(x + w - 9, y + 6);
+  ctx.moveTo(x + 13, y + h - 6);
+  ctx.lineTo(x + w - 5, y + 14);
+  ctx.stroke();
 }

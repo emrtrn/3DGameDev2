@@ -21,6 +21,7 @@ import {
   Plane,
   Raycaster,
   SphereGeometry,
+  Sprite,
   TextureLoader,
   Vector3,
 } from "three";
@@ -116,6 +117,7 @@ import {
 } from "@engine/render-three/reflection";
 import {
   applyReflectionPlaneTransform,
+  createReflectionPlaneIcon,
   createReflectionPlaneObject,
   disposeReflectionPlaneObject,
   resolveReflectionPlane,
@@ -129,6 +131,7 @@ import {
   applySphereReflectionCaptureTransform,
   assignProbeEnvMapMaterial,
   bakeSphereReflectionCapture,
+  createSphereReflectionCaptureIcon,
   createSphereReflectionCaptureObject,
   disposeSphereReflectionCaptureBake,
   disposeSphereReflectionCaptureObject,
@@ -392,8 +395,12 @@ export class SceneApp {
   private reflectionTarget: WebGLRenderTarget | null = null;
   /** Live `Reflector` meshes for placed Planar Reflection actors, by index. */
   private reflectionPlaneObjects: ReflectionPlaneObject[] = [];
+  /** Billboard icons (clickable handles) for placed Mirror Plane actors, by index. */
+  private reflectionPlaneIcons: Sprite[] = [];
   /** Editor wireframe-sphere helpers for placed Sphere Reflection Capture actors, by index. */
   private reflectionCaptureObjects: SphereReflectionCaptureObject[] = [];
+  /** Billboard icons (clickable handles) for placed Sphere Reflection Capture actors, by index. */
+  private reflectionCaptureIcons: Sprite[] = [];
   /** Baked PMREM cache per Sphere Reflection Capture, by index (null = not baked / hidden). */
   private reflectionCaptureBakes: (SphereReflectionCaptureBake | null)[] = [];
   private postProcessPipeline: PostProcessPipeline | null = null;
@@ -485,6 +492,8 @@ export class SceneApp {
   }
   private selectionOutline: EditorSelectionOutline | null = null;
   private readonly lightOutlineGeometry = new SphereGeometry(0.35, 16, 8);
+  /** Unit sphere reused as the selection-outline proxy for capture probes (scaled by the helper's radius). */
+  private readonly captureOutlineGeometry = new SphereGeometry(1, 24, 16);
   /** "Show > Collision" overlay: wireframe boxes of every collider, off by default. */
   private readonly collisionBoxes: LineSegments[] = [];
   private showCollision = false;
@@ -595,7 +604,10 @@ export class SceneApp {
         objects.push(...this.actorObjects);
         for (const record of this.lightObjects) objects.push(record.root);
         objects.push(...this.reflectionPlaneObjects);
-        objects.push(...this.reflectionCaptureObjects);
+        objects.push(...this.reflectionPlaneIcons);
+        // The influence sphere never picks — it only previews the radius while the
+        // probe is selected. The probe is selected through its billboard icon.
+        objects.push(...this.reflectionCaptureIcons);
         return objects;
       },
       surfacePickables: () => {
@@ -730,6 +742,7 @@ export class SceneApp {
     this.disposeReflectionCaptureBakes();
     this.disposeInstanceProbeMaterials();
     this.lightOutlineGeometry.dispose();
+    this.captureOutlineGeometry.dispose();
     // EngineApp.dispose() is async (subsystems may release async resources);
     // SceneApp.dispose() is sync, so fire-and-forget like the renderer teardown.
     void this.engineApp.dispose();
@@ -2156,7 +2169,13 @@ export class SceneApp {
       const resolveMaterial = (source: Material): Material => {
         const base = overrideMaterial ?? source;
         return bake
-          ? assignProbeEnvMapMaterial(base, bake, clonedMaterials, this.scene.environment)
+          ? assignProbeEnvMapMaterial(
+              base,
+              bake,
+              clonedMaterials,
+              this.scene.environment,
+              this.scene.environmentIntensity,
+            )
           : base;
       };
       child.material = Array.isArray(child.material)
@@ -2599,28 +2618,46 @@ export class SceneApp {
     };
   }
 
-  /** Rebuilds every reflector from `layout.reflectionPlanes` (used on load). */
+  /** Rebuilds every reflector + icon from `layout.reflectionPlanes` (used on load). */
   private buildReflectionPlanes(): void {
     for (const reflector of this.reflectionPlaneObjects) {
       this.scene.remove(reflector);
       disposeReflectionPlaneObject(reflector);
     }
+    // Icons share cached material/texture, so just detach them (never dispose).
+    for (const icon of this.reflectionPlaneIcons) this.scene.remove(icon);
     this.reflectionPlaneObjects = [];
+    this.reflectionPlaneIcons = [];
     const planes = this.layout?.reflectionPlanes ?? [];
     planes.forEach((actor, index) => {
       const reflector = createReflectionPlaneObject(this.reflectionPlaneItem(actor));
       reflector.userData.reflectionPlaneIndex = index;
       this.reflectionPlaneObjects.push(reflector);
       this.scene.add(reflector);
+      const icon = createReflectionPlaneIcon();
+      icon.userData.reflectionPlaneIndex = index;
+      this.reflectionPlaneIcons.push(icon);
+      this.scene.add(icon);
+      this.syncReflectionPlaneIcon(index);
     });
   }
 
-  /** Cheap transform/visibility/color sync for one reflector (gizmo drag). */
+  /** Positions a Mirror Plane's billboard icon at the actor and tracks `hidden`. */
+  private syncReflectionPlaneIcon(index: number): void {
+    const icon = this.reflectionPlaneIcons[index];
+    const actor = this.layout?.reflectionPlanes?.[index];
+    if (!icon || !actor) return;
+    icon.position.set(actor.position[0], actor.position[1], actor.position[2]);
+    icon.visible = !(actor.hidden ?? false);
+  }
+
+  /** Cheap transform/visibility/color sync for one reflector + icon (gizmo drag). */
   private refreshReflectionPlaneObject(index: number): void {
     const actor = this.layout?.reflectionPlanes?.[index];
     const reflector = this.reflectionPlaneObjects[index];
     if (!actor || !reflector) return;
     applyReflectionPlaneTransform(reflector, this.reflectionPlaneItem(actor));
+    this.syncReflectionPlaneIcon(index);
   }
 
   /** Recreates one reflector (needed when resolution changes â€” fixed at build). */
@@ -2642,6 +2679,9 @@ export class SceneApp {
     this.reflectionPlaneObjects.forEach((reflector, index) => {
       reflector.userData.reflectionPlaneIndex = index;
     });
+    this.reflectionPlaneIcons.forEach((icon, index) => {
+      icon.userData.reflectionPlaneIndex = index;
+    });
   }
 
   private insertReflectionPlane(index: number, actor: LayoutReflectionPlane): void {
@@ -2652,7 +2692,11 @@ export class SceneApp {
     const reflector = createReflectionPlaneObject(this.reflectionPlaneItem(actor));
     this.reflectionPlaneObjects.splice(insertionIndex, 0, reflector);
     this.scene.add(reflector);
+    const icon = createReflectionPlaneIcon();
+    this.reflectionPlaneIcons.splice(insertionIndex, 0, icon);
+    this.scene.add(icon);
     this.refreshReflectionPlaneIndices();
+    this.syncReflectionPlaneIcon(insertionIndex);
   }
 
   private removeReflectionPlaneAt(index: number): LayoutReflectionPlane | null {
@@ -2663,6 +2707,8 @@ export class SceneApp {
       this.scene.remove(reflector);
       disposeReflectionPlaneObject(reflector);
     }
+    const [icon] = this.reflectionPlaneIcons.splice(index, 1);
+    if (icon) this.scene.remove(icon);
     this.refreshReflectionPlaneIndices();
     return removed ? cloneReflectionPlane(removed) : null;
   }
@@ -2673,14 +2719,14 @@ export class SceneApp {
     const planes = this.layout.reflectionPlanes ?? [];
     const actor: LayoutReflectionPlane = {
       id: uniqueReflectionPlaneId(planes),
-      name: uniqueReflectionPlaneName("Reflection Plane", planes),
+      name: uniqueReflectionPlaneName("Mirror Plane", planes),
       position: [0, 0.01, 0],
       rotation: [-90, 0, 0],
       scale: [4, 4, 1],
     };
     const index = planes.length;
     this.executeCommand({
-      label: "Add Reflection Plane",
+      label: "Add Mirror Plane",
       redo: () => {
         this.insertReflectionPlane(index, actor);
         this.select({ kind: "reflectionPlane", index });
@@ -2694,7 +2740,7 @@ export class SceneApp {
         this.scheduleAutoSave();
       },
     });
-    this.onStatus?.("Added Reflection Plane.", "info");
+    this.onStatus?.("Added Mirror Plane.", "info");
   }
 
   /** Removes a Planar Reflection actor (undoable). */
@@ -2703,7 +2749,7 @@ export class SceneApp {
     if (!actor) return;
     const snapshot = cloneReflectionPlane(actor);
     this.executeCommand({
-      label: "Delete Reflection Plane",
+      label: "Delete Mirror Plane",
       redo: () => {
         this.removeReflectionPlaneAt(index);
         if (this.selection?.kind === "reflectionPlane") this.select(null);
@@ -2728,7 +2774,7 @@ export class SceneApp {
   setReflectionPlane(
     index: number,
     patch: { color?: string; resolution?: number | undefined },
-    label = "Edit Reflection Plane",
+    label = "Edit Mirror Plane",
   ): void {
     const actor = this.layout?.reflectionPlanes?.[index];
     if (!actor) return;
@@ -2775,14 +2821,17 @@ export class SceneApp {
     };
   }
 
-  /** Rebuilds every capture helper from `layout.reflectionCaptures` (used on load). */
+  /** Rebuilds every capture helper + icon from `layout.reflectionCaptures` (used on load). */
   private buildReflectionCaptures(): void {
     for (const helper of this.reflectionCaptureObjects) {
       this.scene.remove(helper);
       disposeSphereReflectionCaptureObject(helper);
     }
+    // Icons share cached material/texture, so just detach them (never dispose).
+    for (const icon of this.reflectionCaptureIcons) this.scene.remove(icon);
     this.disposeReflectionCaptureBakes();
     this.reflectionCaptureObjects = [];
+    this.reflectionCaptureIcons = [];
     const captures = this.layout?.reflectionCaptures ?? [];
     this.reflectionCaptureBakes = captures.map(() => null);
     captures.forEach((actor, index) => {
@@ -2790,10 +2839,40 @@ export class SceneApp {
       helper.userData.reflectionCaptureIndex = index;
       this.reflectionCaptureObjects.push(helper);
       this.scene.add(helper);
+      const icon = createSphereReflectionCaptureIcon();
+      icon.userData.reflectionCaptureIndex = index;
+      this.reflectionCaptureIcons.push(icon);
+      this.scene.add(icon);
+      this.syncReflectionCaptureIcon(index);
     });
-    // Bake each probe once the whole scene is in place (helpers stay hidden during
-    // the cubemap render so they never pollute the reflection).
+    // The influence sphere shows only while the probe is selected; nothing is on
+    // load, so hide every helper now (the icons remain the visible markers).
+    this.updateReflectionCaptureHelperVisibility();
+    // Bake each probe once the whole scene is in place (helpers + icons stay
+    // hidden during the cubemap render so they never pollute the reflection).
     captures.forEach((_actor, index) => this.bakeReflectionCaptureAt(index));
+  }
+
+  /** Positions a probe's billboard icon at the actor center and tracks `hidden`. */
+  private syncReflectionCaptureIcon(index: number): void {
+    const icon = this.reflectionCaptureIcons[index];
+    const actor = this.layout?.reflectionCaptures?.[index];
+    if (!icon || !actor) return;
+    icon.position.set(actor.position[0], actor.position[1], actor.position[2]);
+    icon.visible = !(actor.hidden ?? false);
+  }
+
+  /**
+   * Shows each probe's influence-sphere helper only while that probe is selected
+   * (and not hidden); the always-visible billboard icon stays the marker the rest
+   * of the time. Mirrors the light wireframe's selection-gated visibility.
+   */
+  private updateReflectionCaptureHelperVisibility(): void {
+    this.reflectionCaptureObjects.forEach((helper, index) => {
+      const actor = this.layout?.reflectionCaptures?.[index];
+      const hidden = actor?.hidden ?? false;
+      helper.visible = !hidden && this.isSelectionSelected({ kind: "reflectionCapture", index });
+    });
   }
 
   /**
@@ -2809,7 +2888,11 @@ export class SceneApp {
     const actor = this.layout?.reflectionCaptures?.[index];
     if (!actor) return;
     const item = this.reflectionCaptureItem(actor);
-    if (item.hidden) return;
+    if (item.hidden) {
+      this.refreshReflectionCaptureStaleTint(index);
+      this.applyReflectionCaptureEnvMaps();
+      return;
+    }
     this.reflectionCaptureBakes[index] = this.withEditorAidsHidden(() =>
       bakeSphereReflectionCapture(this.renderer, this.scene, item),
     );
@@ -2886,17 +2969,18 @@ export class SceneApp {
       this.rebuildInstanceGroup(instance.assetId);
     }
     const globalEnv = this.scene.environment;
+    const globalEnvIntensity = this.scene.environmentIntensity;
     this.characterObjects.forEach((object, index) => {
       const character = this.layout?.characters[index];
       if (!object || !character) return;
       const bake = character.hidden ? null : this.probeBakeForPoint(this.objectWorldCenter(object));
-      applyProbeEnvMapToObject(object, bake, globalEnv);
+      applyProbeEnvMapToObject(object, bake, globalEnv, globalEnvIntensity);
     });
     this.actorObjects.forEach((object, index) => {
       const actor = this.layout?.actors?.[index];
       if (!object || !actor) return;
       const bake = actor.hidden ? null : this.probeBakeForPoint(this.objectWorldCenter(object));
-      applyProbeEnvMapToObject(object, bake, globalEnv);
+      applyProbeEnvMapToObject(object, bake, globalEnv, globalEnvIntensity);
     });
     // Instance groups were rebuilt, so refresh the selection outline against the
     // new objects (a selected instance may have become an envMap clone).
@@ -2919,7 +3003,9 @@ export class SceneApp {
     };
     hide(this.gizmoGroup);
     for (const helper of this.reflectionCaptureObjects) hide(helper);
+    for (const icon of this.reflectionCaptureIcons) hide(icon);
     for (const reflector of this.reflectionPlaneObjects) hide(reflector);
+    for (const icon of this.reflectionPlaneIcons) hide(icon);
     for (const record of this.lightObjects) hide(record.gizmo);
     try {
       return fn();
@@ -2928,12 +3014,17 @@ export class SceneApp {
     }
   }
 
-  /** Cheap transform/visibility/radius sync for one capture helper (gizmo drag + radius edit). */
+  /** Cheap transform/visibility/radius sync for one capture helper + icon (gizmo drag + radius edit). */
   private refreshReflectionCaptureObject(index: number): void {
     const actor = this.layout?.reflectionCaptures?.[index];
     const helper = this.reflectionCaptureObjects[index];
     if (!actor || !helper) return;
     applySphereReflectionCaptureTransform(helper, this.reflectionCaptureItem(actor));
+    // The transform sync re-derives helper visibility from `hidden` alone; keep it
+    // selection-gated so the influence sphere only shows for the selected probe.
+    helper.visible =
+      helper.visible && this.isSelectionSelected({ kind: "reflectionCapture", index });
+    this.syncReflectionCaptureIcon(index);
     this.refreshReflectionCaptureStaleTint(index);
   }
 
@@ -2964,6 +3055,9 @@ export class SceneApp {
     this.reflectionCaptureObjects.forEach((helper, index) => {
       helper.userData.reflectionCaptureIndex = index;
     });
+    this.reflectionCaptureIcons.forEach((icon, index) => {
+      icon.userData.reflectionCaptureIndex = index;
+    });
   }
 
   private insertReflectionCapture(index: number, actor: LayoutSphereReflectionCapture): void {
@@ -2975,7 +3069,12 @@ export class SceneApp {
     this.reflectionCaptureObjects.splice(insertionIndex, 0, helper);
     this.reflectionCaptureBakes.splice(insertionIndex, 0, null);
     this.scene.add(helper);
+    const icon = createSphereReflectionCaptureIcon();
+    this.reflectionCaptureIcons.splice(insertionIndex, 0, icon);
+    this.scene.add(icon);
     this.refreshReflectionCaptureIndices();
+    this.syncReflectionCaptureIcon(insertionIndex);
+    this.updateReflectionCaptureHelperVisibility();
     this.bakeReflectionCaptureAt(insertionIndex);
   }
 
@@ -2989,6 +3088,8 @@ export class SceneApp {
       this.scene.remove(helper);
       disposeSphereReflectionCaptureObject(helper);
     }
+    const [icon] = this.reflectionCaptureIcons.splice(index, 1);
+    if (icon) this.scene.remove(icon);
     this.refreshReflectionCaptureIndices();
     // The removed probe's texture is now disposed â€” re-assign so nothing still
     // references it (covered surfaces fall back to the next probe / global env).
@@ -4471,6 +4572,8 @@ export class SceneApp {
   private updateSelectionBox(): void {
     this.removeSelectionBox();
     this.updateLightGizmoVisibility();
+    // Probe influence spheres follow selection (like the light wireframes).
+    this.updateReflectionCaptureHelperVisibility();
     // Collision overlay refreshes with the same cadence as selection boxes, so it
     // tracks live transform edits (drag/cascade all route through here).
     this.updateCollisionBoxes();
@@ -4510,7 +4613,20 @@ export class SceneApp {
       const helper = this.reflectionCaptureObjects[selection.index];
       const actor = this.layout.reflectionCaptures?.[selection.index];
       if (!helper || actor?.hidden) return null;
-      return this.selectionOutline.cloneRenderableMeshes(helper);
+      // The helper is line geometry (no renderable mesh to clone), so glow the
+      // influence sphere via an invisible proxy sized by the helper's world
+      // matrix — mirrors the light-icon outline path and matches Unreal, where
+      // selecting a capture highlights its influence sphere.
+      helper.updateMatrixWorld(true);
+      const proxy = new Mesh(this.captureOutlineGeometry, this.selectionOutline.getInvisibleMaterial());
+      proxy.name = "reflection-capture-outline-proxy";
+      proxy.matrix.copy(helper.matrixWorld);
+      proxy.matrixAutoUpdate = false;
+      proxy.frustumCulled = false;
+      proxy.castShadow = false;
+      proxy.receiveShadow = false;
+      proxy.raycast = () => {};
+      return proxy;
     }
 
     if (selection.kind === "light") {
@@ -4746,11 +4862,13 @@ export class SceneApp {
   private updateGizmo(): void {
     clearGizmoGroup(this.gizmoGroup, this.gizmoPickables);
     if (!this.selection) return;
-    // The Sky Atmosphere + Height Fog + Cloud Layer have no transform, so they never show a gizmo.
+    // The Sky Atmosphere, Height Fog, Cloud Layer and Post Process are scene-wide
+    // environment singletons with no transform, so they never show a move gizmo.
     if (
       this.selection.kind === "sky" ||
       this.selection.kind === "fog" ||
-      this.selection.kind === "cloud"
+      this.selection.kind === "cloud" ||
+      this.selection.kind === "post"
     ) {
       return;
     }

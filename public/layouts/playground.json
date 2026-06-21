@@ -109,7 +109,7 @@
             1.75,
             -3.11
           ],
-          "materialSlot": "gray-material",
+          "materialSlot": "red-material",
           "rotationYDeg": 0,
           "scale": 1
         },
@@ -119,7 +119,7 @@
             1.75,
             3.31
           ],
-          "materialSlot": "gray-material",
+          "materialSlot": "red-material",
           "rotationYDeg": 0,
           "scale": 1
         },
@@ -129,7 +129,7 @@
             1.75,
             -3.1
           ],
-          "materialSlot": "gray-material",
+          "materialSlot": "red-material",
           "rotationYDeg": 0,
           "scale": 1
         },
@@ -139,7 +139,7 @@
             1.75,
             3.32
           ],
-          "materialSlot": "gray-material",
+          "materialSlot": "red-material",
           "rotationYDeg": 0,
           "scale": 1
         }
@@ -150,19 +150,19 @@
       "placements": [
         {
           "position": [
-            -0.71,
+            1.26,
             1,
-            0.95
+            0.93
           ],
           "materialSlot": "starter-mat-emissive",
           "rotationYDeg": 0,
-          "scale": 0.29
+          "scale": 0.3
         },
         {
           "position": [
-            -0.23,
+            0.31,
             1,
-            1.95
+            2.25
           ],
           "materialSlot": "mirror-material",
           "rotationYDeg": 0,
@@ -170,9 +170,19 @@
         },
         {
           "position": [
-            -0.9,
+            -7.22,
             1,
-            1.53
+            2.25
+          ],
+          "materialSlot": "mirror-material",
+          "rotationYDeg": 0,
+          "scale": 0.29
+        },
+        {
+          "position": [
+            -0.35,
+            1,
+            2.24
           ],
           "materialSlot": "starter-mat-metal",
           "rotationYDeg": 0,
@@ -199,7 +209,7 @@
             0.75,
             0.94
           ],
-          "materialSlot": "starter-mat-brick-clay-beveled",
+          "materialSlot": "starter-mat-brick-clay-new",
           "rotationYDeg": 0,
           "scale": 1
         }
@@ -265,26 +275,50 @@
       ],
       "name": "Sun",
       "rotation": [
-        -39,
-        12.1,
-        3.3
+        -26,
+        1.1,
+        -25.7
       ],
       "color": "#ffffff",
-      "intensity": 1,
+      "intensity": 10,
       "castShadow": true
     }
   ],
-  "reflectionPlanes": [],
+  "reflectionPlanes": [
+    {
+      "id": "reflection-plane-1",
+      "position": [
+        -3.2,
+        0.27,
+        -3.04
+      ],
+      "name": "Reflection Plane",
+      "rotation": [
+        -90,
+        0,
+        0
+      ],
+      "scale": [
+        1.63,
+        1.85,
+        0.05
+      ],
+      "color": "#dbdbdb",
+      "resolution": 512
+    }
+  ],
   "reflectionCaptures": [
     {
       "id": "reflection-capture-1",
       "position": [
         0,
-        1.55,
+        1,
         0
       ],
       "name": "Sphere Reflection Capture",
-      "intensity": 1,
+      "radius": 6,
+      "intensity": 0.8,
+      "resolution": 256,
       "near": 0.1,
       "parallax": true
     }

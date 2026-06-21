@@ -8,6 +8,7 @@ import {
   findParentLight,
   findParentReflectionCapture,
   findParentReflectionPlane,
+  findParentReflectiveSurface,
 } from "@engine/render-three/picking";
 import type { InstanceSelection, Selection } from "@editor/core/selection";
 import { pickGizmoHandle as pickGizmoHandleFromObjects } from "@editor/gizmos/interaction";
@@ -103,6 +104,12 @@ export class ScenePicker {
         if (Number.isInteger(index)) return { kind: "reflectionPlane", index };
       }
 
+      const reflectiveSurface = findParentReflectiveSurface(hit.object);
+      if (reflectiveSurface) {
+        const index = Number(reflectiveSurface.userData.reflectiveSurfaceIndex);
+        if (Number.isInteger(index)) return { kind: "reflectiveSurface", index };
+      }
+
       const reflectionCapture = findParentReflectionCapture(hit.object);
       if (reflectionCapture) {
         const index = Number(reflectionCapture.userData.reflectionCaptureIndex);
@@ -174,6 +181,10 @@ export class ScenePicker {
     if (selection.kind === "reflectionPlane") {
       const plane = findParentReflectionPlane(hit.object);
       return plane ? Number(plane.userData.reflectionPlaneIndex) === selection.index : false;
+    }
+    if (selection.kind === "reflectiveSurface") {
+      const surface = findParentReflectiveSurface(hit.object);
+      return surface ? Number(surface.userData.reflectiveSurfaceIndex) === selection.index : false;
     }
     if (selection.kind === "reflectionCapture") {
       const capture = findParentReflectionCapture(hit.object);

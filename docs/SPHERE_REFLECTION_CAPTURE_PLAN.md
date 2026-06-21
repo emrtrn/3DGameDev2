@@ -413,7 +413,32 @@ Kabul:
 
 ### Faz 5 - Kalite / Unreal Benzeri Refinement
 
-- [ ] Overlap blend.
+- [x] Specular-only probe (diffuse Sky Light'tan gelir). Sorun: three.js'te
+  `MeshStandardMaterial.envMap` hem specular reflection (`getIBLRadiance`) hem de
+  diffuse ambient (`getIBLIrradiance`) besler; probe materyalin kendi `envMap`'ini
+  atayınca `scene.environment` (Sky Light Capture) o materyal için tamamen devre dışı
+  kalır. Sonuç: (1) probe kapsamındaki objelerde Sky intensity/Recapture görünmez,
+  (2) probe intensity 1'de diffuse irradiance ekleyip pürüzlü yüzeyleri ve gölgeleri
+  yıkar. Çözüm (Unreal modeli): probe **yalnızca specular** katkı yapsın; diffuse
+  irradiance global Sky Light env'ine yönlendirilsin. `installCaptureShaderPatch`,
+  blend açıkken (global env mevcut) `getIBLIrradiance`'in örnekleme satırını probe
+  `envMap` yerine `captureGlobalEnv`'den (`captureGlobalEnvIntensity / max(envMapIntensity, .0001)`
+  ile ölçekli, böylece fonksiyonun sonundaki `* envMapIntensity` sky'ı kendi
+  yoğunluğunda bırakır) örnekleyecek şekilde yeniden yazar. Specular yansıma,
+  parallax ve boundary blend aynen kalır (aynalar intensity 1'de net). Global env yoksa eski
+  davranışa düşer (probe diffuse'u sürer). `customProgramCacheKey`'in `blend` bayrağı
+  yeni programı zaten ayırt eder. SceneApp + RuntimeSceneApp (Play) paritesi;
+  engine-tests blend testi diffuse yönlendirmesini doğrular.
+- [x] Overlap blend. (Sınır falloff'u: probe envMap'i, fragment world-pos'una göre
+  `score = dist/radius` 0.7→1.0 aralığında global Sky Light Capture'a (`scene.environment`)
+  fade eder, sert probe→global kesme yumuşar. Genelleştirilmiş `installCaptureShaderPatch`
+  IBL chunk'ını inline edip probe örneklemesinden sonra `mix(global, probe, weight)` enjekte
+  eder; `captureGlobalEnv` sampler + `captureGlobalEnvIntensity` uniform'ları (global örnek
+  `captureGlobalEnvIntensity / max(envMapIntensity, .0001)` ile ölçeklenir ki final
+  `* envMapIntensity` sonrası global kendi yoğunluğunda çıksın). Global env, parallax'tan
+  bağımsız un-parallaxed reflectVec ile örneklenir; `customProgramCacheKey` parallax/blend
+  bayraklarını kodlar. `scene.environment` değişince (`applyReflection`) probe klonları
+  yeniden bağlanır. SceneApp + RuntimeSceneApp (Play) paritesi.)
 - [x] Priority/small-probe override kuralÄ±nÄ± iyileÅŸtir. (`selectNearestReflectionCapture`
   artÄ±k kapsayan probe'lar arasÄ±nda Unreal-tarzÄ± Ã¶ncelik uygular: `priority` (yÃ¼ksek) â†’
   kÃ¼Ã§Ã¼k `radius` (daha lokal capture bÃ¼yÃ¼ÄŸÃ¼ override eder, bÃ¼yÃ¼k daha merkezde olsa bile) â†’

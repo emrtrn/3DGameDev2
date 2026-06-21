@@ -88,6 +88,24 @@ export interface EditableReflectionCapture {
   priority: number;
 }
 
+/**
+ * Resolved Reflective Surface fields for the Details panel. Like the Sphere
+ * Reflection Capture this is a placed actor with a transform; the material
+ * reference + reflection-blend settings ride alongside in
+ * {@link EditableSelection.reflectiveSurface}.
+ */
+export interface EditableReflectiveSurface {
+  name: string;
+  hidden: boolean;
+  material: string | null;
+  reflectionStrength: number;
+  fresnelPower: number;
+  fresnelBias: number;
+  distortion: number;
+  tint: string;
+  resolution: number;
+}
+
 /** Resolved global Post Process fields for the Details panel. */
 export interface EditablePostProcess {
   name: string;
@@ -162,6 +180,8 @@ export interface EditableSelection {
   cloud?: EditableCloud;
   /** Resolved Sphere Reflection Capture settings; present only when `kind === "reflectionCapture"`. */
   reflectionCapture?: EditableReflectionCapture;
+  /** Resolved Reflective Surface settings; present only when `kind === "reflectiveSurface"`. */
+  reflectiveSurface?: EditableReflectiveSurface;
   /** Resolved Post Process settings; present only when `kind === "post"`. */
   post?: EditablePostProcess;
 }

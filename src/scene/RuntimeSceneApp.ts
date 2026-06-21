@@ -110,7 +110,14 @@ import {
   type SphereReflectionCaptureBake,
   type SphereReflectionCaptureRenderItem,
 } from "@engine/render-three/reflectionCapture";
-import { readRotation } from "@engine/scene/transform";
+import {
+  createReflectionPlaneObject,
+  disposeReflectionPlaneObject,
+  resolveReflectionPlane,
+  type ReflectionPlaneObject,
+  type ReflectionPlaneRenderItem,
+} from "@engine/render-three/reflectionPlane";
+import { readRotation, readScale } from "@engine/scene/transform";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
   collectMaterialStats,
@@ -127,6 +134,7 @@ import type {
   LayoutCharacter,
   LayoutLightActor,
   LayoutPlacement,
+  LayoutReflectionPlane,
   LayoutSphereReflectionCapture,
   RoomLayout,
   Vec3,
@@ -244,6 +252,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private reflectionCaptureBakes: (SphereReflectionCaptureBake | null)[] = [];
   /** Per-asset materials cloned to carry a probe envMap; disposed on rebuild. */
   private readonly instanceProbeMaterials = new Map<string, Material[]>();
+  /** Planar Reflection (mirror) reflectors built from `layout.reflectionPlanes`. */
+  private reflectionPlaneObjects: ReflectionPlaneObject[] = [];
   private characterObjects: Object3D[] = [];
   private characterRefs: RuntimeCharacterRef[] = [];
   private lightObjects: LightObjectRecord[] = [];
@@ -411,6 +421,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (bake) disposeSphereReflectionCaptureBake(bake);
     }
     this.reflectionCaptureBakes = [];
+    for (const reflector of this.reflectionPlaneObjects) {
+      this.scene.remove(reflector);
+      disposeReflectionPlaneObject(reflector);
+    }
+    this.reflectionPlaneObjects = [];
     this.disposeInstanceProbeMaterials();
     this.interactionPromptElement.remove();
     void this.engineApp.dispose();
@@ -527,6 +542,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Bake placed Sphere Reflection Captures from the finished scene + environment,
     // then assign nearest-probe envMaps (Play parity with the editor).
     this.buildRuntimeReflectionCaptures();
+    // Planar Reflection mirrors come last so they don't leak into the probe cubemaps.
+    this.buildRuntimeReflectionPlanes();
 
     const bytes = await this.assetLoader.totalBytesForGroups(this.layout.loadGroups);
     const materialStats = collectMaterialStats(this.models);
@@ -1038,7 +1055,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const resolveMaterial = (source: Material): Material => {
         const base = overrideMaterial ?? source;
         return bake
-          ? assignProbeEnvMapMaterial(base, bake, clonedMaterials, this.scene.environment)
+          ? assignProbeEnvMapMaterial(
+              base,
+              bake,
+              clonedMaterials,
+              this.scene.environment,
+              this.scene.environmentIntensity,
+            )
           : base;
       };
       child.material = Array.isArray(child.material)
@@ -1137,18 +1160,45 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.scene.add(this.createInstancedModel(instance.assetId, instance.placements));
     }
     const globalEnv = this.scene.environment;
+    const globalEnvIntensity = this.scene.environmentIntensity;
     this.characterObjects.forEach((object, index) => {
       const character = this.layout?.characters[index];
       if (!object || !character) return;
       const bake = character.hidden ? null : this.probeBakeForPoint(this.objectWorldCenter(object));
-      applyProbeEnvMapToObject(object, bake, globalEnv);
+      applyProbeEnvMapToObject(object, bake, globalEnv, globalEnvIntensity);
     });
     for (const [index, object] of this.actorObjects) {
       const actor = this.layout?.actors?.[index];
       if (!actor) continue;
       const bake = actor.hidden ? null : this.probeBakeForPoint(this.objectWorldCenter(object));
-      applyProbeEnvMapToObject(object, bake, globalEnv);
+      applyProbeEnvMapToObject(object, bake, globalEnv, globalEnvIntensity);
     }
+  }
+
+  /** Resolved settings + world transform for a reflection-plane layout actor. */
+  private reflectionPlaneItem(actor: LayoutReflectionPlane): ReflectionPlaneRenderItem {
+    return {
+      ...resolveReflectionPlane(actor),
+      position: [...actor.position],
+      rotation: readRotation(actor),
+      scale: readScale(actor),
+    };
+  }
+
+  /**
+   * Builds the Planar Reflection mirrors (`layout.reflectionPlanes`) for Play —
+   * editor parity with {@link SceneApp.buildReflectionPlanes}. Each `Reflector`
+   * self-updates via its own `onBeforeRender`, so the render loop never drives it.
+   * Called after the Sphere Reflection Capture bake so the flat mirrors never leak
+   * into the probe cubemaps (the editor hides them during its bake instead).
+   */
+  private buildRuntimeReflectionPlanes(): void {
+    const planes = this.layout?.reflectionPlanes ?? [];
+    planes.forEach((actor) => {
+      const reflector = createReflectionPlaneObject(this.reflectionPlaneItem(actor));
+      this.reflectionPlaneObjects.push(reflector);
+      this.scene.add(reflector);
+    });
   }
 
   /**

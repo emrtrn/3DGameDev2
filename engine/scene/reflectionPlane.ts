@@ -22,7 +22,8 @@ export interface ResolvedReflectionPlane {
 }
 
 export const REFLECTION_PLANE_DEFAULTS: ResolvedReflectionPlane = {
-  name: "Reflection Plane",
+  // Named "Mirror Plane" — its only use is a flat mirror surface.
+  name: "Mirror Plane",
   hidden: false,
   color: "#888888",
   resolution: 512,

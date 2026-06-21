@@ -45,6 +45,15 @@ export function findParentReflectionPlane(object: Object3D): Object3D | null {
   return null;
 }
 
+export function findParentReflectiveSurface(object: Object3D): Object3D | null {
+  let current: Object3D | null = object;
+  while (current) {
+    if (current.userData.reflectiveSurfaceIndex !== undefined) return current;
+    current = current.parent;
+  }
+  return null;
+}
+
 export function findParentReflectionCapture(object: Object3D): Object3D | null {
   let current: Object3D | null = object;
   while (current) {

@@ -313,7 +313,7 @@ export class EditorUi {
               <button type="button" data-add-sky-atmosphere>Sky Atmosphere</button>
               <button type="button" data-add-height-fog>Exponential Height Fog</button>
               <button type="button" data-add-cloud-layer>Cloud Layer</button>
-              <button type="button" data-add-reflection-plane>Reflection Plane</button>
+              <button type="button" data-add-reflection-plane>Mirror Plane</button>
               <button type="button" data-add-reflection-capture>Sphere Reflection Capture</button>
               <button type="button" data-add-post-process>Post Process</button>
               <div class="add-actor-section-title">Gameplay</div>
@@ -2817,6 +2817,7 @@ export class EditorUi {
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
       selection.kind === "reflectionPlane" ||
+      selection.kind === "reflectiveSurface" ||
       selection.kind === "reflectionCapture" ||
       selection.kind === "post"
     ) {
@@ -3000,6 +3001,7 @@ export class EditorUi {
       this.selected.kind === "fog" ||
       this.selected.kind === "cloud" ||
       this.selected.kind === "reflectionPlane" ||
+      this.selected.kind === "reflectiveSurface" ||
       this.selected.kind === "reflectionCapture" ||
       this.selected.kind === "post"
     ) {
@@ -3162,7 +3164,7 @@ export class EditorUi {
       <label class="detail-row">
         <span>Name</span>
         <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
-          placeholder="Reflection Plane" />
+          placeholder="Mirror Plane" />
       </label>
       ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
       ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
