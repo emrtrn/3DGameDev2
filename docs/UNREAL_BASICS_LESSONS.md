@@ -99,6 +99,13 @@ tutkalı shell'lerde ince kalır.
   dispatcher/message binding ve BehaviorContext API'i üzerinden kurulacaktır.
   Takip dokümanı: `docs/completed/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md`.
 
+- *2026-06-21* — **Player Character / Character Movement karari.** `Player.Actor`
+  icin skeletal mesh tek basina yeterli degil. Forge, Unreal'in Character
+  ayrimini alacak: possess edilebilen Pawn + skeletal mesh + capsule collider +
+  birinci sinif `CharacterMovement` component'i + GameMode/PlayerController
+  possession akisi. Takip dokumani:
+  `docs/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md`.
+
 ## Mevcut runtime taban çizgisi (kanıt)
 
 - Davranışlar saf game kodu: `src/game/behaviors.ts` — `spin`, `input-move`
@@ -2082,6 +2089,7 @@ docs/
   LAUNCH_WORKFLOW.md
   UNREAL_BASICS_LESSONS.md
   completed/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md
+  PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md
   GAMEPLAY_FRAMEWORK_CHECKLIST.md
   ACTORS_COMPONENTS_CHECKLIST.md
   PACKAGING_CHECKLIST.md

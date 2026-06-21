@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "Player",
+  "parentClass": "character",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "meshRenderer",
+      "component": "MeshRenderer",
+      "props": {
+        "assetId": "character-a"
+      },
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

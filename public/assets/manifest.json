@@ -7451,6 +7451,52 @@
         "bytes": 358
       },
       "license": "Unknown"
+    },
+    {
+      "id": "player-actor",
+      "name": "Player.Actor",
+      "assetType": "prefab",
+      "category": "Script",
+      "path": "assets/starter-content/Script/Player.actor.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Script",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 344
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "mygamemode-actor",
+      "name": "My Game Mode.Actor",
+      "assetType": "prefab",
+      "category": "Script",
+      "path": "assets/starter-content/Script/MyGameMode.actor.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Script",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 347
+      },
+      "license": "Unknown"
     }
   ]
 }
