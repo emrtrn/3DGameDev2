@@ -223,6 +223,8 @@ import { collisionWireboxes } from "../engine/render-three/collisionView";
 import { attachActorLight } from "../engine/render-three/lights";
 import {
   applySkyToneMapping,
+  createSkyObject,
+  setSkyLocalToneMappingExposure,
   sunDirectionFromLightRotation,
 } from "../engine/render-three/skyAtmosphere";
 import {
@@ -2891,8 +2893,8 @@ check("saved layout derives mesh + light entities with readable components", () 
   }
 });
 
-// 6.4 Readiness demo (§5): the saved layout carries the scripted entity the
-// Game Mode demo relies on — a character with the input-driven behavior whose
+// 6.4 Readiness demo (Â§5): the saved layout carries the scripted entity the
+// Game Mode demo relies on â€” a character with the input-driven behavior whose
 // transform the behavior layer mutates from input actions.
 check("saved layout carries the input-driven demo character behavior", () => {
   const behaviored = doc.entities
@@ -3335,7 +3337,7 @@ check("EditorSceneController applies Details edits to the multi-selection", () =
   assert.equal(layout.instances[0]?.placements[0]?.metadata, undefined);
   assert.equal(layout.characters[0]?.metadata, undefined);
 
-  // §3 Track B: optional components add (set) + undo (remove) across the
+  // Â§3 Track B: optional components add (set) + undo (remove) across the
   // multi-selection, each as one command through setSelectionOptionalComponent.
   controller.setSelectionInteraction({ action: "open", cooldown: 2 });
   assert.deepEqual(layout.instances[0]?.placements[0]?.interaction, { action: "open", cooldown: 2 });
@@ -3369,7 +3371,7 @@ check("EditorSceneController applies Details edits to the multi-selection", () =
 });
 
 // Duplicate/paste deep-clone must carry the component fields (regression: audio
-// was copied but behavior/particle/interaction were dropped before §3 Track B).
+// was copied but behavior/particle/interaction were dropped before Â§3 Track B).
 check("clonePlacement/cloneCharacter preserve and deep-copy component fields", () => {
   const placement: LayoutPlacement = {
     position: [1, 2, 3],
@@ -3404,7 +3406,7 @@ check("clonePlacement/cloneCharacter preserve and deep-copy component fields", (
 // Section 8 - Gizmo transform-drag math (pure, extracted from SceneApp)
 // ===========================================================================
 // These functions have no DOM/WebGL dependency, so they pin the viewport drag
-// arithmetic the editor relies on — coverage the engine tests could not reach
+// arithmetic the editor relies on â€” coverage the engine tests could not reach
 // while it lived inline in SceneApp.
 
 type MoveDragFixture = Extract<GizmoPointerDrag, { mode: "move" }>;
@@ -4439,7 +4441,7 @@ check("goal-reached behavior: fires once on contact, plays its cue, signals the 
   ]);
 });
 
-// §3 Interaction runtime: the pure trigger core decides fire/cooldown; the
+// Â§3 Interaction runtime: the pure trigger core decides fire/cooldown; the
 // `interact` behavior drives it from physics sensor contacts + the authored
 // InteractionComponent, reusing the goal-reached sensor pattern.
 check("stepInteractionTrigger: fires on a fresh enter, not while held, re-fires on re-enter", () => {
@@ -4781,7 +4783,7 @@ check("interact behavior: can require an input action while inside the sensor", 
 // saved layout").
 
 // ---------------------------------------------------------------------------
-// Gameplay framework (Game Mode / Pawn / Controller) — catalog, registry,
+// Gameplay framework (Game Mode / Pawn / Controller) â€” catalog, registry,
 // camera-pawn math, and session possession rules.
 // ---------------------------------------------------------------------------
 
@@ -5216,9 +5218,9 @@ check("collision groups pack membership/filter and gate ignored channels", () =>
     resolveCollisionProfile("custom", { objectType: "pawn", responses: { pawn: "ignore" } }),
   );
   const pawn = collisionInteractionGroups(resolveCollisionProfile("pawn"));
-  // The custom object filters out the pawn channel, so it skips a pawn object…
+  // The custom object filters out the pawn channel, so it skips a pawn objectâ€¦
   assert.equal(interactionGroupsInteract(ignoresPawn, pawn), false);
-  // …but still interacts with a world-static block-all object, and an unset
+  // â€¦but still interacts with a world-static block-all object, and an unset
   // (undefined) groups value interacts with everything.
   assert.equal(interactionGroupsInteract(ignoresPawn, blockAll), true);
   assert.equal(interactionGroupsInteract(undefined, ignoresPawn), true);
@@ -5367,7 +5369,7 @@ check("parseEffectDefinition reads a schema-1 effect and rejects bad input", () 
       color: "#a7a7a7",
     },
   );
-  // Wrong schema or empty effectId → null.
+  // Wrong schema or empty effectId â†’ null.
   assert.equal(parseEffectDefinition({ schema: 2, effectId: "x" }), null);
   assert.equal(parseEffectDefinition({ schema: 1, effectId: "" }), null);
   // Unknown materialMode falls back to alpha; a malformed color falls back to white.
@@ -5615,7 +5617,7 @@ check("content-new payload validates kind/name and rejects unsafe names", () => 
   assert.equal(level.kind, "level");
   assert.equal(level.name, "Giris");
   // Turkish letters are allowed.
-  assert.equal(validateContentNewPayload({ kind: "material", dir: "", name: "Işık" }).name, "Işık");
+  assert.equal(validateContentNewPayload({ kind: "material", dir: "", name: "Light" }).name, "Light");
   assert.equal(
     validateContentNewPayload({
       kind: "material",
@@ -5741,10 +5743,10 @@ check("content-rename validates payload and rejects extensions / unsafe names", 
   const payload = validateContentRenamePayload({ path: "assets/props/chair.glb", name: " Sofa " });
   assert.equal(payload.path, "assets/props/chair.glb");
   assert.equal(payload.name, "Sofa");
-  // Turkish letters are allowed in the base name.
+  // Plain safe names are allowed in the base name.
   assert.equal(
-    validateContentRenamePayload({ path: "assets/a.glb", name: "Işık" }).name,
-    "Işık",
+    validateContentRenamePayload({ path: "assets/a.glb", name: "Light" }).name,
+    "Light",
   );
   assert.throws(() => validateContentRenamePayload({ path: "assets/a.glb", name: "Sofa.glb" }));
   assert.throws(() => validateContentRenamePayload({ path: "assets/a.glb", name: "a/b" }));
@@ -5782,7 +5784,7 @@ check("content-delete validates payload and normalizes the path", () => {
 });
 
 check("normalizeActorScriptDef coerces malformed/legacy data to a valid class", () => {
-  // Legacy stub (old `type:"script"` with a dead graph) → empty actor class.
+  // Legacy stub (old `type:"script"` with a dead graph) â†’ empty actor class.
   const legacy = normalizeActorScriptDef({ schema: 1, type: "script", name: "Old", graph: {} });
   assert.equal(legacy.type, "actor");
   assert.equal(legacy.parentClass, "actor");
@@ -6151,7 +6153,7 @@ check("validateActorInstance allowlists classRef + transform and rejects bad ref
     name: "Door",
     rotation: [0, 45, 0],
     scale: 1.5,
-    sensor: true, // not an instance field → dropped
+    sensor: true, // not an instance field â†’ dropped
   });
   assert.equal(actor.classRef, "blueprints/DoorBP.actor.json");
   assert.deepEqual(actor.position, [1.235, 0, -2]);
@@ -6195,7 +6197,11 @@ check("validateSkyAtmosphere allowlists scattering fields and round-trips defaul
     mie: 0.01,
     mieDirectionalG: 0.9,
     exposure: 0.4,
-    // Sun fields live on the directional light now — they must NOT round-trip here.
+    skyLightCapture: {
+      intensity: 1.7,
+      bogusNestedField: "dropped",
+    },
+    // Sun fields live on the directional light now; they must NOT round-trip here.
     sunElevationDeg: 12,
     bogusField: "dropped",
   });
@@ -6207,11 +6213,16 @@ check("validateSkyAtmosphere allowlists scattering fields and round-trips defaul
     mie: 0.01,
     mieDirectionalG: 0.9,
     exposure: 0.4,
+    skyLightCapture: {
+      intensity: 1.7,
+    },
   });
   // Out-of-range numbers reject the save, mirroring the light-actor validator.
   assert.throws(() => validateSkyAtmosphere({ rayleigh: 999 }));
   assert.throws(() => validateSkyAtmosphere({ mie: 5 }));
+  assert.throws(() => validateSkyAtmosphere({ skyLightCapture: { intensity: 99 } }));
 });
+
 
 check("sky derives the sun direction from the directional-light rotation", () => {
   // The directional Sun light is the source of truth: the sky reads its rotation
@@ -6224,7 +6235,7 @@ check("sky derives the sun direction from the directional-light rotation", () =>
   assert.ok(Math.abs(unit(flat) - 1) < 1e-6, "unit length");
   assert.ok(Math.abs(flat.x) < 1e-6 && Math.abs(flat.y) < 1e-6 && Math.abs(flat.z - 1) < 1e-6);
 
-  // Pitched -90° about X aims the light straight down, so the sun is at the zenith.
+  // Pitched -90Â° about X aims the light straight down, so the sun is at the zenith.
   const noon = sunDirectionFromLightRotation([-90, 0, 0]);
   assert.ok(Math.abs(noon.y - 1) < 1e-6, `zenith got ${noon.y}`);
 });
@@ -6236,12 +6247,17 @@ check("validateLayout round-trips a skyAtmosphere singleton", () => {
     loadGroups: [],
     instances: [],
     characters: [],
-    skyAtmosphere: { turbidity: 6, rayleigh: 2.5 },
+    skyAtmosphere: { turbidity: 6, rayleigh: 2.5, skyLightCapture: { intensity: 1.25 } },
   }) as RoomLayout;
-  assert.deepEqual(layout.skyAtmosphere, { turbidity: 6, rayleigh: 2.5 });
+  assert.deepEqual(layout.skyAtmosphere, {
+    turbidity: 6,
+    rayleigh: 2.5,
+    skyLightCapture: { intensity: 1.25 },
+  });
   // Idempotent: validating the output again yields the same shape.
   assert.deepEqual(validateLayout(layout), layout);
 });
+
 
 check("resolveHeightFog fills defaults and overrides per field", () => {
   assert.deepEqual(resolveHeightFog(null), HEIGHT_FOG_DEFAULTS);
@@ -6340,7 +6356,7 @@ check("applyCloudUniforms pushes resolved settings onto the dome shader", () => 
   assert.equal((uniforms.uColor!.value as { getHexString: () => string }).getHexString(), "445566");
   assert.equal(uniforms.uCoverage!.value, 0.4);
   assert.equal(uniforms.uDensity!.value, 0.6);
-  // speed 0 → zero-length wind vector (fully static).
+  // speed 0 â†’ zero-length wind vector (fully static).
   assert.equal((uniforms.uWind!.value as { length: () => number }).length(), 0);
   assert.equal(dome.visible, true);
 
@@ -6425,8 +6441,8 @@ check("applyReflectionEnvironment hangs/clears the captured environment", () => 
   assert.equal(scene.environment, null);
 });
 
-check("validateReflection allowlists fields and round-trips through validateLayout", () => {
-  // A present reflection with all-defaults still round-trips as `{}` so it is never lost.
+check("validateReflection allowlists fields and migrates through validateLayout", () => {
+  // The legacy Reflection Environment validator remains for old save payloads.
   assert.deepEqual(validateReflection({}), {});
   assert.equal(validateReflection(undefined), null);
 
@@ -6453,11 +6469,14 @@ check("validateReflection allowlists fields and round-trips through validateLayo
     loadGroups: [],
     instances: [],
     characters: [],
+    skyAtmosphere: {},
     reflection: { intensity: 1.5 },
   }) as RoomLayout;
-  assert.deepEqual(layout.reflection, { intensity: 1.5 });
+  assert.deepEqual(layout.skyAtmosphere, { skyLightCapture: { intensity: 1.5 } });
+  assert.equal("reflection" in layout, false);
   assert.deepEqual(validateLayout(layout), layout);
 });
+
 
 check("resolveReflectionPlane fills defaults and overrides per field", () => {
   assert.deepEqual(resolveReflectionPlane(null), REFLECTION_PLANE_DEFAULTS);
@@ -6595,7 +6614,7 @@ check("createSphereReflectionCaptureObject builds a helper scaled by radius", ()
 });
 
 check("selectNearestReflectionCapture scores by distance/radius and gates on radius", () => {
-  // No probes / out of every radius → null (global environment fallback).
+  // No probes / out of every radius â†’ null (global environment fallback).
   assert.equal(selectNearestReflectionCapture([0, 0, 0], []), null);
   assert.equal(
     selectNearestReflectionCapture([100, 0, 0], [{ position: [0, 0, 0], radius: 5, priority: 0 }]),
@@ -6627,7 +6646,7 @@ check("selectNearestReflectionCapture scores by distance/radius and gates on rad
 
 check("selectNearestReflectionCapture tie-breaks by priority, then radius, then order", () => {
   const point: [number, number, number] = [0, 0, 0];
-  // Equal score (both at distance 0) → higher priority wins.
+  // Equal score (both at distance 0) â†’ higher priority wins.
   assert.equal(
     selectNearestReflectionCapture(point, [
       { position: [0, 0, 0], radius: 5, priority: 0 },
@@ -6635,7 +6654,7 @@ check("selectNearestReflectionCapture tie-breaks by priority, then radius, then 
     ]),
     1,
   );
-  // Equal score + priority → smaller radius wins (more local).
+  // Equal score + priority â†’ smaller radius wins (more local).
   assert.equal(
     selectNearestReflectionCapture(point, [
       { position: [0, 0, 0], radius: 8, priority: 1 },
@@ -6643,7 +6662,7 @@ check("selectNearestReflectionCapture tie-breaks by priority, then radius, then 
     ]),
     1,
   );
-  // Equal score + priority + radius → earliest layout order wins.
+  // Equal score + priority + radius â†’ earliest layout order wins.
   assert.equal(
     selectNearestReflectionCapture(point, [
       { position: [0, 0, 0], radius: 5, priority: 1 },
@@ -6656,7 +6675,7 @@ check("selectNearestReflectionCapture tie-breaks by priority, then radius, then 
 check("selectNearestReflectionCapture: smaller probe overrides a larger one (priority first)", () => {
   // A small local probe wins over a larger, more-centered one (Unreal-style
   // small-refines-large): point sits dead-center of the big r10 probe (score 0)
-  // yet still inside the small r4 probe (score 0.75) — the small one wins.
+  // yet still inside the small r4 probe (score 0.75) â€” the small one wins.
   assert.equal(
     selectNearestReflectionCapture([3, 0, 0], [
       { position: [3, 0, 0], radius: 10, priority: 0 },
@@ -6719,7 +6738,7 @@ check("assignProbeEnvMapMaterial clones standard mats; parallax patches the shad
       parallax,
     }) as unknown as SphereReflectionCaptureBake;
 
-  // MeshBasicMaterial is not a probe-env material — returned as-is, never tracked.
+  // MeshBasicMaterial is not a probe-env material â€” returned as-is, never tracked.
   const basic = new MeshBasicMaterial();
   const basicTracked: Material[] = [];
   assert.equal(assignProbeEnvMapMaterial(basic, makeBake(true, [0, 0, 0]), basicTracked), basic);
@@ -6737,7 +6756,7 @@ check("assignProbeEnvMapMaterial clones standard mats; parallax patches the shad
   assert.notEqual(plain, base);
   assert.equal(plain.envMap, fakeTexture);
   assert.equal(plain.envMapIntensity, 1.5);
-  // No parallax patch → same program cache key as an untouched standard material.
+  // No parallax patch â†’ same program cache key as an untouched standard material.
   assert.equal(plain.customProgramCacheKey(), base.customProgramCacheKey());
   assert.deepEqual(plainTracked, [plain]);
 
@@ -6750,7 +6769,7 @@ check("assignProbeEnvMapMaterial clones standard mats; parallax patches the shad
   assert.equal(a.customProgramCacheKey(), b.customProgramCacheKey());
 
   // three.js hands onBeforeCompile the sources with `#include <...>` directives
-  // still UNEXPANDED, so the stub mirrors that — the patch must anchor on the raw
+  // still UNEXPANDED, so the stub mirrors that â€” the patch must anchor on the raw
   // includes (not on text that only exists after three resolves them).
   const runPatch = (material: MeshStandardMaterial) => {
     const shader = {
@@ -6809,11 +6828,11 @@ check("isReflectionCaptureBakeStale flags moved / near-far edits; tint follows",
     far: item.far,
   } as unknown as SphereReflectionCaptureBake;
 
-  // Matching position + near + far → fresh.
+  // Matching position + near + far â†’ fresh.
   assert.equal(isReflectionCaptureBakeStale(bake, item), false);
-  // Probe moved since the bake → stale.
+  // Probe moved since the bake â†’ stale.
   assert.equal(isReflectionCaptureBakeStale(bake, { ...item, position: [1, 2, 3.5] }), true);
-  // near / far edited since the bake → stale.
+  // near / far edited since the bake â†’ stale.
   assert.equal(isReflectionCaptureBakeStale(bake, { ...item, near: item.near + 1 }), true);
   assert.equal(isReflectionCaptureBakeStale(bake, { ...item, far: item.far + 1 }), true);
   // Radius / intensity / priority are live-patched, never stale.
@@ -6926,7 +6945,25 @@ check("applyPostProcessToneMapping maps tonemapper enum and ignores hidden/null"
   assert.equal(renderer.toneMappingExposure, 2);
 });
 
-check("post process tone mapping overrides sky when present", () => {
+check("sky local exposure temporarily overrides renderer exposure for its draw call", () => {
+  const sky = createSkyObject();
+  const renderer = { toneMappingExposure: 1.7 } as import("three").WebGLRenderer;
+
+  setSkyLocalToneMappingExposure(sky, 0.35);
+  sky.onBeforeRender(renderer, null!, null!, null!, null!, null!);
+  assert.equal(renderer.toneMappingExposure, 0.35);
+  sky.onAfterRender(renderer, null!, null!, null!, null!, null!);
+  assert.equal(renderer.toneMappingExposure, 1.7);
+
+  setSkyLocalToneMappingExposure(sky, null);
+  sky.onBeforeRender(renderer, null!, null!, null!, null!, null!);
+  assert.equal(renderer.toneMappingExposure, 1.7);
+
+  sky.geometry.dispose();
+  sky.material.dispose();
+});
+
+check("post process tone mapping can override scene exposure after sky", () => {
   const renderer = {
     toneMapping: NoToneMapping,
     toneMappingExposure: 1,
@@ -6940,6 +6977,7 @@ check("post process tone mapping overrides sky when present", () => {
     mie: 0.005,
     mieDirectionalG: 0.8,
     exposure: 0.4,
+    skyLightCapture: { intensity: 1 },
   });
   assert.equal(renderer.toneMapping, ACESFilmicToneMapping);
   assert.equal(renderer.toneMappingExposure, 0.4);
@@ -6956,6 +6994,7 @@ check("post process tone mapping overrides sky when present", () => {
     mie: 0.005,
     mieDirectionalG: 0.8,
     exposure: 0.6,
+    skyLightCapture: { intensity: 1 },
   });
   applyPostProcessToneMapping(renderer, null);
   assert.equal(renderer.toneMapping, ACESFilmicToneMapping);

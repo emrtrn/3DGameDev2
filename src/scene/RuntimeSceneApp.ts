@@ -75,6 +75,7 @@ import {
   createSkyObject,
   followCameraWithSky,
   resolveSkyAtmosphere,
+  setSkyLocalToneMappingExposure,
   sunDirectionFromLightRotation,
 } from "@engine/render-three/skyAtmosphere";
 import { applySceneFog, resolveHeightFog } from "@engine/render-three/heightFog";
@@ -92,6 +93,7 @@ import {
   hasPostProcessEffectPasses,
   PostProcessPipeline,
   resolvePostProcess,
+  type ResolvedPostProcess,
 } from "@engine/render-three/postProcess";
 import {
   applyReflectionEnvironment,
@@ -1035,7 +1037,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (!isRenderableMesh(child)) return;
       const resolveMaterial = (source: Material): Material => {
         const base = overrideMaterial ?? source;
-        return bake ? assignProbeEnvMapMaterial(base, bake, clonedMaterials) : base;
+        return bake
+          ? assignProbeEnvMapMaterial(base, bake, clonedMaterials, this.scene.environment)
+          : base;
       };
       child.material = Array.isArray(child.material)
         ? child.material.map(resolveMaterial)
@@ -1132,17 +1136,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (previous) this.scene.remove(previous);
       this.scene.add(this.createInstancedModel(instance.assetId, instance.placements));
     }
+    const globalEnv = this.scene.environment;
     this.characterObjects.forEach((object, index) => {
       const character = this.layout?.characters[index];
       if (!object || !character) return;
       const bake = character.hidden ? null : this.probeBakeForPoint(this.objectWorldCenter(object));
-      applyProbeEnvMapToObject(object, bake);
+      applyProbeEnvMapToObject(object, bake, globalEnv);
     });
     for (const [index, object] of this.actorObjects) {
       const actor = this.layout?.actors?.[index];
       if (!actor) continue;
       const bake = actor.hidden ? null : this.probeBakeForPoint(this.objectWorldCenter(object));
-      applyProbeEnvMapToObject(object, bake);
+      applyProbeEnvMapToObject(object, bake, globalEnv);
     }
   }
 
@@ -1337,41 +1342,29 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Mirrors the editor's Reflection Environment in Play: capture the authored Sky
-   * Atmosphere once and use it as the PBR environment/ambient bounce.
+   * Mirrors the editor's Sky Atmosphere-owned Sky Light Capture in Play: capture
+   * the authored sky once and use it as the global PBR environment/ambient bounce
+   * wherever no local Sphere Reflection Capture applies.
    */
   private applyRuntimeReflection(recapture = false): void {
-    const actor = this.layout?.reflection ?? null;
-    if (!actor) {
+    const skyActor = this.layout?.skyAtmosphere ?? null;
+    const sky = skyActor ? resolveSkyAtmosphere(skyActor) : null;
+    if (!sky || sky.hidden) {
       this.disposeReflectionTarget();
       applyReflectionEnvironment(this.scene, null, null);
       return;
     }
 
-    const resolved = resolveReflection(actor);
-    if (resolved.hidden) {
-      this.disposeReflectionTarget();
-      applyReflectionEnvironment(this.scene, null, resolved);
-      return;
-    }
-
     if (recapture || !this.reflectionTarget) {
       this.disposeReflectionTarget();
-      const skyActor = this.layout?.skyAtmosphere ?? null;
-      if (skyActor) {
-        const sun = this.sunLightActor();
-        const sunDirection = sun
-          ? sunDirectionFromLightRotation(readRotation(sun))
-          : new Vector3(0, 1, 0);
-        this.reflectionTarget = captureSkyEnvironment(
-          this.renderer,
-          resolveSkyAtmosphere(skyActor),
-          sunDirection,
-        );
-      }
+      const sun = this.sunLightActor();
+      const sunDirection = sun
+        ? sunDirectionFromLightRotation(readRotation(sun))
+        : new Vector3(0, 1, 0);
+      this.reflectionTarget = captureSkyEnvironment(this.renderer, sky, sunDirection);
     }
 
-    applyReflectionEnvironment(this.scene, this.reflectionTarget, resolved);
+    applyReflectionEnvironment(this.scene, this.reflectionTarget, resolveReflection(sky.skyLightCapture));
   }
 
   private disposeReflectionTarget(): void {
@@ -1385,6 +1378,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const actor = this.layout?.postProcess ?? null;
     const resolved = actor ? resolvePostProcess(actor) : null;
     applyPostProcessToneMapping(this.renderer, resolved);
+    this.applyRuntimeSkyPostProcessExposure(resolved);
     if (!hasPostProcessEffectPasses(resolved)) {
       this.postProcessPipeline?.dispose();
       this.postProcessPipeline = null;
@@ -1403,6 +1397,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         height: window.innerHeight,
       }),
     );
+  }
+
+  private applyRuntimeSkyPostProcessExposure(post: ResolvedPostProcess | null): void {
+    if (!this.skyObject) return;
+    const sky = this.layout?.skyAtmosphere ? resolveSkyAtmosphere(this.layout.skyAtmosphere) : null;
+    if (!sky || sky.hidden || !post || post.hidden) {
+      setSkyLocalToneMappingExposure(this.skyObject, null);
+      return;
+    }
+    setSkyLocalToneMappingExposure(this.skyObject, post.exposure * sky.exposure);
   }
 
   /** The scene's Sun light actor (preferred id, else the first directional light). */

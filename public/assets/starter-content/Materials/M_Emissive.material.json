@@ -14,5 +14,5 @@
   "alphaTest": 0.5,
   "side": "front",
   "emissive": "#ffffff",
-  "emissiveIntensity": 5
+  "emissiveIntensity": 2
 }

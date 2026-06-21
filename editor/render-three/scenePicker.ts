@@ -184,7 +184,6 @@ export class ScenePicker {
       selection.kind === "sky" ||
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
-      selection.kind === "reflection" ||
       selection.kind === "post"
     ) {
       return false;

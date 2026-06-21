@@ -14,6 +14,7 @@ import {
   type Material,
   type Object3D,
   type Scene,
+  type Texture,
   type WebGLRenderer,
   type WebGLRenderTarget,
 } from "three";
@@ -216,29 +217,35 @@ function isProbeEnvMaterial(material: Material): material is MeshStandardMateria
 type ShaderPatch = Parameters<MeshStandardMaterial["onBeforeCompile"]>[0];
 
 /**
- * `customProgramCacheKey` value for parallax-corrected materials. All parallax
- * clones share one compiled program (same GLSL); the per-probe position/radius
- * ride in as uniforms, so they stay distinct per material. This key only has to
- * differ from the stock standard/physical key so the patched program is not
- * confused with an unpatched one in three.js' program cache.
+ * `customProgramCacheKey` prefix for capture-patched materials. All clones with the
+ * same feature flags share one compiled program (the per-probe position/radius and
+ * the global-env sampler ride in as uniforms), so the key only encodes which GLSL
+ * branches are present — enough to keep patched programs from colliding with the
+ * stock standard/physical program or with a differently-patched one.
  */
-const PARALLAX_CACHE_KEY = "forge-reflection-capture-parallax";
+const CAPTURE_CACHE_KEY_BASE = "forge-reflection-capture";
 
 // onBeforeCompile receives the shader sources with `#include <...>` directives
 // still UNEXPANDED, so we anchor on the raw includes — not on text that only
 // exists after three.js resolves them. The vertex include yields `worldPosition`;
-// the fragment include is the IBL chunk we patch (its `reflectVec` line is what we
-// re-aim, so we expand that chunk inline rather than leaving the directive).
+// the fragment include is the IBL chunk we patch (its reflect/sample lines), so we
+// expand that chunk inline rather than leaving the directive.
 
 /** Vertex-shader include after which `worldPosition` is in scope (USE_ENVMAP is set). */
-const PARALLAX_WORLDPOS_INCLUDE = "#include <worldpos_vertex>";
+const CAPTURE_WORLDPOS_INCLUDE = "#include <worldpos_vertex>";
 /** Fragment-shader include for the IBL chunk that owns the reflection lookup. */
-const PARALLAX_FRAGMENT_INCLUDE = "#include <envmap_physical_pars_fragment>";
+const CAPTURE_FRAGMENT_INCLUDE = "#include <envmap_physical_pars_fragment>";
 /** Line inside the IBL chunk where `reflectVec` becomes the world-space reflection dir. */
-const PARALLAX_REFLECT_LINE = "reflectVec = inverseTransformDirection( reflectVec, viewMatrix );";
+const CAPTURE_REFLECT_LINE = "reflectVec = inverseTransformDirection( reflectVec, viewMatrix );";
+/** Line inside the IBL chunk that samples the probe envMap into `envMapColor`. */
+const CAPTURE_ENVCOLOR_LINE =
+  "vec4 envMapColor = textureCubeUV( envMap, envMapRotation * reflectVec, roughness );";
 
-/** Forwards the fragment world position to the parallax correction. */
-const PARALLAX_VERTEX_ASSIGN = `${PARALLAX_WORLDPOS_INCLUDE}\n\tvCaptureWorldPos = worldPosition.xyz;`;
+/** Forwards the fragment world position the patch needs (parallax + blend score). */
+const CAPTURE_VERTEX_ASSIGN = `${CAPTURE_WORLDPOS_INCLUDE}\n\tvCaptureWorldPos = worldPosition.xyz;`;
+
+/** Snapshot of the un-parallaxed world reflection dir, for sampling the global env. */
+const CAPTURE_GLOBAL_REFLECT_SAVE = `\n\t\t\tvec3 captureReflectGlobal = reflectVec;`;
 
 /**
  * Sphere-bounded parallax correction injected after `reflectVec` becomes the
@@ -247,7 +254,7 @@ const PARALLAX_VERTEX_ASSIGN = `${PARALLAX_WORLDPOS_INCLUDE}\n\tvCaptureWorldPos
  * cubemap is sampled as if infinitely far (flat-looking on planar surfaces); with
  * it the reflection tracks the fragment's position inside the probe sphere.
  */
-const PARALLAX_FRAGMENT_CORRECTION = `
+const CAPTURE_PARALLAX_BLOCK = `
 			{
 				vec3 captureToFrag = vCaptureWorldPos - captureProbePosition;
 				float captureB = dot( reflectVec, captureToFrag );
@@ -261,54 +268,100 @@ const PARALLAX_FRAGMENT_CORRECTION = `
 				}
 			}`;
 
+/** Falloff start: the probe is at full strength inside this fraction of its radius. */
+const CAPTURE_BLEND_START = 0.7;
+
 /**
- * Installs local sphere parallax correction on a probe-envMap material via
- * `onBeforeCompile`: inlines the IBL fragment chunk with a re-aimed reflection
- * lookup (toward the probe sphere, using the fragment world position) and forwards
- * that world position from the vertex stage. The probe `position`/`radius` ride in
- * as uniforms (so all parallax clones share one program), and `customProgramCacheKey`
- * keeps that program separate from the unpatched standard program. If the three.js
- * shader anchors ever move the patch is skipped and the material degrades to a plain
- * (non-parallax) envMap.
+ * Overlap blend injected after the probe envMap is sampled: fades the probe sample
+ * toward the global Reflection Environment near the probe's radius edge, so a
+ * covered surface does not hard-cut to the global IBL at the boundary. The weight
+ * ramps from 1 (full probe) inside `CAPTURE_BLEND_START` of the radius down to 0
+ * (full global) at the radius. The global env is sampled with the un-parallaxed
+ * reflection dir since it is infinitely far.
  */
-function installParallaxCorrection(material: MeshStandardMaterial, position: Vec3, radius: number): void {
+const CAPTURE_BLEND_BLOCK = `
+			{
+				float captureScore = length( vCaptureWorldPos - captureProbePosition ) / captureProbeRadius;
+				float captureWeight = 1.0 - smoothstep( ${CAPTURE_BLEND_START.toFixed(2)}, 1.0, captureScore );
+				vec4 captureGlobalColor = textureCubeUV( captureGlobalEnv, envMapRotation * captureReflectGlobal, roughness );
+				envMapColor = mix( captureGlobalColor, envMapColor, captureWeight );
+			}`;
+
+/**
+ * Installs the reflection-capture fragment patch on a probe-envMap material via
+ * `onBeforeCompile`, combining two optional features that share the same world
+ * position + probe uniforms:
+ *
+ * - **parallax**: re-aims the IBL reflection lookup at the probe sphere (Faz 4).
+ * - **boundary blend**: when `globalEnv` is given, fades the probe sample toward
+ *   the global Reflection Environment near the probe radius edge (Faz 5), softening
+ *   the hard probe→global cut.
+ *
+ * Inlines the IBL chunk from `ShaderChunk` so the patch survives three.js' (still
+ * unexpanded at this point) `#include` directives, and forwards `worldPosition` from
+ * the vertex stage. `customProgramCacheKey` encodes the active features so patched
+ * programs do not collide. A no-op when neither feature is requested; degrades to a
+ * plain envMap if the three.js shader anchors ever move.
+ */
+function installCaptureShaderPatch(
+  material: MeshStandardMaterial,
+  position: Vec3,
+  radius: number,
+  parallax: boolean,
+  globalEnv: Texture | null,
+): void {
+  const blend = globalEnv !== null;
+  if (!parallax && !blend) return;
   const probePosition = new Vector3(position[0], position[1], position[2]);
   const probeRadius = Math.max(radius, 0.001);
   material.onBeforeCompile = (shader: ShaderPatch) => {
     const iblChunk = ShaderChunk.envmap_physical_pars_fragment;
     if (
-      !shader.vertexShader.includes(PARALLAX_WORLDPOS_INCLUDE) ||
-      !shader.fragmentShader.includes(PARALLAX_FRAGMENT_INCLUDE) ||
-      !iblChunk.includes(PARALLAX_REFLECT_LINE)
+      !shader.vertexShader.includes(CAPTURE_WORLDPOS_INCLUDE) ||
+      !shader.fragmentShader.includes(CAPTURE_FRAGMENT_INCLUDE) ||
+      !iblChunk.includes(CAPTURE_REFLECT_LINE) ||
+      (blend && !iblChunk.includes(CAPTURE_ENVCOLOR_LINE))
     ) {
       return;
     }
     shader.uniforms.captureProbePosition = { value: probePosition };
     shader.uniforms.captureProbeRadius = { value: probeRadius };
+    if (blend) shader.uniforms.captureGlobalEnv = { value: globalEnv };
     shader.vertexShader = `varying vec3 vCaptureWorldPos;\n${shader.vertexShader.replace(
-      PARALLAX_WORLDPOS_INCLUDE,
-      PARALLAX_VERTEX_ASSIGN,
+      CAPTURE_WORLDPOS_INCLUDE,
+      CAPTURE_VERTEX_ASSIGN,
     )}`;
-    // Expand the IBL chunk inline with the correction spliced in after reflectVec,
-    // replacing the directive so three.js does not re-expand the stock chunk over it.
-    const patchedChunk = iblChunk.replace(
-      PARALLAX_REFLECT_LINE,
-      `${PARALLAX_REFLECT_LINE}${PARALLAX_FRAGMENT_CORRECTION}`,
+    // Expand the IBL chunk inline, splicing the requested blocks in, then replace the
+    // directive so three.js does not re-expand the stock chunk over the patched one.
+    let patchedChunk = iblChunk.replace(
+      CAPTURE_REFLECT_LINE,
+      `${CAPTURE_REFLECT_LINE}${blend ? CAPTURE_GLOBAL_REFLECT_SAVE : ""}${parallax ? CAPTURE_PARALLAX_BLOCK : ""}`,
     );
-    shader.fragmentShader = `uniform vec3 captureProbePosition;\nuniform float captureProbeRadius;\nvarying vec3 vCaptureWorldPos;\n${shader.fragmentShader.replace(
-      PARALLAX_FRAGMENT_INCLUDE,
+    if (blend) {
+      patchedChunk = patchedChunk.replace(
+        CAPTURE_ENVCOLOR_LINE,
+        `${CAPTURE_ENVCOLOR_LINE}${CAPTURE_BLEND_BLOCK}`,
+      );
+    }
+    const decls =
+      "uniform vec3 captureProbePosition;\nuniform float captureProbeRadius;\nvarying vec3 vCaptureWorldPos;\n" +
+      (blend ? "uniform sampler2D captureGlobalEnv;\n" : "");
+    shader.fragmentShader = `${decls}${shader.fragmentShader.replace(
+      CAPTURE_FRAGMENT_INCLUDE,
       patchedChunk,
     )}`;
   };
-  material.customProgramCacheKey = () => PARALLAX_CACHE_KEY;
+  material.customProgramCacheKey = () =>
+    `${CAPTURE_CACHE_KEY_BASE}-p${parallax ? 1 : 0}b${blend ? 1 : 0}`;
   material.needsUpdate = true;
 }
 
 /**
  * Returns a material carrying the probe's local envMap: clones the standard `base`
  * material and assigns the PMREM texture + `envMapIntensity` (tracking the clone in
- * `clonedMaterials` for later disposal). When the probe has `parallax` on, the clone
- * also gets the sphere parallax shader patch. Non-standard materials (e.g.
+ * `clonedMaterials` for later disposal). When the probe has `parallax` on, or a
+ * `globalEnv` (the global Reflection Environment) is supplied for boundary blend,
+ * the clone also gets the capture shader patch. Non-standard materials (e.g.
  * `MeshBasicMaterial`) are returned unchanged. Shared by the editor + runtime
  * clone-fallback paths so a probe-covered surface samples the local capture.
  */
@@ -316,12 +369,13 @@ export function assignProbeEnvMapMaterial(
   base: Material,
   bake: SphereReflectionCaptureBake,
   clonedMaterials: Material[],
+  globalEnv: Texture | null = null,
 ): Material {
   if (!isProbeEnvMaterial(base)) return base;
   const cloned = base.clone();
   cloned.envMap = bake.target.texture;
   cloned.envMapIntensity = bake.intensity;
-  if (bake.parallax) installParallaxCorrection(cloned, bake.position, bake.radius);
+  installCaptureShaderPatch(cloned, bake.position, bake.radius, bake.parallax, globalEnv);
   cloned.needsUpdate = true;
   clonedMaterials.push(cloned);
   return cloned;
@@ -338,6 +392,7 @@ export function assignProbeEnvMapMaterial(
 export function applyProbeEnvMapToObject(
   object: Object3D,
   bake: SphereReflectionCaptureBake | null,
+  globalEnv: Texture | null = null,
 ): void {
   const previous = object.userData.captureMaterials as Material[] | undefined;
   if (previous) for (const material of previous) material.dispose();
@@ -354,8 +409,8 @@ export function applyProbeEnvMapToObject(
       return;
     }
     mesh.material = Array.isArray(base)
-      ? base.map((material) => assignProbeEnvMapMaterial(material, bake, cloned))
-      : assignProbeEnvMapMaterial(base, bake, cloned);
+      ? base.map((material) => assignProbeEnvMapMaterial(material, bake, cloned, globalEnv))
+      : assignProbeEnvMapMaterial(base, bake, cloned, globalEnv);
   });
   object.userData.captureMaterials = cloned;
 }

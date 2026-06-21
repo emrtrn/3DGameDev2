@@ -2,7 +2,6 @@ import { defaultLightIntensity } from "@engine/scene/lights";
 import { resolveSkyAtmosphere } from "@engine/scene/skyAtmosphere";
 import { resolveHeightFog } from "@engine/scene/heightFog";
 import { resolveCloudLayer } from "@engine/scene/cloudLayer";
-import { resolveReflection } from "@engine/scene/reflection";
 import { resolveReflectionPlane } from "@engine/scene/reflectionPlane";
 import { resolveSphereReflectionCapture } from "@engine/scene/reflectionCapture";
 import { resolvePostProcess } from "@engine/scene/postProcess";
@@ -12,7 +11,6 @@ import type {
   LayoutHeightFog,
   LayoutLightActor,
   LayoutPostProcess,
-  LayoutReflection,
   LayoutReflectionPlane,
   LayoutSkyAtmosphere,
   LayoutSphereReflectionCapture,
@@ -36,9 +34,6 @@ export const HEIGHT_FOG_ASSET_ID = "height-fog";
 
 /** Stable Outliner/Details asset id shown for the singleton Cloud Layer. */
 export const CLOUD_LAYER_ASSET_ID = "cloud-layer";
-
-/** Stable Outliner/Details asset id shown for the singleton Reflection Environment. */
-export const REFLECTION_ASSET_ID = "reflection-environment";
 
 /** Stable Outliner/Details asset id shown for the singleton Post Process actor. */
 export const POST_PROCESS_ASSET_ID = "post-process";
@@ -125,35 +120,6 @@ function buildCloudEditableSelection(cloud: LayoutCloudLayer): EditableSelection
     simulatePhysics: false,
     physics: {},
     cloud: { ...resolved },
-    metadata: {},
-  };
-}
-
-/**
- * Builds the transform-less Details/Outliner view-model for the Reflection
- * Environment singleton. Like the other environment singletons it has no
- * position/scale, so transform fields are zeroed and the resolved settings ride
- * along in {@link EditableSelection.reflection}.
- */
-function buildReflectionEditableSelection(reflection: LayoutReflection): EditableSelection {
-  const resolved = resolveReflection(reflection);
-  return {
-    id: "reflection",
-    kind: "reflection",
-    assetId: REFLECTION_ASSET_ID,
-    category: "visual-effects",
-    label: resolved.name,
-    position: [0, 0, 0],
-    rotation: [0, 0, 0],
-    scale: [1, 1, 1],
-    pivot: [0, 0, 0],
-    scaleLocked: true,
-    locked: false,
-    castShadow: false,
-    collision: false,
-    simulatePhysics: false,
-    physics: {},
-    reflection: { ...resolved },
     metadata: {},
   };
 }
@@ -391,16 +357,6 @@ export function buildSceneObjects(
     });
   }
 
-  if (layout.reflection) {
-    const selection: Selection = { kind: "reflection" };
-    objects.push({
-      ...buildReflectionEditableSelection(layout.reflection),
-      selected: deps.isSelected(selection),
-      hidden: layout.reflection.hidden ?? false,
-      locked: false,
-    });
-  }
-
   if (layout.postProcess) {
     const selection: Selection = { kind: "post" };
     objects.push({
@@ -555,11 +511,6 @@ export function buildEditableSelection(
   if (selection.kind === "cloud") {
     if (!layout.cloudLayer) return null;
     return buildCloudEditableSelection(layout.cloudLayer);
-  }
-
-  if (selection.kind === "reflection") {
-    if (!layout.reflection) return null;
-    return buildReflectionEditableSelection(layout.reflection);
   }
 
   if (selection.kind === "post") {

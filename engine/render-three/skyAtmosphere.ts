@@ -19,7 +19,7 @@ export {
 } from "@engine/scene/skyAtmosphere";
 
 /**
- * Sky Atmosphere render binding — Unreal-style physically-inspired sky built on
+ * Sky Atmosphere render binding - Unreal-style physically-inspired sky built on
  * three.js's analytic `Sky` shader (Rayleigh + Mie scattering). The dome is a
  * camera-following, depth-test-disabled background box: the scene camera's far
  * plane is small (100u), so the textbook 450000u sky sphere would be frustum-
@@ -35,6 +35,32 @@ export {
 /** Box half-extent the camera sits inside; well within the 100u camera far plane. */
 const SKY_BOX_SCALE = 100;
 
+const SKY_LOCAL_TONE_MAPPING_EXPOSURE = "forgeSkyLocalToneMappingExposure";
+const SKY_PREVIOUS_TONE_MAPPING_EXPOSURE = "forgeSkyPreviousToneMappingExposure";
+
+function installSkyLocalToneMappingExposure(sky: Sky): void {
+  sky.onBeforeRender = (renderer: WebGLRenderer) => {
+    const exposure = sky.userData[SKY_LOCAL_TONE_MAPPING_EXPOSURE];
+    if (typeof exposure !== "number") return;
+    sky.userData[SKY_PREVIOUS_TONE_MAPPING_EXPOSURE] = renderer.toneMappingExposure;
+    renderer.toneMappingExposure = exposure;
+  };
+  sky.onAfterRender = (renderer: WebGLRenderer) => {
+    const previous = sky.userData[SKY_PREVIOUS_TONE_MAPPING_EXPOSURE];
+    if (typeof previous !== "number") return;
+    renderer.toneMappingExposure = previous;
+    delete sky.userData[SKY_PREVIOUS_TONE_MAPPING_EXPOSURE];
+  };
+}
+
+export function setSkyLocalToneMappingExposure(sky: Sky, exposure: number | null): void {
+  if (typeof exposure === "number" && Number.isFinite(exposure)) {
+    sky.userData[SKY_LOCAL_TONE_MAPPING_EXPOSURE] = Math.max(0, exposure);
+  } else {
+    delete sky.userData[SKY_LOCAL_TONE_MAPPING_EXPOSURE];
+  }
+}
+
 /** Builds the sky dome mesh (uniforms still need {@link applySkyUniforms}). */
 export function createSkyObject(): Sky {
   const sky = new Sky();
@@ -47,6 +73,7 @@ export function createSkyObject(): Sky {
   sky.frustumCulled = false;
   // Background geometry is never a pick target.
   sky.raycast = () => {};
+  installSkyLocalToneMappingExposure(sky);
   return sky;
 }
 
@@ -70,13 +97,13 @@ export function applySkyUniforms(sky: Sky, resolved: ResolvedSkyAtmosphere): voi
   uniforms.mieCoefficient!.value = resolved.mie;
   uniforms.mieDirectionalG!.value = resolved.mieDirectionalG;
   // Some three builds ship a clouds-extended Sky; disable its procedural clouds so
-  // this stays a pure atmosphere (clouds are a separate concern, à la UE's
+  // this stays a pure atmosphere (clouds are a separate concern, a la UE's
   // Volumetric Clouds) and we don't need to animate the `time` uniform.
   if (uniforms.cloudCoverage) uniforms.cloudCoverage.value = 0;
   sky.visible = !resolved.hidden;
 }
 
-/** Sets the sky's sun-disc/horizon position from a ground→sun direction. */
+/** Sets the sky's sun-disc/horizon position from a ground->sun direction. */
 export function applySkySunDirection(sky: Sky, sunDirection: Vector3): void {
   (sky.material.uniforms.sunPosition!.value as Vector3).copy(sunDirection);
 }
@@ -84,7 +111,7 @@ export function applySkySunDirection(sky: Sky, sunDirection: Vector3): void {
 const LIGHT_FORWARD = new Vector3(0, 0, -1);
 
 /**
- * Ground→sun direction derived from a directional light's Euler rotation. The
+ * Ground->sun direction derived from a directional light's Euler rotation. The
  * light travels FROM the sun TOWARD the scene (local forward -Z, see
  * `applyLightTransform` in lights.ts), so the direction to the sun is the negated
  * forward. This makes the Sun light the source of truth for the sky's sun.

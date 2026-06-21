@@ -37,7 +37,6 @@ import type {
   LayoutParticleEmitter,
   LayoutPhysics,
   LayoutPostProcess,
-  LayoutReflection,
   LayoutSkyAtmosphere,
   MetadataValue,
 } from "@engine/scene/layout";
@@ -314,7 +313,6 @@ export class EditorUi {
               <button type="button" data-add-sky-atmosphere>Sky Atmosphere</button>
               <button type="button" data-add-height-fog>Exponential Height Fog</button>
               <button type="button" data-add-cloud-layer>Cloud Layer</button>
-              <button type="button" data-add-reflection>Reflection Environment</button>
               <button type="button" data-add-reflection-plane>Reflection Plane</button>
               <button type="button" data-add-reflection-capture>Sphere Reflection Capture</button>
               <button type="button" data-add-post-process>Post Process</button>
@@ -601,13 +599,6 @@ export class EditorUi {
         this.app.addCloudLayer();
       });
 
-    // Reflection Environment (Sky Light) is a transform-less singleton actor.
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-reflection]")
-      ?.addEventListener("click", () => {
-        this.app.addReflection();
-      });
-
     // Reflection Plane (Planar mirror) is a placed actor with a transform.
     this.root
       .querySelector<HTMLButtonElement>("[data-add-reflection-plane]")
@@ -785,7 +776,7 @@ export class EditorUi {
 
   /**
    * Play/Test: saves the layout, then opens the game in a new tab. Single
-   * codebase — the game is this same app's default route (`/`), so Play just
+   * codebase â€” the game is this same app's default route (`/`), so Play just
    * opens it; a project may still override with an external `editor.previewUrl`.
    */
   private async playTest(): Promise<void> {
@@ -796,14 +787,14 @@ export class EditorUi {
       return;
     }
     // Hand the current viewport camera pose to the runtime (default camera mode
-    // starts there). Temporary session override — not written to the layout.
+    // starts there). Temporary session override â€” not written to the layout.
     writePlayCameraPose(this.app.getPlayCameraPose());
     const previewUrl = this.projectInfo?.manifest.editor.previewUrl ?? "/";
     const opened = window.open(previewUrl, "_blank", "noopener");
     if (opened) {
       this.setStatus(`Saved. Opening game: ${previewUrl}`, "success");
     } else {
-      this.setStatus(`Saved. Popup blocked — open ${previewUrl} manually.`, "warning");
+      this.setStatus(`Saved. Popup blocked â€” open ${previewUrl} manually.`, "warning");
     }
   }
 
@@ -850,10 +841,10 @@ export class EditorUi {
   }
 
   /**
-   * Reveals an asset in the Content Browser (Toolbar → Browse from an open
+   * Reveals an asset in the Content Browser (Toolbar â†’ Browse from an open
    * editor): opens the drawer, navigates to the asset's folder (expanding
    * ancestors and clearing any type/search filter that would hide it), then
-   * selects + briefly flashes the card. Best-effort — a missing folder falls
+   * selects + briefly flashes the card. Best-effort â€” a missing folder falls
    * back to the asset root. Uses a single authoritative refresh so the flash is
    * never clobbered by a concurrent reload.
    */
@@ -1193,7 +1184,7 @@ export class EditorUi {
         event.dataTransfer?.setData("application/x-forge-actor-class", item.path);
         event.dataTransfer!.effectAllowed = "copy";
         event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
-        this.setStatus(`Dragging ${item.label} — drop in the viewport to place.`);
+        this.setStatus(`Dragging ${item.label} â€” drop in the viewport to place.`);
         return;
       }
       if (!item.editable || (!canPlace && !canAssignMaterial)) return;
@@ -1210,8 +1201,8 @@ export class EditorUi {
       if (canPlace) this.app.beginAssetDragPreview(item.editable.id);
       this.setStatus(
         canAssignMaterial
-          ? `Dragging ${item.editable.id} — drop on a static mesh.`
-          : `Dragging ${item.editable.id} — drop in the viewport to place.`,
+          ? `Dragging ${item.editable.id} â€” drop on a static mesh.`
+          : `Dragging ${item.editable.id} â€” drop in the viewport to place.`,
       );
     });
     card.addEventListener("dragend", () => {
@@ -1266,9 +1257,9 @@ export class EditorUi {
   }
 
   private showContentAssetDetails(item: BrowserAssetItem, issues: BrowserAssetIssue[]): void {
-    const prefix = `${item.label} · ${formatContentTypeBadge(item.type)}`;
+    const prefix = `${item.label} Â· ${formatContentTypeBadge(item.type)}`;
     this.contentStatus.textContent =
-      issues.length > 0 ? `${prefix} · ${contentAssetIssueTooltip(issues)}` : `${prefix} · No issues`;
+      issues.length > 0 ? `${prefix} Â· ${contentAssetIssueTooltip(issues)}` : `${prefix} Â· No issues`;
   }
 
   /** Drops the Content Browser asset selection and restores the grid summary. */
@@ -1634,14 +1625,14 @@ export class EditorUi {
     row.innerHTML = `
       <span class="outliner-kind">${outlinerKindLabel(object.kind)}</span>
       <span class="outliner-meta">
-        <strong>${object.groupId ? "⛓ " : ""}${object.label}</strong>
+        <strong>${object.groupId ? "â›“ " : ""}${object.label}</strong>
         <small>${object.assetId} - ${formatPosition(object.position)}</small>
       </span>
       <span class="outliner-actions">
         <button type="button" class="outliner-toggle${object.hidden ? " on" : ""}"
-          data-action="hidden" title="${object.hidden ? "Show object" : "Hide object"}">${object.hidden ? "🙈" : "👁"}</button>
+          data-action="hidden" title="${object.hidden ? "Show object" : "Hide object"}">${object.hidden ? "ğŸ™ˆ" : "ğŸ‘"}</button>
         <button type="button" class="outliner-toggle${object.locked ? " on" : ""}"
-          data-action="locked" title="${object.locked ? "Unlock object" : "Lock object"}">${object.locked ? "🔒" : "🔓"}</button>
+          data-action="locked" title="${object.locked ? "Unlock object" : "Lock object"}">${object.locked ? "ğŸ”’" : "ğŸ”“"}</button>
       </span>
     `;
     row.addEventListener("click", (event) => {
@@ -2239,10 +2230,6 @@ export class EditorUi {
       this.renderCloudDetails(selection);
       return;
     }
-    if (selection.kind === "reflection" && selection.reflection) {
-      this.renderReflectionDetails(selection);
-      return;
-    }
     if (selection.kind === "post" && selection.post) {
       this.renderPostDetails(selection);
       return;
@@ -2282,7 +2269,7 @@ export class EditorUi {
       <div class="detail-row">
         <span>Category</span>
         <span class="detail-value">${
-          selection.category ? escapeHtml(selection.category) : "—"
+          selection.category ? escapeHtml(selection.category) : "â€”"
         }</span>
       </div>
       ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
@@ -2520,7 +2507,7 @@ export class EditorUi {
   }
 
   /**
-   * Optional-component editor (§3): each present component (Audio/Behavior/
+   * Optional-component editor (Â§3): each present component (Audio/Behavior/
    * Particle/Interaction) renders as a card with editable fields + Remove, and a
    * single "Add Component" menu lists the absent ones. Add/Remove/edit each route
    * through a `setSelection*` command, so all are single undo/redo steps. The
@@ -2549,7 +2536,7 @@ export class EditorUi {
         <label class="detail-row">
           <span>Add Component</span>
           <select data-add-component>
-            <option value="">Add…</option>
+            <option value="">Addâ€¦</option>
             ${absent.map((kind) => `<option value="${kind}">${COMPONENT_LABELS[kind]}</option>`).join("")}
           </select>
         </label>
@@ -2630,7 +2617,7 @@ export class EditorUi {
    * Particle component editor: a reference to a pre-authored effect asset
    * (`.effect.json`) chosen from a dropdown, plus Auto Play. Emitter settings
    * (rate/lifetime/size/velocity/material/color) live in the effect asset, not
-   * inline on the component — adding the component references an effect, it does
+   * inline on the component â€” adding the component references an effect, it does
    * not author a new particle system.
    */
   private renderParticleFields(particle: LayoutParticleEmitter): string {
@@ -2780,7 +2767,7 @@ export class EditorUi {
   /**
    * Commits the Particle component as a reference to an effect asset + Auto Play.
    * Any previously-authored inline emitter fields are preserved (spread) but no
-   * longer edited here — the effect asset is the source of truth.
+   * longer edited here â€” the effect asset is the source of truth.
    */
   private commitParticleInput(): void {
     const effect = this.detailsBody.querySelector<HTMLSelectElement | HTMLInputElement>(
@@ -2829,7 +2816,6 @@ export class EditorUi {
       selection.kind === "sky" ||
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
-      selection.kind === "reflection" ||
       selection.kind === "reflectionPlane" ||
       selection.kind === "reflectionCapture" ||
       selection.kind === "post"
@@ -2867,7 +2853,7 @@ export class EditorUi {
 
     if (field.type === "select") {
       const current = typeof raw === "string" ? raw : "";
-      const options = [`<option value="">—</option>`]
+      const options = [`<option value="">â€”</option>`]
         .concat(
           (field.options ?? []).map(
             (option) =>
@@ -3013,7 +2999,6 @@ export class EditorUi {
       this.selected.kind === "sky" ||
       this.selected.kind === "fog" ||
       this.selected.kind === "cloud" ||
-      this.selected.kind === "reflection" ||
       this.selected.kind === "reflectionPlane" ||
       this.selected.kind === "reflectionCapture" ||
       this.selected.kind === "post"
@@ -3275,7 +3260,7 @@ export class EditorUi {
   /**
    * Details panel for a placed Sphere Reflection Capture (probe) actor: a Location
    * transform plus a Reflection Capture section for the probe radius / resolution /
-   * intensity / near-far / priority / parallax. There is no rotation or scale — the
+   * intensity / near-far / priority / parallax. There is no rotation or scale â€” the
    * influence size is the radius.
    */
   private renderReflectionCaptureDetails(selection: EditableSelection): void {
@@ -3345,14 +3330,14 @@ export class EditorUi {
         </label>
         ${
           bakeStale
-            ? `<div class="detail-hint detail-hint-warning">⚠ Bake is stale — the probe moved or near/far changed since capture. Press Recapture.</div>`
+            ? `<div class="detail-hint detail-hint-warning">âš  Bake is stale â€” the probe moved or near/far changed since capture. Press Recapture.</div>`
             : ""
         }
         <button type="button" data-capture-recapture class="detail-button${
           bakeStale ? " detail-button-warning" : ""
         }">Recapture</button>
         <button type="button" data-capture-recapture-all class="detail-button">Recapture All</button>
-        <div class="detail-hint">Static capture: bakes a cubemap from this point — press Recapture after moving the probe or scene.</div>
+        <div class="detail-hint">Static capture: bakes a cubemap from this point â€” press Recapture after moving the probe or scene.</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Actor</div>
@@ -3420,9 +3405,10 @@ export class EditorUi {
   }
 
   /**
-   * Details panel for the singleton Sky Atmosphere (scattering only). The sun
-   * direction is controlled by rotating the scene's Directional Sun light, so it
-   * is intentionally absent here.
+   * Details panel for the singleton Sky Atmosphere. The sun direction is
+   * controlled by rotating the scene's Directional Sun light, so it is
+   * intentionally absent here. The global PBR sky-light capture is owned here
+   * instead of a separate Reflection Environment actor.
    */
   private renderSkyDetails(selection: EditableSelection): void {
     const sky = selection.sky;
@@ -3466,6 +3452,16 @@ export class EditorUi {
         </label>
         <div class="detail-hint">Sun direction is set by rotating the Directional Sun light.</div>
       </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Sky Light Capture</div>
+        <label class="detail-row">
+          <span>Intensity</span>
+          <input data-sky-capture-intensity type="number" step="0.05" min="0" max="4"
+            value="${sky.skyLightCapture.intensity}" />
+        </label>
+        <button type="button" data-sky-recapture class="detail-button">Recapture from Sky</button>
+        <div class="detail-hint">Fallback PBR reflection used where no Sphere Reflection Capture applies.</div>
+      </div>
     `;
 
     const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-sky-name]");
@@ -3488,6 +3484,23 @@ export class EditorUi {
         );
       });
     });
+
+    this.detailsBody
+      .querySelector<HTMLInputElement>("[data-sky-capture-intensity]")
+      ?.addEventListener("change", (event) => {
+        const value = Number((event.currentTarget as HTMLInputElement).value);
+        if (!Number.isFinite(value)) return;
+        this.app.setSkyAtmosphere(
+          { skyLightCapture: { intensity: value } },
+          "Edit Sky Light Capture",
+        );
+      });
+
+    this.detailsBody
+      .querySelector<HTMLButtonElement>("[data-sky-recapture]")
+      ?.addEventListener("click", () => {
+        this.app.recaptureSkyLightCapture();
+      });
   }
 
   /**
@@ -3585,7 +3598,7 @@ export class EditorUi {
   /**
    * Details panel for the singleton static Cloud Layer (procedural cloud dome).
    * Coverage/density/softness/scale paint the noise; Wind drives the optional
-   * drift (0 = static). Not volumetric — a flat camera-following dome backdrop.
+   * drift (0 = static). Not volumetric â€” a flat camera-following dome backdrop.
    */
   private renderCloudDetails(selection: EditableSelection): void {
     const cloud = selection.cloud;
@@ -3659,78 +3672,6 @@ export class EditorUi {
     });
   }
 
-  /**
-   * Details panel for the singleton Reflection Environment (Sky Light). The
-   * environment is captured from the Sky Atmosphere; Intensity scales the
-   * reflection + ambient bounce, and Recapture re-bakes from the current sun.
-   */
-  private renderReflectionDetails(selection: EditableSelection): void {
-    const reflection = selection.reflection;
-    if (!reflection) return;
-    this.detailsScale = [1, 1, 1];
-    this.detailsBody.innerHTML = `
-      <div class="detail-heading">
-        <strong>${escapeHtml(selection.label)}</strong>
-        <span>visual effect / reflection environment</span>
-      </div>
-      <label class="detail-row">
-        <span>Name</span>
-        <input data-reflection-name type="text" value="${escapeHtml(reflection.name)}" placeholder="Reflection Environment" />
-      </label>
-      <div class="detail-section">
-        <div class="detail-section-title">Sky Light Capture</div>
-        <label class="detail-row">
-          <span>Source</span>
-          <select data-reflection-source>
-            <option value="sky" ${reflection.source === "sky" ? "selected" : ""}>Sky Atmosphere</option>
-          </select>
-        </label>
-        <label class="detail-row">
-          <span>Intensity</span>
-          <input data-reflection-intensity type="number" step="0.05" min="0" max="4"
-            value="${reflection.intensity}" />
-        </label>
-        <button type="button" data-reflection-recapture class="detail-button">Recapture from Sky</button>
-        <div class="detail-hint">Static capture: reflections refresh on sky edits — press Recapture after rotating the Sun.</div>
-      </div>
-    `;
-
-    const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-reflection-name]");
-    nameInput?.addEventListener("change", () => {
-      const value = nameInput.value.trim();
-      this.app.setReflection(
-        { name: value.length > 0 ? value : undefined },
-        "Rename Reflection Environment",
-      );
-    });
-
-    this.detailsBody.querySelector<HTMLSelectElement>("[data-reflection-source]")?.addEventListener(
-      "change",
-      (event) => {
-        const value = (event.currentTarget as HTMLSelectElement).value;
-        if (value !== "sky") return;
-        this.app.setReflection(
-          { source: value as LayoutReflection["source"] },
-          "Edit Reflection Environment",
-        );
-      },
-    );
-
-    this.detailsBody
-      .querySelector<HTMLInputElement>("[data-reflection-intensity]")
-      ?.addEventListener("change", (event) => {
-        const value = Number((event.currentTarget as HTMLInputElement).value);
-        if (!Number.isFinite(value)) return;
-        this.app.setReflection({ intensity: value }, "Edit Reflection Environment");
-      });
-
-    this.detailsBody
-      .querySelector<HTMLButtonElement>("[data-reflection-recapture]")
-      ?.addEventListener("click", () => {
-        this.app.recaptureReflection();
-      });
-  }
-
   /** Details panel for the singleton global Post Process actor (Faz 1). */
   private renderPostDetails(selection: EditableSelection): void {
     const post = selection.post;
@@ -3760,7 +3701,7 @@ export class EditorUi {
             <option value="none" ${post.toneMapping === "none" ? "selected" : ""}>None</option>
           </select>
         </label>
-        <div class="detail-hint">Active Post Process overrides Sky exposure/tone mapping.</div>
+        <div class="detail-hint">Post Process controls scene exposure; Sky Atmosphere scales its own exposure locally.</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Bloom</div>
@@ -4166,7 +4107,7 @@ function scaleRow(
         <span>Scale</span>
         <button type="button" class="scale-lock${locked ? " on" : ""}"
           data-scale-lock title="${locked ? "Unlock scale ratio" : "Lock scale ratio"}"
-          aria-pressed="${locked}">${locked ? "🔒" : "🔓"}</button>
+          aria-pressed="${locked}">${locked ? "ğŸ”’" : "ğŸ”“"}</button>
       </span>
       <div class="vector-fields">${fields}</div>
     </div>
@@ -4197,7 +4138,7 @@ function pivotRow(
       <button type="button" class="pivot-drag-toggle${dragActive ? " on" : ""}"
         data-pivot-drag aria-pressed="${dragActive}" ${off}
         title="Drag the gizmo in the viewport to set the pivot">${
-          dragActive ? "● Dragging pivot" : "Drag in viewport"
+          dragActive ? "â— Dragging pivot" : "Drag in viewport"
         }</button>
     </div>
     <div class="detail-actions-row">
@@ -4269,7 +4210,6 @@ function outlinerKindLabel(kind: EditableSceneObject["kind"]): string {
   if (kind === "sky") return "S";
   if (kind === "fog") return "F";
   if (kind === "cloud") return "K";
-  if (kind === "reflection") return "R";
   if (kind === "reflectionPlane") return "M";
   if (kind === "reflectionCapture") return "O";
   if (kind === "post") return "P";
@@ -4364,7 +4304,7 @@ function formatContentListStatus(
   if (missingManifestAssetCount > 0) {
     parts.push(`${missingManifestAssetCount} manifest asset file missing`);
   }
-  return parts.join(" · ");
+  return parts.join(" Â· ");
 }
 
 function formatAssetTypeFallbackLabel(value: string): string {

@@ -1,4 +1,4 @@
-import {
+﻿import {
   NoToneMapping,
   PMREMGenerator,
   Scene,
@@ -18,7 +18,7 @@ export {
 } from "@engine/scene/reflection";
 
 /**
- * Reflection Environment render binding — the web/three counterpart to Unreal's
+ * Sky Light Capture render binding â€” the web/three counterpart to Unreal's
  * Sky Light static capture. {@link captureSkyEnvironment} renders a throwaway sky
  * dome (built from the resolved Sky Atmosphere settings + the Sun direction) into
  * a prefiltered PMREM cubemap; {@link applyReflectionEnvironment} hangs that on
@@ -61,7 +61,7 @@ export function captureSkyEnvironment(
   uniforms.rayleigh!.value = sky.rayleigh;
   uniforms.mieCoefficient!.value = sky.mie;
   uniforms.mieDirectionalG!.value = sky.mieDirectionalG;
-  // Match the live sky: some three builds ship a clouds-extended Sky — keep this a
+  // Match the live sky: some three builds ship a clouds-extended Sky â€” keep this a
   // pure atmosphere so the captured IBL is just sky scattering.
   if (uniforms.cloudCoverage) uniforms.cloudCoverage.value = 0;
   (uniforms.sunPosition!.value as Vector3).copy(sunDirection);
@@ -80,7 +80,7 @@ export function captureSkyEnvironment(
 
 /**
  * Hangs a captured environment on the scene (or clears it). A hidden/absent
- * reflection — or a missing capture target — removes the environment so PBR
+ * reflection â€” or a missing capture target â€” removes the environment so PBR
  * materials fall back to the scene lights alone.
  */
 export function applyReflectionEnvironment(

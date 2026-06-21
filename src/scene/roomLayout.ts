@@ -20,6 +20,15 @@ export {
 
 import type { RoomLayout } from "@engine/scene/layout";
 
+type LegacyReflection = {
+  hidden?: boolean;
+  intensity?: number;
+};
+
+type LegacyReflectionLayout = RoomLayout & {
+  reflection?: LegacyReflection;
+};
+
 const BASE_URL = import.meta.env.BASE_URL.endsWith("/")
   ? import.meta.env.BASE_URL
   : `${import.meta.env.BASE_URL}/`;
@@ -36,5 +45,23 @@ export async function loadRoomLayout(pathOrName: string): Promise<RoomLayout> {
       `Room layout failed: ${response.status} ${response.statusText}`,
     );
   }
-  return (await response.json()) as RoomLayout;
+  return normalizeLoadedRoomLayout((await response.json()) as RoomLayout);
+}
+
+/**
+ * Keeps old saved scenes working after the editor-facing Reflection Environment
+ * actor moved under Sky Atmosphere as `skyLightCapture`. The legacy field is
+ * intentionally dropped from the in-memory layout so the next save writes only
+ * the Sky Atmosphere-owned shape.
+ */
+export function normalizeLoadedRoomLayout(layout: RoomLayout): RoomLayout {
+  const legacy = (layout as LegacyReflectionLayout).reflection;
+  const legacyIntensity = legacy?.intensity;
+  if (legacy && !legacy.hidden && typeof legacyIntensity === "number" && Number.isFinite(legacyIntensity)) {
+    layout.skyAtmosphere ??= {};
+    layout.skyAtmosphere.skyLightCapture ??= {};
+    layout.skyAtmosphere.skyLightCapture.intensity ??= legacyIntensity;
+  }
+  delete (layout as LegacyReflectionLayout).reflection;
+  return layout;
 }

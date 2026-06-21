@@ -1,34 +1,34 @@
-# Sphere Reflection Capture Plan
+﻿# Sphere Reflection Capture Plan
 
-> Amaç: `Add Actor -> Visual Effects` altına yerleştirilebilir **Sphere Reflection
-> Capture** aktörü eklemek. Her probe kendi konumundan statik cubemap bake eder;
-> sahnedeki PBR yüzeyler global `Reflection Environment` yerine en uygun local
-> probe cubemap'ini kullanabilir. İlk hedef: probe başına CubeCamera bake +
+> AmaÃ§: `Add Actor -> Visual Effects` altÄ±na yerleÅŸtirilebilir **Sphere Reflection
+> Capture** aktÃ¶rÃ¼ eklemek. Her probe kendi konumundan statik cubemap bake eder;
+> sahnedeki PBR yÃ¼zeyler Sky Atmosphere global fallback yerine en uygun local
+> probe cubemap'ini kullanabilir. Ä°lk hedef: probe baÅŸÄ±na CubeCamera bake +
 > nearest-probe per-object `envMap`; ikinci hedef: local/parallax correction.
 
-## Kısa Sonuç
+## KÄ±sa SonuÃ§
 
-Forge'da mevcut yansıma sistemi iki parçadan oluşuyor:
+Forge'da mevcut yansÄ±ma sistemi iki parÃ§adan oluÅŸuyor:
 
-- **Reflection Environment**: singleton Sky Light karşılığı. Sky Atmosphere'ı
-  PMREM'e bake edip `scene.environment` olarak asıyor. Bu global IBL'dir ve bütün
-  `MeshStandardMaterial` yüzeyleri etkiler.
-- **Reflection Plane**: placed actor. Three.js `Reflector` ile düzlemsel mirror
-  üretir; kendi render target'ı ve transform'u vardır.
+- **Sky Atmosphere â†’ Sky Light Capture**: Sky Atmosphere'Ä±n sahip olduÄŸu global
+  fallback IBL. Sky Atmosphere'Ä± PMREM'e bake edip `scene.environment` olarak
+  asar; Sphere Reflection Capture etkisi olmayan PBR yÃ¼zeyler bu yansÄ±mayÄ± alÄ±r.
+- **Reflection Plane**: placed actor. Three.js `Reflector` ile dÃ¼zlemsel mirror
+  Ã¼retir; kendi render target'Ä± ve transform'u vardÄ±r.
 
-Sphere Reflection Capture, bu iki sistemden farklı bir üçüncü katman olmalı:
+Sphere Reflection Capture, bu iki sistemden farklÄ± bir Ã¼Ã§Ã¼ncÃ¼ katman olmalÄ±:
 
-- `Reflection Environment` gibi global singleton değil.
+- Sky Atmosphere'Ä±n global Sky Light Capture fallback'i gibi singleton deÄŸil.
 - `Reflection Plane` gibi sahneyi her frame mirror kamera ile tekrar render eden
-  pahalı bir sistem değil.
-- Yerleştirilebilir statik probe aktörü; bake sonucu cache'lenmiş local cubemap.
-- Render sırasında nesne/placement için en yakın/geçerli probe seçilir.
+  pahalÄ± bir sistem deÄŸil.
+- YerleÅŸtirilebilir statik probe aktÃ¶rÃ¼; bake sonucu cache'lenmiÅŸ local cubemap.
+- Render sÄ±rasÄ±nda nesne/placement iÃ§in en yakÄ±n/geÃ§erli probe seÃ§ilir.
 
-## Unreal Referansı
+## Unreal ReferansÄ±
 
-Unreal Engine'de Reflection Capture aktörleri statik local reflection verisi
-sağlar. Seviye birçok noktadan capture edilir, sphere/box gibi basit şekillere
-reproject edilir ve runtime'da düşük maliyetle kullanılır.
+Unreal Engine'de Reflection Capture aktÃ¶rleri statik local reflection verisi
+saÄŸlar. Seviye birÃ§ok noktadan capture edilir, sphere/box gibi basit ÅŸekillere
+reproject edilir ve runtime'da dÃ¼ÅŸÃ¼k maliyetle kullanÄ±lÄ±r.
 
 Kaynaklar:
 
@@ -39,43 +39,42 @@ Kaynaklar:
 - Epic: Planar Reflections in Unreal Engine  
   https://dev.epicgames.com/documentation/unreal-engine/planar-reflections-in-unreal-engine
 
-Unreal'dan alınması gereken fikirler:
+Unreal'dan alÄ±nmasÄ± gereken fikirler:
 
-- Sphere/Box capture düşük maliyetli, statik local cubemap'tir.
-- Capture aktörleri overlap edebilir; küçük/local capture büyük/global capture'ı
+- Sphere/Box capture dÃ¼ÅŸÃ¼k maliyetli, statik local cubemap'tir.
+- Capture aktÃ¶rleri overlap edebilir; kÃ¼Ã§Ã¼k/local capture bÃ¼yÃ¼k/global capture'Ä±
   refine eder.
-- Parlak ve düz yüzeylerde cubemap projection hataları daha görünürdür.
-- Planar Reflection ayrı bir kategoridir: daha doğru fakat sahneyi tekrar render
-  ettiği için pahalıdır.
+- Parlak ve dÃ¼z yÃ¼zeylerde cubemap projection hatalarÄ± daha gÃ¶rÃ¼nÃ¼rdÃ¼r.
+- Planar Reflection ayrÄ± bir kategoridir: daha doÄŸru fakat sahneyi tekrar render
+  ettiÄŸi iÃ§in pahalÄ±dÄ±r.
 
-## Mevcut Forge Dayanakları
+## Mevcut Forge DayanaklarÄ±
 
-Kodda ilgili sahiplik noktaları:
+Kodda ilgili sahiplik noktalarÄ±:
 
-- `engine/scene/reflection.ts`: `Reflection Environment` render-agnostic model ve
-  defaults. Yorumlarda positional Sphere Reflection Capture'ın mevcut fazda kapsam
-  dışı olduğu belirtiliyor.
+- `engine/scene/reflection.ts`: Sky Atmosphere-owned Sky Light Capture iÃ§in
+  render-agnostik global IBL model ve defaults.
 - `engine/render-three/reflection.ts`: Sky Atmosphere -> PMREM -> `scene.environment`.
 - `engine/scene/reflectionPlane.ts`: Planar reflection defaults.
 - `engine/render-three/reflectionPlane.ts`: `Reflector` binding.
-- `engine/scene/layout.ts`: `reflection?: LayoutReflection` ve
-  `reflectionPlanes?: LayoutReflectionPlane[]` şeması.
-- `tools/saveValidator.ts`: reflection ve reflection plane allowlist validator'ları.
-- `src/editor/EditorUi.ts`: `Add Actor -> Visual Effects` butonları ve Details
+- `engine/scene/layout.ts`: `skyAtmosphere.skyLightCapture` ve
+  `reflectionPlanes?: LayoutReflectionPlane[]` ÅŸemasÄ±.
+- `tools/saveValidator.ts`: reflection ve reflection plane allowlist validator'larÄ±.
+- `src/editor/EditorUi.ts`: `Add Actor -> Visual Effects` butonlarÄ± ve Details
   panel binding'leri.
 - `src/scene/SceneApp.ts`: editor-side build, selection, undo/redo, recapture ve
   render object lifecycle.
-- `src/scene/RuntimeSceneApp.ts`: Play tarafında instanced model/material override
+- `src/scene/RuntimeSceneApp.ts`: Play tarafÄ±nda instanced model/material override
   parity.
 
-Önemli mevcut kısıt:
+Ã–nemli mevcut kÄ±sÄ±t:
 
-- Instanced static mesh yolu aynı GLTF material referansını paylaşır. Per-placement
-  probe `envMap` için materyali doğrudan mutasyona uğratmak tüm instance'ları
-  etkileyebilir. Çözüm olarak placement'ları probe bucket'larına ayırmak veya
-  material override clone yoluna benzer ayrı render object üretmek gerekir.
+- Instanced static mesh yolu aynÄ± GLTF material referansÄ±nÄ± paylaÅŸÄ±r. Per-placement
+  probe `envMap` iÃ§in materyali doÄŸrudan mutasyona uÄŸratmak tÃ¼m instance'larÄ±
+  etkileyebilir. Ã‡Ã¶zÃ¼m olarak placement'larÄ± probe bucket'larÄ±na ayÄ±rmak veya
+  material override clone yoluna benzer ayrÄ± render object Ã¼retmek gerekir.
 
-## Önerilen Layout Modeli
+## Ã–nerilen Layout Modeli
 
 Yeni alan:
 
@@ -83,7 +82,7 @@ Yeni alan:
 reflectionCaptures?: LayoutSphereReflectionCapture[];
 ```
 
-Önerilen aktör şeması:
+Ã–nerilen aktÃ¶r ÅŸemasÄ±:
 
 ```ts
 export interface LayoutSphereReflectionCapture {
@@ -106,7 +105,7 @@ export interface LayoutSphereReflectionCapture {
 }
 ```
 
-Başlangıç defaults:
+BaÅŸlangÄ±Ã§ defaults:
 
 - `name`: `"Sphere Reflection Capture"`
 - `hidden`: `false`
@@ -118,7 +117,7 @@ Başlangıç defaults:
 - `parallax`: `false` ilk fazda false
 - `priority`: `0`
 
-## Önerilen Dosya Yapısı
+## Ã–nerilen Dosya YapÄ±sÄ±
 
 Yeni render-agnostic model:
 
@@ -141,44 +140,44 @@ Yeni Three binding:
 
 Editor/runtime entegrasyon:
 
-- `engine/scene/layout.ts`: yeni layout interface ve `RoomLayout` alanı.
+- `engine/scene/layout.ts`: yeni layout interface ve `RoomLayout` alanÄ±.
 - `tools/saveValidator.ts`: `validateSphereReflectionCapture(...)`.
 - `editor/core/selection.ts`: `kind: "reflectionCapture"`.
 - `editor/core/sceneObjects.ts`: outliner/details view-model.
 - `editor/core/layoutSnapshots.ts`: clone helper.
 - `editor/render-three/scenePicker.ts` ve `engine/render-three/picking.ts`: probe
-  helper seçimi.
+  helper seÃ§imi.
 - `src/editor/EditorUi.ts`: Add Actor button + Details panel.
 - `src/scene/SceneApp.ts`: build/add/remove/set/recapture lifecycle.
 - `src/scene/RuntimeSceneApp.ts`: Play parity.
 - `tools/engine-tests.ts`: resolver, validator, object lifecycle, nearest-probe
   selection testleri.
 
-## Capture Bake Tasarımı
+## Capture Bake TasarÄ±mÄ±
 
-Her probe için:
+Her probe iÃ§in:
 
-1. `WebGLCubeRenderTarget(resolution)` oluştur.
-2. `CubeCamera(near, far, target)` oluştur.
-3. Probe helper/wire ve editor-only objeleri capture sırasında gizle.
+1. `WebGLCubeRenderTarget(resolution)` oluÅŸtur.
+2. `CubeCamera(near, far, target)` oluÅŸtur.
+3. Probe helper/wire ve editor-only objeleri capture sÄ±rasÄ±nda gizle.
 4. `cubeCamera.position = probe.position`.
-5. `cubeCamera.update(renderer, scene)` ile cubemap üret.
+5. `cubeCamera.update(renderer, scene)` ile cubemap Ã¼ret.
 6. `PMREMGenerator.fromCubemap(cubeTarget.texture)` ile prefiltered environment
-   target üret.
-7. Eski PMREM/cube target'ları dispose et.
+   target Ã¼ret.
+7. Eski PMREM/cube target'larÄ± dispose et.
 8. Probe cache'e `texture`, `position`, `radius`, `intensity`, `priority` yaz.
 
-Capture statik olmalı:
+Capture statik olmalÄ±:
 
-- İlk load'da ve aktör eklendiğinde bake.
+- Ä°lk load'da ve aktÃ¶r eklendiÄŸinde bake.
 - Details panelde `Recapture` butonu.
 - `Recapture All Reflection Captures` opsiyonel toplu komut.
-- Transform/radius/resolution değişince otomatik yeniden bake opsiyonel; ilk fazda
-  explicit `Recapture` daha güvenli.
+- Transform/radius/resolution deÄŸiÅŸince otomatik yeniden bake opsiyonel; ilk fazda
+  explicit `Recapture` daha gÃ¼venli.
 
-## Probe Seçimi
+## Probe SeÃ§imi
 
-Başlangıç algoritması:
+BaÅŸlangÄ±Ã§ algoritmasÄ±:
 
 ```ts
 score = distance(objectCenter, probe.position) / probe.radius
@@ -186,74 +185,73 @@ score = distance(objectCenter, probe.position) / probe.radius
 
 Kurallar:
 
-- Hidden probe yok sayılır.
-- `score <= 1` ise probe etki alanı içindedir.
-- En düşük score kazanır.
-- Eşitlikte yüksek `priority`, sonra küçük `radius`, sonra layout sırası.
-- Probe bulunamazsa global `scene.environment` fallback olarak kalır.
+- Hidden probe yok sayÄ±lÄ±r.
+- `score <= 1` ise probe etki alanÄ± iÃ§indedir.
+- En dÃ¼ÅŸÃ¼k score kazanÄ±r.
+- EÅŸitlikte yÃ¼ksek `priority`, sonra kÃ¼Ã§Ã¼k `radius`, sonra layout sÄ±rasÄ±.
+- Probe bulunamazsa global `scene.environment` fallback olarak kalÄ±r.
 
-Bu Unreal'ın multi-probe blend modelinin basit karşılığıdır. İlk faz için blend
-yapmadan nearest-probe seçimi yeterli ve daha test edilebilir.
+Bu Unreal'Ä±n multi-probe blend modelinin basit karÅŸÄ±lÄ±ÄŸÄ±dÄ±r. Ä°lk faz iÃ§in blend
+yapmadan nearest-probe seÃ§imi yeterli ve daha test edilebilir.
 
 ## Material / Instancing Stratejisi
 
-Three.js `scene.environment` globaldir. Sphere Capture ise object/placement bazlı
+Three.js `scene.environment` globaldir. Sphere Capture ise object/placement bazlÄ±
 envMap gerektirir.
 
-İlk faz için uygulanabilir strateji:
+Ä°lk faz iÃ§in uygulanabilir strateji:
 
-- Her renderable object/placement için nearest probe hesapla.
-- `MeshStandardMaterial` klonlarına `envMap = probe.pmrem.texture` ve
+- Her renderable object/placement iÃ§in nearest probe hesapla.
+- `MeshStandardMaterial` klonlarÄ±na `envMap = probe.pmrem.texture` ve
   `envMapIntensity = probe.intensity` ata.
 - `MeshBasicMaterial` etkilenmez.
 - Probe yoksa material envMap temizlenir ve global `scene.environment` devrede
-  kalır.
+  kalÄ±r.
 
-Instanced mesh için iki seçenek:
+Instanced mesh iÃ§in iki seÃ§enek:
 
-1. **Probe bucket instancing (önerilen)**  
-   Aynı asset placement'ları `probeKey` bazında gruplara ayrılır. Her bucket ayrı
-   `InstancedMesh` ve ayrı cloned material set'i kullanır. Draw call artar ama
+1. **Probe bucket instancing (Ã¶nerilen)**
+   AynÄ± asset placement'larÄ± `probeKey` bazÄ±nda gruplara ayrÄ±lÄ±r. Her bucket ayrÄ±
+   `InstancedMesh` ve ayrÄ± cloned material set'i kullanÄ±r. Draw call artar ama
    instancing tamamen kaybolmaz.
 
 2. **Clone fallback**  
-   Material override yoluna benzer şekilde etkilenen placement'lar instanced mesh
-   içinde gizlenir, ayrı cloned object olarak render edilir. Basit ama çok sayıda
-   placement'ta pahalıdır.
+   Material override yoluna benzer ÅŸekilde etkilenen placement'lar instanced mesh
+   iÃ§inde gizlenir, ayrÄ± cloned object olarak render edilir. Basit ama Ã§ok sayÄ±da
+   placement'ta pahalÄ±dÄ±r.
 
-Öneri: V1'de probe bucket instancing; clone fallback sadece karmaşık/özel material
-override çakışmalarında.
+Ã–neri: V1'de probe bucket instancing; clone fallback sadece karmaÅŸÄ±k/Ã¶zel material
+override Ã§akÄ±ÅŸmalarÄ±nda.
 
 ## Parallax Correction
 
-`MeshStandardMaterial.envMap` tek başına local parallax vermez; cubemap'i sonsuz
-uzakta varsayar. Bu yüzden "parallax" hedefi ayrı faz olmalı.
+`MeshStandardMaterial.envMap` tek baÅŸÄ±na local parallax vermez; cubemap'i sonsuz
+uzakta varsayar. Bu yÃ¼zden "parallax" hedefi ayrÄ± faz olmalÄ±.
 
 V1:
 
-- Probe başına cubemap bake.
+- Probe baÅŸÄ±na cubemap bake.
 - Nearest-probe per-object envMap.
-- Parallax kapalı.
+- Parallax kapalÄ±.
 
 V2:
 
 - `MeshStandardMaterial.onBeforeCompile` shader patch.
-- Probe position/radius uniform'ları.
-- Reflection vector sampling'i local sphere projection ile düzeltme.
-- `customProgramCacheKey` ile shader cache ayrımı.
+- Probe position/radius uniform'larÄ±.
+- Reflection vector sampling'i local sphere projection ile dÃ¼zeltme.
+- `customProgramCacheKey` ile shader cache ayrÄ±mÄ±.
 
 V3:
 
 - Multi-probe blend.
 - Box Reflection Capture / box projection.
-- Roughness ve probe blending kalitesi için daha gelişmiş weighting.
+- Roughness ve probe blending kalitesi iÃ§in daha geliÅŸmiÅŸ weighting.
 
 ## UI / UX
 
 Add Actor:
 
 - `Visual Effects`
-  - `Reflection Environment`
   - `Reflection Plane`
   - `Sphere Reflection Capture`
   - `Post Process`
@@ -273,16 +271,16 @@ Details panel:
 Viewport:
 
 - Wire sphere helper.
-- Küçük capture icon/marker.
-- Seçilebilir ve taşınabilir placed actor.
-- Hidden olduğunda helper ve etki devre dışı.
+- KÃ¼Ã§Ã¼k capture icon/marker.
+- SeÃ§ilebilir ve taÅŸÄ±nabilir placed actor.
+- Hidden olduÄŸunda helper ve etki devre dÄ±ÅŸÄ±.
 
-## Faz Planı
+## Faz PlanÄ±
 
-### Faz 1 - Şema ve Editor Aktörü ✅ (tamamlandı)
+### Faz 1 - Åema ve Editor AktÃ¶rÃ¼ âœ… (tamamlandÄ±)
 
-- [x] `LayoutSphereReflectionCapture` ekle. (`engine/scene/layout.ts` + `reflectionCaptures?` alanı)
-- [x] Resolver/default/id/name helper dosyasını ekle. (`engine/scene/reflectionCapture.ts`)
+- [x] `LayoutSphereReflectionCapture` ekle. (`engine/scene/layout.ts` + `reflectionCaptures?` alanÄ±)
+- [x] Resolver/default/id/name helper dosyasÄ±nÄ± ekle. (`engine/scene/reflectionCapture.ts`)
 - [x] Validator ve layout round-trip testleri ekle. (`tools/saveValidator.ts`
   `validateSphereReflectionCapture` + `tools/engine-tests.ts`)
 - [x] Selection/outliner/details modelini ekle. (`editor/core/selection.ts`,
@@ -296,157 +294,157 @@ Viewport:
 
 Kabul:
 
-- Aktör eklenir, seçilir, taşınır, kaydedilir, yüklenir. ✅
-- `npm run build:verify` geçer. ✅
+- AktÃ¶r eklenir, seÃ§ilir, taÅŸÄ±nÄ±r, kaydedilir, yÃ¼klenir. âœ…
+- `npm run build:verify` geÃ§er. âœ…
 
-> Not: Faz 1'de capture yalnızca editor-side wireframe helper olarak görünür; bake
-> ve nearest-probe envMap yok, bu yüzden `RuntimeSceneApp` parity'si Faz 3'e
-> ertelendi (Play modunda capture görünmez). Helper sadece pickables'a eklenir,
-> surface-pickables'a değil (asset yerleştirme küreye tutunmaz). Capture'ın anlamlı
-> bir scale'i yoktur (boyut = `radius`), bu yüzden `applyTransform` capture için
-> `writeScale`'i atlar; `rotation` küre için kozmetiktir ama round-trip eder.
+> Not: Faz 1'de capture yalnÄ±zca editor-side wireframe helper olarak gÃ¶rÃ¼nÃ¼r; bake
+> ve nearest-probe envMap yok, bu yÃ¼zden `RuntimeSceneApp` parity'si Faz 3'e
+> ertelendi (Play modunda capture gÃ¶rÃ¼nmez). Helper sadece pickables'a eklenir,
+> surface-pickables'a deÄŸil (asset yerleÅŸtirme kÃ¼reye tutunmaz). Capture'Ä±n anlamlÄ±
+> bir scale'i yoktur (boyut = `radius`), bu yÃ¼zden `applyTransform` capture iÃ§in
+> `writeScale`'i atlar; `rotation` kÃ¼re iÃ§in kozmetiktir ama round-trip eder.
 
-### Faz 2 - CubeCamera Bake Cache ✅ (tamamlandı)
+### Faz 2 - CubeCamera Bake Cache âœ… (tamamlandÄ±)
 
 - [x] `engine/render-three/reflectionCapture.ts` binding ekle. (`bakeSphereReflectionCapture`,
   `SphereReflectionCaptureBake`, `disposeSphereReflectionCaptureBake`)
-- [x] Probe başına cube render target + PMREM cache üret.
-  (`WebGLCubeRenderTarget` → `CubeCamera.update` → `PMREMGenerator.fromCubemap`;
-  raw cube target bake sonunda dispose edilir, yalnızca PMREM target saklanır.)
-- [x] Recapture ve Recapture All komutları ekle. (`SceneApp.recaptureSelectedReflectionCapture`
-  / `recaptureAllReflectionCaptures`; Details panelde iki buton — undo'ya girmez, cache türetilmiş veridir.)
-- [x] Capture sırasında helper/editor-only görünürlüğünü güvenli yönet.
-  (`SceneApp.withEditorAidsHidden`: gizmo + probe helper'ları + planar mirror'lar +
-  light icon'ları bake süresince gizlenir, sonra geri açılır.)
+- [x] Probe baÅŸÄ±na cube render target + PMREM cache Ã¼ret.
+  (`WebGLCubeRenderTarget` â†’ `CubeCamera.update` â†’ `PMREMGenerator.fromCubemap`;
+  raw cube target bake sonunda dispose edilir, yalnÄ±zca PMREM target saklanÄ±r.)
+- [x] Recapture ve Recapture All komutlarÄ± ekle. (`SceneApp.recaptureSelectedReflectionCapture`
+  / `recaptureAllReflectionCaptures`; Details panelde iki buton â€” undo'ya girmez, cache tÃ¼retilmiÅŸ veridir.)
+- [x] Capture sÄ±rasÄ±nda helper/editor-only gÃ¶rÃ¼nÃ¼rlÃ¼ÄŸÃ¼nÃ¼ gÃ¼venli yÃ¶net.
+  (`SceneApp.withEditorAidsHidden`: gizmo + probe helper'larÄ± + planar mirror'lar +
+  light icon'larÄ± bake sÃ¼resince gizlenir, sonra geri aÃ§Ä±lÄ±r.)
 - [x] Dispose lifecycle testlerini ekle. (`disposeSphereReflectionCaptureBake` testi;
-  bake'in kendisi canlı WebGL gerektirir, `captureSkyEnvironment` gibi editor'de çalışır.)
+  bake'in kendisi canlÄ± WebGL gerektirir, `captureSkyEnvironment` gibi editor'de Ã§alÄ±ÅŸÄ±r.)
 
 Kabul:
 
-- Probe capture cache oluşur. ✅ (load + add'de bake, `reflectionCaptureBakes[]` cache)
-- Resolution değişimi eski target'ları dispose eder. ✅ (`setReflectionCapture` apply'ı
-  resolution değişiminde eski bake'i dispose edip yeniden bake eder)
-- Hidden probe envMap seçimine katılmaz. ✅ (hidden probe bake edilmez; hidden toggle
-  bake'i dispose eder, görünür olunca yeniden bake eder)
+- Probe capture cache oluÅŸur. âœ… (load + add'de bake, `reflectionCaptureBakes[]` cache)
+- Resolution deÄŸiÅŸimi eski target'larÄ± dispose eder. âœ… (`setReflectionCapture` apply'Ä±
+  resolution deÄŸiÅŸiminde eski bake'i dispose edip yeniden bake eder)
+- Hidden probe envMap seÃ§imine katÄ±lmaz. âœ… (hidden probe bake edilmez; hidden toggle
+  bake'i dispose eder, gÃ¶rÃ¼nÃ¼r olunca yeniden bake eder)
 
-> Not: Faz 2'de cache oluşur ama henüz tüketilmez — nearest-probe envMap ataması Faz 3.
-> Bu yüzden Faz 2 görsel bir değişiklik üretmez; kabul kriterleri cache + dispose
-> yaşam döngüsüdür. Transform/radius/intensity/near/far/priority değişiminde otomatik
-> yeniden bake YOK (explicit Recapture); yalnızca resolution otomatik yeniden bake eder.
+> Not: Faz 2'de cache oluÅŸur ama henÃ¼z tÃ¼ketilmez â€” nearest-probe envMap atamasÄ± Faz 3.
+> Bu yÃ¼zden Faz 2 gÃ¶rsel bir deÄŸiÅŸiklik Ã¼retmez; kabul kriterleri cache + dispose
+> yaÅŸam dÃ¶ngÃ¼sÃ¼dÃ¼r. Transform/radius/intensity/near/far/priority deÄŸiÅŸiminde otomatik
+> yeniden bake YOK (explicit Recapture); yalnÄ±zca resolution otomatik yeniden bake eder.
 
-### Faz 3 - Nearest-Probe EnvMap Assignment ✅ (tamamlandı)
+### Faz 3 - Nearest-Probe EnvMap Assignment âœ… (tamamlandÄ±)
 
-- [x] Renderable object world center hesaplama helper'ı ekle. (`placementWorldCenter`
-  = bounds-center × placement matrix; `objectWorldCenter` = `Box3.setFromObject` — her iki app'te.)
-- [x] Nearest-probe seçim algoritmasını test et. (`selectNearestReflectionCapture`
-  pure helper — score=dist/radius, gate score≤1, tie-break priority→radius→order; 2 test.)
-- [x] Non-instanced/override objects için material clone + envMap ata. (karakter + actor
+- [x] Renderable object world center hesaplama helper'Ä± ekle. (`placementWorldCenter`
+  = bounds-center Ã— placement matrix; `objectWorldCenter` = `Box3.setFromObject` â€” her iki app'te.)
+- [x] Nearest-probe seÃ§im algoritmasÄ±nÄ± test et. (`selectNearestReflectionCapture`
+  pure helper â€” score=dist/radius, gate scoreâ‰¤1, tie-break priorityâ†’radiusâ†’order; 2 test.)
+- [x] Non-instanced/override objects iÃ§in material clone + envMap ata. (karakter + actor
   in-place `applyProbeEnvMapToObject`; override clone'lar `assignProbeEnvMapMaterial` ile.)
-- [x] Instanced placements için ~~probe bucket instancing~~ **clone-fallback** ekle
-  (kullanıcı kararı): probe-içi placement'lar InstancedMesh'ten gizlenir, mevcut
-  material-override klon mekanizmasıyla envMap'li ayrı obje olarak render edilir;
+- [x] Instanced placements iÃ§in ~~probe bucket instancing~~ **clone-fallback** ekle
+  (kullanÄ±cÄ± kararÄ±): probe-iÃ§i placement'lar InstancedMesh'ten gizlenir, mevcut
+  material-override klon mekanizmasÄ±yla envMap'li ayrÄ± obje olarak render edilir;
   picking `userData.placementIndex` ile korunur.
-- [x] RuntimeSceneApp parity ekle. (Play'de load sonrası bake + aynı clone-fallback
+- [x] RuntimeSceneApp parity ekle. (Play'de load sonrasÄ± bake + aynÄ± clone-fallback
   routing + char/actor envMap; statik tek seferlik, recapture yok.)
 
 Kabul:
 
-- Probe radius içindeki parlak/metallic (`MeshStandardMaterial`) PBR yüzeyler local
-  cubemap'i kullanır. ✅ (`MeshBasicMaterial` etkilenmez.)
-- Probe dışında global Reflection Environment fallback'i bozulmaz. ✅ (probe yok →
+- Probe radius iÃ§indeki parlak/metallic (`MeshStandardMaterial`) PBR yÃ¼zeyler local
+  cubemap'i kullanÄ±r. âœ… (`MeshBasicMaterial` etkilenmez.)
+- Probe dÄ±ÅŸÄ±nda Sky Atmosphere global fallback'i bozulmaz. âœ… (probe yok â†’
   envMap temizlenir, `scene.environment` devrede.)
-- Editor ve Play aynı sonucu verir. ✅ (paylaşılan `assignProbeEnvMapMaterial` +
-  `applyProbeEnvMapToObject` engine helper'ları + aynı seçim algoritması.)
+- Editor ve Play aynÄ± sonucu verir. âœ… (paylaÅŸÄ±lan `assignProbeEnvMapMaterial` +
+  `applyProbeEnvMapToObject` engine helper'larÄ± + aynÄ± seÃ§im algoritmasÄ±.)
 
-> Seçilen strateji: **clone-fallback** (probe bucket instancing yerine), çünkü
-> `instanceId == placementIndex` picking sözleşmesini bozmaz ve mevcut altyapıyı
-> kullanır. Dezavantaj: çok sayıda probe-içi statik objede instancing kaybı
-> (Faz 5 refinement adayı). Editor'de envMap ataması bake değişiminde (load/add/
+> SeÃ§ilen strateji: **clone-fallback** (probe bucket instancing yerine), Ã§Ã¼nkÃ¼
+> `instanceId == placementIndex` picking sÃ¶zleÅŸmesini bozmaz ve mevcut altyapÄ±yÄ±
+> kullanÄ±r. Dezavantaj: Ã§ok sayÄ±da probe-iÃ§i statik objede instancing kaybÄ±
+> (Faz 5 refinement adayÄ±). Editor'de envMap atamasÄ± bake deÄŸiÅŸiminde (load/add/
 > remove/recapture/hidden/resolution) tetiklenir; transform/radius/intensity/priority
-> de canlı (radius/intensity/priority cache scalar'ı güncellenir), near/far explicit
-> Recapture bekler. Material clone'ları rebuild/dispose'da serbest bırakılır.
+> de canlÄ± (radius/intensity/priority cache scalar'Ä± gÃ¼ncellenir), near/far explicit
+> Recapture bekler. Material clone'larÄ± rebuild/dispose'da serbest bÄ±rakÄ±lÄ±r.
 
-### Faz 4 - Parallax ✅ (tamamlandı)
+### Faz 4 - Parallax âœ… (tamamlandÄ±)
 
 - [x] `onBeforeCompile` shader patch prototipi. (`engine/render-three/reflectionCapture.ts`
-  `installParallaxCorrection`: standard shader'ın IBL `reflectVec`'ini probe küresiyle
-  kesiştirip yeniden yönlendiren ray-sphere düzeltmesi; vertex'te dünya pozisyonu
-  `vCaptureWorldPos` varying'i ile taşınır. **Önemli:** `onBeforeCompile` shader'ı
-  `#include <...>` direktifleri AÇILMADAN alır, bu yüzden patch ham include'lara tutunur
-  (`#include <worldpos_vertex>` + `#include <envmap_physical_pars_fragment>`) ve IBL chunk'ını
-  `ShaderChunk`'tan alıp düzeltmeyi içine enjekte ederek inline açar. Anchor'lar bulunamazsa
-  patch sessizce atlanır → plain envMap.)
-- [x] Probe uniform'ları: position, radius, intensity. (`captureProbePosition` +
-  `captureProbeRadius` custom uniform; intensity stok `envMapIntensity` uniform'undan gelir —
-  yön düzeltmesini etkilemez. Tüm parallax klonları aynı programı paylaşsın diye
-  `customProgramCacheKey` sabit bir anahtar döner; probe değerleri uniform olarak ayrı kalır.)
-- [x] `parallax` checkbox aktif et. (`src/editor/EditorUi.ts` checkbox artık aktif;
-  `setSelectedReflectionCapture({ parallax })` → `setReflectionCapture` toggle anında
-  cache scalar'ını günceller ve `applyReflectionCaptureEnvMaps` ile materyalleri yeniden
-  klonlayıp patch'i ekler/kaldırır.)
-- [x] Basit düz yüzey ve oda test layout'u ile görsel doğrulama. (Playwright + headed Chrome
-  ile `?editor` sürülerek: ayna küre/küp + düz yüzey sahnesinde Parallax aç/kapat, viewport'a
-  kırpılmış ekran görüntüleri pixelmatch ile karşılaştırıldı. Parallax ON↔OFF yansıtıcı
-  yüzeylerde **2672 px (%0.55) lokalize** değişim üretti — düz yüzeyde yansıyan çizgilerin
-  tutarlı kayması + küre yansıma silüetinde kayma; emissive/mat yüzeylerde değişim yok; shader
-  derleme hatası yok; OFF→ON→OFF piksel-mükemmel tersinir.)
+  `installParallaxCorrection`: standard shader'Ä±n IBL `reflectVec`'ini probe kÃ¼resiyle
+  kesiÅŸtirip yeniden yÃ¶nlendiren ray-sphere dÃ¼zeltmesi; vertex'te dÃ¼nya pozisyonu
+  `vCaptureWorldPos` varying'i ile taÅŸÄ±nÄ±r. **Ã–nemli:** `onBeforeCompile` shader'Ä±
+  `#include <...>` direktifleri AÃ‡ILMADAN alÄ±r, bu yÃ¼zden patch ham include'lara tutunur
+  (`#include <worldpos_vertex>` + `#include <envmap_physical_pars_fragment>`) ve IBL chunk'Ä±nÄ±
+  `ShaderChunk`'tan alÄ±p dÃ¼zeltmeyi iÃ§ine enjekte ederek inline aÃ§ar. Anchor'lar bulunamazsa
+  patch sessizce atlanÄ±r â†’ plain envMap.)
+- [x] Probe uniform'larÄ±: position, radius, intensity. (`captureProbePosition` +
+  `captureProbeRadius` custom uniform; intensity stok `envMapIntensity` uniform'undan gelir â€”
+  yÃ¶n dÃ¼zeltmesini etkilemez. TÃ¼m parallax klonlarÄ± aynÄ± programÄ± paylaÅŸsÄ±n diye
+  `customProgramCacheKey` sabit bir anahtar dÃ¶ner; probe deÄŸerleri uniform olarak ayrÄ± kalÄ±r.)
+- [x] `parallax` checkbox aktif et. (`src/editor/EditorUi.ts` checkbox artÄ±k aktif;
+  `setSelectedReflectionCapture({ parallax })` â†’ `setReflectionCapture` toggle anÄ±nda
+  cache scalar'Ä±nÄ± gÃ¼nceller ve `applyReflectionCaptureEnvMaps` ile materyalleri yeniden
+  klonlayÄ±p patch'i ekler/kaldÄ±rÄ±r.)
+- [x] Basit dÃ¼z yÃ¼zey ve oda test layout'u ile gÃ¶rsel doÄŸrulama. (Playwright + headed Chrome
+  ile `?editor` sÃ¼rÃ¼lerek: ayna kÃ¼re/kÃ¼p + dÃ¼z yÃ¼zey sahnesinde Parallax aÃ§/kapat, viewport'a
+  kÄ±rpÄ±lmÄ±ÅŸ ekran gÃ¶rÃ¼ntÃ¼leri pixelmatch ile karÅŸÄ±laÅŸtÄ±rÄ±ldÄ±. Parallax ONâ†”OFF yansÄ±tÄ±cÄ±
+  yÃ¼zeylerde **2672 px (%0.55) lokalize** deÄŸiÅŸim Ã¼retti â€” dÃ¼z yÃ¼zeyde yansÄ±yan Ã§izgilerin
+  tutarlÄ± kaymasÄ± + kÃ¼re yansÄ±ma silÃ¼etinde kayma; emissive/mat yÃ¼zeylerde deÄŸiÅŸim yok; shader
+  derleme hatasÄ± yok; OFFâ†’ONâ†’OFF piksel-mÃ¼kemmel tersinir.)
 
-> ⚠️ Görsel doğrulama bir bug yakaladı: ilk implementasyon `reflectVec = inverseTransformDirection(...)`
-> satırına (include AÇILDIKTAN sonra var olan metin) tutunuyordu; `onBeforeCompile` shader'ı
-> direktifler açılmadan verdiği için anchor bulunamıyor, guard erken dönüyor ve parallax
-> **sessizce no-op** oluyordu (viewport diff'i 0 px). Düzeltme: ham `#include` direktifine
-> tutunup IBL chunk'ını `ShaderChunk`'tan inline açmak. Birim testi de gerçek (açılmamış)
-> include davranışını yansıtacak şekilde güncellendi.
+> âš ï¸ GÃ¶rsel doÄŸrulama bir bug yakaladÄ±: ilk implementasyon `reflectVec = inverseTransformDirection(...)`
+> satÄ±rÄ±na (include AÃ‡ILDIKTAN sonra var olan metin) tutunuyordu; `onBeforeCompile` shader'Ä±
+> direktifler aÃ§Ä±lmadan verdiÄŸi iÃ§in anchor bulunamÄ±yor, guard erken dÃ¶nÃ¼yor ve parallax
+> **sessizce no-op** oluyordu (viewport diff'i 0 px). DÃ¼zeltme: ham `#include` direktifine
+> tutunup IBL chunk'Ä±nÄ± `ShaderChunk`'tan inline aÃ§mak. Birim testi de gerÃ§ek (aÃ§Ä±lmamÄ±ÅŸ)
+> include davranÄ±ÅŸÄ±nÄ± yansÄ±tacak ÅŸekilde gÃ¼ncellendi.
 
 Kabul:
 
-- Parallax açıkken local capture, object konumuna göre daha doğru yönlenir. ✅ (kod yolu;
-  shader düzeltmesi fragment dünya pozisyonuna göre `reflectVec`'i probe küresine kilitler.)
-- Parallax kapalıyken V3 öncesi stabil envMap davranışı korunur. ✅ (parallax kapalı klon
-  patch almaz, stok program cache anahtarını korur — birim testi doğrular.)
+- Parallax aÃ§Ä±kken local capture, object konumuna gÃ¶re daha doÄŸru yÃ¶nlenir. âœ… (kod yolu;
+  shader dÃ¼zeltmesi fragment dÃ¼nya pozisyonuna gÃ¶re `reflectVec`'i probe kÃ¼resine kilitler.)
+- Parallax kapalÄ±yken V3 Ã¶ncesi stabil envMap davranÄ±ÅŸÄ± korunur. âœ… (parallax kapalÄ± klon
+  patch almaz, stok program cache anahtarÄ±nÄ± korur â€” birim testi doÄŸrular.)
 
-> Not: Parallax yalnızca specular IBL reflection vektörünü düzeltir (`getIBLRadiance`);
-> diffuse irradiance (`getIBLIrradiance`) küre projeksiyonu gerektirmediğinden dokunulmaz.
-> Düzeltme `MeshStandardMaterial` klonlarına `bake.parallax` true olduğunda
-> `assignProbeEnvMapMaterial` içinde uygulanır; editör + Play paylaşılan helper'lardan
-> geçtiği için parite otomatiktir. Patch `node_modules/three@0.184` shader anchor
-> string'lerine bağlıdır; three sürümü değişirse anchor kontrolü patch'i güvenle atlar
-> (plain envMap'e düşer).
+> Not: Parallax yalnÄ±zca specular IBL reflection vektÃ¶rÃ¼nÃ¼ dÃ¼zeltir (`getIBLRadiance`);
+> diffuse irradiance (`getIBLIrradiance`) kÃ¼re projeksiyonu gerektirmediÄŸinden dokunulmaz.
+> DÃ¼zeltme `MeshStandardMaterial` klonlarÄ±na `bake.parallax` true olduÄŸunda
+> `assignProbeEnvMapMaterial` iÃ§inde uygulanÄ±r; editÃ¶r + Play paylaÅŸÄ±lan helper'lardan
+> geÃ§tiÄŸi iÃ§in parite otomatiktir. Patch `node_modules/three@0.184` shader anchor
+> string'lerine baÄŸlÄ±dÄ±r; three sÃ¼rÃ¼mÃ¼ deÄŸiÅŸirse anchor kontrolÃ¼ patch'i gÃ¼venle atlar
+> (plain envMap'e dÃ¼ÅŸer).
 
 ### Faz 5 - Kalite / Unreal Benzeri Refinement
 
 - [ ] Overlap blend.
-- [x] Priority/small-probe override kuralını iyileştir. (`selectNearestReflectionCapture`
-  artık kapsayan probe'lar arasında Unreal-tarzı öncelik uygular: `priority` (yüksek) →
-  küçük `radius` (daha lokal capture büyüğü override eder, büyük daha merkezde olsa bile) →
-  düşük `score` → layout sırası. Eski "en düşük score kazanır" davranışı yalnızca eşit
-  radius'larda geçerli; mevcut tie-break testleri korunur + small-probe override testleri eklendi.)
+- [x] Priority/small-probe override kuralÄ±nÄ± iyileÅŸtir. (`selectNearestReflectionCapture`
+  artÄ±k kapsayan probe'lar arasÄ±nda Unreal-tarzÄ± Ã¶ncelik uygular: `priority` (yÃ¼ksek) â†’
+  kÃ¼Ã§Ã¼k `radius` (daha lokal capture bÃ¼yÃ¼ÄŸÃ¼ override eder, bÃ¼yÃ¼k daha merkezde olsa bile) â†’
+  dÃ¼ÅŸÃ¼k `score` â†’ layout sÄ±rasÄ±. Eski "en dÃ¼ÅŸÃ¼k score kazanÄ±r" davranÄ±ÅŸÄ± yalnÄ±zca eÅŸit
+  radius'larda geÃ§erli; mevcut tie-break testleri korunur + small-probe override testleri eklendi.)
 - [x] Debug show flag: probe radius, selected probe, stale bake indicator. (Probe radius =
   mevcut wireframe influence-sphere helper; selected probe = mevcut selection-outline pass;
-  YENİ **stale bake indicator**: `isReflectionCaptureBakeStale` (bake.position/near/far vs
-  güncel item) → helper kehribar (`setSphereReflectionCaptureStale`) + Details panelde uyarı
+  YENÄ° **stale bake indicator**: `isReflectionCaptureBakeStale` (bake.position/near/far vs
+  gÃ¼ncel item) â†’ helper kehribar (`setSphereReflectionCaptureStale`) + Details panelde uyarÄ±
   hint'i + Recapture vurgusu. `refreshReflectionCaptureObject` (transform/gizmo) ve (re)bake'te
   tazelenir; `SceneApp.isSelectedReflectionCaptureBakeStale` paneli besler. Kapsam: probe
-  taşıma + near/far düzenlemesini yakalar — sahne içeriği değişimini (obje taşıma) yakalamaz,
-  o hâlâ explicit Recapture ister.)
+  taÅŸÄ±ma + near/far dÃ¼zenlemesini yakalar â€” sahne iÃ§eriÄŸi deÄŸiÅŸimini (obje taÅŸÄ±ma) yakalamaz,
+  o hÃ¢lÃ¢ explicit Recapture ister.)
 
 ## Riskler
 
-- Material paylaşımı yanlış yönetilirse bir probe tüm asset instance'larını etkiler.
-- Çok fazla probe ve yüksek resolution GPU memory kullanımını artırır.
-- Her transform değişiminde auto-recature pahalı olabilir.
-- Shader patch parallax, Three.js sürüm değişimlerine daha kırılgandır.
-- Reflection Plane ile Sphere Capture aynı parlak yüzeyi etkilediğinde öncelik
-  net tanımlanmalı: planar mirror kendi yüzeyi için daha özel/üstün kabul edilmeli.
+- Material paylaÅŸÄ±mÄ± yanlÄ±ÅŸ yÃ¶netilirse bir probe tÃ¼m asset instance'larÄ±nÄ± etkiler.
+- Ã‡ok fazla probe ve yÃ¼ksek resolution GPU memory kullanÄ±mÄ±nÄ± artÄ±rÄ±r.
+- Her transform deÄŸiÅŸiminde auto-recature pahalÄ± olabilir.
+- Shader patch parallax, Three.js sÃ¼rÃ¼m deÄŸiÅŸimlerine daha kÄ±rÄ±lgandÄ±r.
+- Reflection Plane ile Sphere Capture aynÄ± parlak yÃ¼zeyi etkilediÄŸinde Ã¶ncelik
+  net tanÄ±mlanmalÄ±: planar mirror kendi yÃ¼zeyi iÃ§in daha Ã¶zel/Ã¼stÃ¼n kabul edilmeli.
 
-## Önerilen Başlangıç Dilimi
+## Ã–nerilen BaÅŸlangÄ±Ã§ Dilimi
 
-İlk uygulanacak küçük dilim:
+Ä°lk uygulanacak kÃ¼Ã§Ã¼k dilim:
 
-1. Şema + validator + resolver.
+1. Åema + validator + resolver.
 2. Add Actor + outliner/details + transform/picking.
 3. `build:verify`.
 
-Bu dilim render kalitesine dokunmadan aktör altyapısını güvenli kurar. Ardından
-CubeCamera bake ve nearest-probe envMap ayrı, test edilebilir dilimler halinde
+Bu dilim render kalitesine dokunmadan aktÃ¶r altyapÄ±sÄ±nÄ± gÃ¼venli kurar. ArdÄ±ndan
+CubeCamera bake ve nearest-probe envMap ayrÄ±, test edilebilir dilimler halinde
 eklenmelidir.

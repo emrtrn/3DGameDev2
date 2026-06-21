@@ -241,6 +241,17 @@ export interface LayoutWorldSettings {
 }
 
 /**
+ * Sky Atmosphere-owned global sky-light capture. This is the editor-facing
+ * replacement for the old singleton Reflection Environment actor: the PMREM /
+ * `scene.environment` machinery still exists internally, but its authored
+ * strength lives under Sky Atmosphere.
+ */
+export interface LayoutSkyLightCapture {
+  /** Reflection + ambient bounce strength (maps to `scene.environmentIntensity`). */
+  intensity?: number;
+}
+
+/**
  * Singleton environment actor: a physically-inspired sky dome (Rayleigh + Mie
  * scattering, à la Unreal's Sky Atmosphere). Rendered with three.js's analytic
  * `Sky` shader as the scene background.
@@ -266,8 +277,10 @@ export interface LayoutSkyAtmosphere {
   mie?: number;
   /** Mie directional anisotropy — sun halo tightness (0..1). */
   mieDirectionalG?: number;
-  /** Sky exposure / overall brightness, mapped to tone-mapping exposure (0..1). */
+  /** Sky exposure / overall brightness, used as the sky-local exposure scale (0..1). */
   exposure?: number;
+  /** Global sky capture fallback used by PBR reflections when no local probe applies. */
+  skyLightCapture?: LayoutSkyLightCapture;
 }
 
 /**
@@ -322,12 +335,15 @@ export interface LayoutCloudLayer {
 }
 
 /**
- * Singleton environment actor: a Reflection Environment (à la Unreal's Sky Light
+ * Deprecated legacy singleton actor: a Reflection Environment (à la Unreal's Sky Light
  * static capture). Snapshots the Sky Atmosphere into a prefiltered environment
  * map that drives image-based reflections + ambient bounce on every PBR surface.
  * All fields are optional; absent reads the defaults in
  * `engine/scene/reflection.ts`. Faz 1 captures only the sky (`source: "sky"`); a
  * positional Sphere Reflection Capture is intentionally out of scope.
+ *
+ * New layouts store this as `skyAtmosphere.skyLightCapture`; this type remains so
+ * old saved files can be loaded and migrated without losing their intensity.
  */
 export interface LayoutReflection {
   /** Display name in the Outliner. Absent means "Reflection Environment". */
@@ -471,7 +487,7 @@ export interface RoomLayout {
   heightFog?: LayoutHeightFog;
   /** Optional singleton static Cloud Layer environment actor. */
   cloudLayer?: LayoutCloudLayer;
-  /** Optional singleton Reflection Environment (Sky Light) actor. */
+  /** Deprecated legacy Reflection Environment actor; migrated into Sky Atmosphere on save/load. */
   reflection?: LayoutReflection;
   /** Optional singleton global Post Process settings actor. */
   postProcess?: LayoutPostProcess;

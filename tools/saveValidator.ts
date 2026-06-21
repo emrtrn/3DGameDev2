@@ -1,8 +1,8 @@
-/**
+﻿/**
  * Save-payload validator for the `/__save-layout` dev endpoint.
  *
  * Extracted from `vite.config.ts` so it can be unit-tested headlessly (see
- * tools/engine-tests.ts) — the validator is an **allowlist**: every field that
+ * tools/engine-tests.ts) â€” the validator is an **allowlist**: every field that
  * survives a save is copied explicitly here. A new `LayoutPlacement` /
  * `LayoutCharacter` / `LayoutLightActor` field that is NOT added to
  * `applyTransformFields` / `validateLightActor` is silently dropped on save.
@@ -565,7 +565,7 @@ export function validateReflectionPlane(value: unknown): Record<string, unknown>
  * Mirrors {@link validateReflectionPlane}: a required `id` + `position`, the
  * shared transform/hierarchy/flag fields, plus the probe-specific radius /
  * intensity / resolution / near / far / parallax / priority. There is no `scale`
- * — the influence size is the `radius`.
+ * â€” the influence size is the `radius`.
  */
 export function validateSphereReflectionCapture(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object") {
@@ -631,7 +631,7 @@ export function validateSkyAtmosphere(value: unknown): Record<string, unknown> |
   if (typeof input.name === "string" && input.name.length > 0) sky.name = input.name;
   if (input.hidden === true) sky.hidden = true;
 
-  // Scattering only — the sun direction lives on the directional Sun light.
+  // Scattering only; the sun direction lives on the directional Sun light.
   const numeric: Array<[keyof typeof input, number, number]> = [
     ["rayleigh", 0, 6],
     ["turbidity", 1, 20],
@@ -644,9 +644,30 @@ export function validateSkyAtmosphere(value: unknown): Record<string, unknown> |
     if (resolved !== undefined) sky[key as string] = resolved;
   }
 
-  // A present (placed) sky always round-trips — even an all-defaults `{}` — so the
-  // actor's existence survives the save; only `undefined` (no sky) returns null.
+  const skyLightCapture = validateSkyLightCapture(
+    input.skyLightCapture,
+    "skyAtmosphere.skyLightCapture",
+  );
+  if (skyLightCapture) sky.skyLightCapture = skyLightCapture;
+
+  // A present (placed) sky always round-trips, even an all-defaults `{}`, so the
+  // actor existence survives the save; only `undefined` (no sky) returns null.
   return sky;
+}
+
+function validateSkyLightCapture(
+  value: unknown,
+  label: string,
+): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  const capture: Record<string, unknown> = {};
+  const intensity = validateOptionalNumber(input.intensity, `${label}.intensity`, 0, 4);
+  if (intensity !== undefined) capture.intensity = intensity;
+  return Object.keys(capture).length > 0 ? capture : undefined;
 }
 
 /**
@@ -680,7 +701,7 @@ export function validateHeightFog(value: unknown): Record<string, unknown> | nul
     if (resolved !== undefined) fog[key as string] = resolved;
   }
 
-  // A present (placed) fog always round-trips — even an all-defaults `{}` — so the
+  // A present (placed) fog always round-trips â€” even an all-defaults `{}` â€” so the
   // actor's existence survives the save; only `undefined` (no fog) returns null.
   return fog;
 }
@@ -717,7 +738,7 @@ export function validateCloudLayer(value: unknown): Record<string, unknown> | nu
     if (resolved !== undefined) cloud[key as string] = resolved;
   }
 
-  // A present (placed) cloud always round-trips — even an all-defaults `{}` — so
+  // A present (placed) cloud always round-trips â€” even an all-defaults `{}` â€” so
   // the actor's existence survives the save; only `undefined` returns null.
   return cloud;
 }
@@ -918,10 +939,18 @@ export function validateLayout(value: unknown): unknown {
     characters,
   };
   if (worldSettings) output.worldSettings = worldSettings;
-  if (skyAtmosphere) output.skyAtmosphere = skyAtmosphere;
+  if (skyAtmosphere) {
+    if (
+      reflection?.hidden !== true &&
+      reflection?.intensity !== undefined &&
+      !skyAtmosphere.skyLightCapture
+    ) {
+      skyAtmosphere.skyLightCapture = { intensity: reflection.intensity };
+    }
+    output.skyAtmosphere = skyAtmosphere;
+  }
   if (heightFog) output.heightFog = heightFog;
   if (cloudLayer) output.cloudLayer = cloudLayer;
-  if (reflection) output.reflection = reflection;
   if (postProcess) output.postProcess = postProcess;
   if (lights) output.lights = lights;
   if (reflectionPlanes) output.reflectionPlanes = reflectionPlanes;
@@ -1398,7 +1427,7 @@ function isContentNewKind(value: unknown): value is ContentNewKind {
 /**
  * Sanitizes a user-entered content name to a single safe path segment: trimmed,
  * non-empty, no slashes / `..` / leading dot, Unicode letters+digits and a few
- * separators only (so Turkish names like "Işık" are allowed).
+ * separators only (so Turkish names like "IÅŸÄ±k" are allowed).
  */
 function sanitizeContentName(value: unknown): string {
   if (typeof value !== "string") throw new Error("content name must be a string");
@@ -1560,7 +1589,7 @@ export interface ContentRenamePayload {
 
 /**
  * Validates a `/__content-rename` payload. The new name is sanitized to a single
- * safe path segment and must not carry its own extension — the source file's
+ * safe path segment and must not carry its own extension â€” the source file's
  * extension chain (e.g. `.glb`, `.material.json`) is preserved by the resolver.
  */
 export function validateContentRenamePayload(value: unknown): ContentRenamePayload {
@@ -1649,7 +1678,7 @@ function humanizeName(value: string): string {
 /**
  * Builds a manifest `AssetRecord` for a freshly imported file so it is no longer
  * a "loose file". Returns null when the type can't be inferred (e.g. a `.bin`
- * companion or plain `.json`) — those stay unregistered. The id is made unique
+ * companion or plain `.json`) â€” those stay unregistered. The id is made unique
  * against `existingIds`. Mesh assets are placeable with collision on; other
  * types are non-placeable. Defaults satisfy `validateAssetManifest`.
  */

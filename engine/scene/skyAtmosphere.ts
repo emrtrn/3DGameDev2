@@ -8,8 +8,14 @@ import type { LayoutSkyAtmosphere } from "./layout";
  *
  * The sun is NOT part of this model: like Unreal, the scene's directional Sun
  * light is the source of truth for the sun direction (the sky reads its rotation
- * at render time). Only scattering/exposure live here.
+ * at render time). Scattering/exposure live here, plus the Sky Atmosphere-owned
+ * global sky-light capture settings used as the PBR reflection fallback.
  */
+export interface ResolvedSkyLightCapture {
+  /** Reflection + ambient bounce strength (maps to `scene.environmentIntensity`). */
+  intensity: number;
+}
+
 export interface ResolvedSkyAtmosphere {
   name: string;
   hidden: boolean;
@@ -18,6 +24,7 @@ export interface ResolvedSkyAtmosphere {
   mie: number;
   mieDirectionalG: number;
   exposure: number;
+  skyLightCapture: ResolvedSkyLightCapture;
 }
 
 export const SKY_ATMOSPHERE_DEFAULTS: ResolvedSkyAtmosphere = {
@@ -28,6 +35,9 @@ export const SKY_ATMOSPHERE_DEFAULTS: ResolvedSkyAtmosphere = {
   mie: 0.005,
   mieDirectionalG: 0.8,
   exposure: 0.5,
+  skyLightCapture: {
+    intensity: 1,
+  },
 };
 
 /** Fills every Sky Atmosphere field with its default, decoupled from the layout. */
@@ -35,7 +45,7 @@ export function resolveSkyAtmosphere(
   actor: LayoutSkyAtmosphere | null | undefined,
 ): ResolvedSkyAtmosphere {
   const defaults = SKY_ATMOSPHERE_DEFAULTS;
-  if (!actor) return { ...defaults };
+  if (!actor) return { ...defaults, skyLightCapture: { ...defaults.skyLightCapture } };
   return {
     name: actor.name ?? defaults.name,
     hidden: actor.hidden ?? defaults.hidden,
@@ -44,5 +54,8 @@ export function resolveSkyAtmosphere(
     mie: actor.mie ?? defaults.mie,
     mieDirectionalG: actor.mieDirectionalG ?? defaults.mieDirectionalG,
     exposure: actor.exposure ?? defaults.exposure,
+    skyLightCapture: {
+      intensity: actor.skyLightCapture?.intensity ?? defaults.skyLightCapture.intensity,
+    },
   };
 }

@@ -564,7 +564,6 @@ export class EditorSceneController {
         selection.kind === "sky" ||
         selection.kind === "fog" ||
         selection.kind === "cloud" ||
-        selection.kind === "reflection" ||
         selection.kind === "reflectionPlane" ||
         selection.kind === "reflectionCapture" ||
         selection.kind === "post"
@@ -1025,13 +1024,12 @@ export class EditorSceneController {
   private duplicateSelection(selection: Selection): Selection | null {
     const layout = this.host.getMutableLayout();
     if (!layout) return null;
-    // The Sky Atmosphere + Height Fog + Cloud Layer + Reflection are singletons,
-    // and reflection planes aren't duplicable in v1: never duplicated.
+    // The Sky Atmosphere + Height Fog + Cloud Layer are singletons, and
+    // reflection planes/captures aren't duplicable in v1: never duplicated.
     if (
       selection.kind === "sky" ||
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
-      selection.kind === "reflection" ||
       selection.kind === "reflectionPlane" ||
       selection.kind === "reflectionCapture"
     ) {

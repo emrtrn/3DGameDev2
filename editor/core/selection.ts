@@ -8,7 +8,6 @@ export type Selection =
   | { kind: "sky" }
   | { kind: "fog" }
   | { kind: "cloud" }
-  | { kind: "reflection" }
   | { kind: "post" };
 
 export type InstanceSelection = Extract<Selection, { kind: "instance" }>;
@@ -25,8 +24,6 @@ export type SkySelection = Extract<Selection, { kind: "sky" }>;
 export type FogSelection = Extract<Selection, { kind: "fog" }>;
 /** The singleton static Cloud Layer environment actor (no index/transform). */
 export type CloudSelection = Extract<Selection, { kind: "cloud" }>;
-/** The singleton Reflection Environment (Sky Light) actor (no index/transform). */
-export type ReflectionSelection = Extract<Selection, { kind: "reflection" }>;
 /** The singleton global Post Process environment actor (no index/transform). */
 export type PostSelection = Extract<Selection, { kind: "post" }>;
 
@@ -45,7 +42,6 @@ export function cloneSelection(selection: Selection): Selection {
   if (selection.kind === "sky") return { kind: "sky" };
   if (selection.kind === "fog") return { kind: "fog" };
   if (selection.kind === "cloud") return { kind: "cloud" };
-  if (selection.kind === "reflection") return { kind: "reflection" };
   if (selection.kind === "post") return { kind: "post" };
   return { kind: "character", index: selection.index };
 }
@@ -59,7 +55,6 @@ export function selectionId(selection: Selection): string {
   if (selection.kind === "sky") return "sky";
   if (selection.kind === "fog") return "fog";
   if (selection.kind === "cloud") return "cloud";
-  if (selection.kind === "reflection") return "reflection";
   if (selection.kind === "post") return "post";
   return `instance:${encodeURIComponent(selection.assetId)}:${selection.placementIndex}`;
 }
@@ -69,7 +64,6 @@ export function parseSelectionId(id: string): Selection | null {
   if (kind === "sky") return { kind: "sky" };
   if (kind === "fog") return { kind: "fog" };
   if (kind === "cloud") return { kind: "cloud" };
-  if (kind === "reflection") return { kind: "reflection" };
   if (kind === "post") return { kind: "post" };
   if (kind === "character") {
     const index = Number(encodedAssetId);
@@ -125,7 +119,6 @@ export function selectionsEqual(
   if (left.kind === "sky" && right.kind === "sky") return true;
   if (left.kind === "fog" && right.kind === "fog") return true;
   if (left.kind === "cloud" && right.kind === "cloud") return true;
-  if (left.kind === "reflection" && right.kind === "reflection") return true;
   if (left.kind === "post" && right.kind === "post") return true;
   if (left.kind !== "instance" || right.kind !== "instance") return false;
   return left.assetId === right.assetId && left.placementIndex === right.placementIndex;

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SceneApp - the single render-layer orchestrator (L11 boundary).
  *
  * three.js is imported ONLY under src/scene/. Game rules live in pure-TS
@@ -90,6 +90,7 @@ import {
   createSkyObject,
   followCameraWithSky,
   resolveSkyAtmosphere,
+  setSkyLocalToneMappingExposure,
   sunDirectionFromLightRotation,
 } from "@engine/render-three/skyAtmosphere";
 import { applySceneFog, resolveHeightFog } from "@engine/render-three/heightFog";
@@ -106,6 +107,7 @@ import {
   createPostProcessEffectPasses,
   PostProcessPipeline,
   resolvePostProcess,
+  type ResolvedPostProcess,
 } from "@engine/render-three/postProcess";
 import {
   applyReflectionEnvironment,
@@ -204,7 +206,6 @@ import type {
   LayoutPlacement,
   LayoutPhysics,
   LayoutPostProcess,
-  LayoutReflection,
   LayoutReflectionPlane,
   LayoutSkyAtmosphere,
   LayoutSphereReflectionCapture,
@@ -684,7 +685,7 @@ export class SceneApp {
       const deltaSeconds = deltaMs / 1000;
 
       // Engine-core tick: fans out to registered subsystems. The
-      // AnimationSubsystem advances character mixers here — that work no longer
+      // AnimationSubsystem advances character mixers here â€” that work no longer
       // runs inline in this loop. Camera/gizmo work stays inline for now.
       this.engineApp.update(deltaSeconds);
 
@@ -865,14 +866,6 @@ export class SceneApp {
       this.setCloudLayer({ name: next.length > 0 ? next : undefined }, "Rename Cloud Layer");
       return;
     }
-    if (selection.kind === "reflection") {
-      const next = name.trim();
-      this.setReflection(
-        { name: next.length > 0 ? next : undefined },
-        "Rename Reflection Environment",
-      );
-      return;
-    }
     if (selection.kind === "post") {
       const next = name.trim();
       this.setPostProcess({ name: next.length > 0 ? next : undefined }, "Rename Post Process");
@@ -897,13 +890,6 @@ export class SceneApp {
     }
     if (selection.kind === "cloud") {
       this.setCloudLayer({ hidden }, hidden ? "Hide Cloud Layer" : "Show Cloud Layer");
-      return;
-    }
-    if (selection.kind === "reflection") {
-      this.setReflection(
-        { hidden },
-        hidden ? "Hide Reflection Environment" : "Show Reflection Environment",
-      );
       return;
     }
     if (selection.kind === "post") {
@@ -1059,7 +1045,7 @@ export class SceneApp {
   /**
    * Current viewport camera pose, for the Play button to hand off to the runtime
    * so the default camera mode starts where the editor was looking. Editor-only
-   * handoff — never written into the layout.
+   * handoff â€” never written into the layout.
    */
   getPlayCameraPose(): PlayCameraPose {
     return {
@@ -1290,7 +1276,7 @@ export class SceneApp {
     if (!gltf) return;
     // clone(true) shares geometries with the source gltf (Mesh.clone keeps the
     // geometry/material by reference), so only the override material we add here
-    // needs disposing on cleanup — never the shared geometries.
+    // needs disposing on cleanup â€” never the shared geometries.
     const group = gltf.scene.clone(true);
     const material = new MeshStandardMaterial({
       color: 0xf59e2c,
@@ -1540,10 +1526,6 @@ export class SceneApp {
       this.removeCloudLayer();
       return;
     }
-    if (this.selection?.kind === "reflection" && this.editorSceneController.selectedCount <= 1) {
-      this.removeReflection();
-      return;
-    }
     if (this.selection?.kind === "post" && this.editorSceneController.selectedCount <= 1) {
       this.removePostProcess();
       return;
@@ -1611,7 +1593,7 @@ export class SceneApp {
 
   /**
    * Sets the active selection's local authoring pivot (the point rotation/scale
-   * gizmos act around). Does not move the object — only where the gizmo sits.
+   * gizmos act around). Does not move the object â€” only where the gizmo sits.
    */
   setSelectionPivot(pivot: Vec3): void {
     if (
@@ -1699,7 +1681,7 @@ export class SceneApp {
     if (preset === "center") {
       this.setSelectionPivot([center.x, center.y, center.z]);
     } else {
-      // base: bottom-centre — natural hinge for objects resting on the floor.
+      // base: bottom-centre â€” natural hinge for objects resting on the floor.
       this.setSelectionPivot([center.x, bounds.min.y, center.z]);
     }
   }
@@ -1728,7 +1710,7 @@ export class SceneApp {
   }
 
   /**
-   * Spawn a built-in primitive (cube/sphere/…) in front of the camera. Shapes
+   * Spawn a built-in primitive (cube/sphere/â€¦) in front of the camera. Shapes
    * are model instances under a synthetic `shape:<type>` asset, so they reuse
    * the instance transform/selection/save pipeline; only the procedural model
    * needs registering on first use.
@@ -2092,7 +2074,7 @@ export class SceneApp {
 
     // Per placement: resolve the override material (if any) and the nearest
     // reflection-capture probe (if it covers the placement). A placement renders
-    // as a separate clone — and is hidden in the shared InstancedMesh — when it has
+    // as a separate clone â€” and is hidden in the shared InstancedMesh â€” when it has
     // an override material OR a probe envMap (clone-fallback per the plan); picking
     // stays intact because the clone carries `userData.placementIndex`.
     const decisions = placements.map((placement) => {
@@ -2173,7 +2155,9 @@ export class SceneApp {
       if (!isRenderableMesh(child)) return;
       const resolveMaterial = (source: Material): Material => {
         const base = overrideMaterial ?? source;
-        return bake ? assignProbeEnvMapMaterial(base, bake, clonedMaterials) : base;
+        return bake
+          ? assignProbeEnvMapMaterial(base, bake, clonedMaterials, this.scene.environment)
+          : base;
       };
       child.material = Array.isArray(child.material)
         ? child.material.map(resolveMaterial)
@@ -2269,7 +2253,6 @@ export class SceneApp {
       selection.kind === "sky" ||
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
-      selection.kind === "reflection" ||
       selection.kind === "post"
     ) return;
 
@@ -2640,7 +2623,7 @@ export class SceneApp {
     applyReflectionPlaneTransform(reflector, this.reflectionPlaneItem(actor));
   }
 
-  /** Recreates one reflector (needed when resolution changes — fixed at build). */
+  /** Recreates one reflector (needed when resolution changes â€” fixed at build). */
   private rebuildReflectionPlaneObject(index: number): void {
     const old = this.reflectionPlaneObjects[index];
     if (old) {
@@ -2815,7 +2798,7 @@ export class SceneApp {
 
   /**
    * Bakes (or re-bakes) one probe's PMREM cache, disposing any prior bake first.
-   * Hidden probes are not baked — their cache stays null so they never feed an
+   * Hidden probes are not baked â€” their cache stays null so they never feed an
    * envMap. Editor-only aids (helpers, gizmo, light icons, mirrors) are hidden for
    * the duration of the cubemap render so the capture sees only the real scene.
    */
@@ -2902,17 +2885,18 @@ export class SceneApp {
     for (const instance of this.layout.instances) {
       this.rebuildInstanceGroup(instance.assetId);
     }
+    const globalEnv = this.scene.environment;
     this.characterObjects.forEach((object, index) => {
       const character = this.layout?.characters[index];
       if (!object || !character) return;
       const bake = character.hidden ? null : this.probeBakeForPoint(this.objectWorldCenter(object));
-      applyProbeEnvMapToObject(object, bake);
+      applyProbeEnvMapToObject(object, bake, globalEnv);
     });
     this.actorObjects.forEach((object, index) => {
       const actor = this.layout?.actors?.[index];
       if (!object || !actor) return;
       const bake = actor.hidden ? null : this.probeBakeForPoint(this.objectWorldCenter(object));
-      applyProbeEnvMapToObject(object, bake);
+      applyProbeEnvMapToObject(object, bake, globalEnv);
     });
     // Instance groups were rebuilt, so refresh the selection outline against the
     // new objects (a selected instance may have become an envMap clone).
@@ -3006,7 +2990,7 @@ export class SceneApp {
       disposeSphereReflectionCaptureObject(helper);
     }
     this.refreshReflectionCaptureIndices();
-    // The removed probe's texture is now disposed — re-assign so nothing still
+    // The removed probe's texture is now disposed â€” re-assign so nothing still
     // references it (covered surfaces fall back to the next probe / global env).
     this.applyReflectionCaptureEnvMaps();
     return removed ? cloneSphereReflectionCapture(removed) : null;
@@ -3142,7 +3126,7 @@ export class SceneApp {
 
   /**
    * Re-bakes one probe's cubemap from the current scene. Not undoable: the cached
-   * PMREM is derived data (like {@link recaptureReflection}), so moving objects or
+   * PMREM is derived data (like {@link recaptureSkyLightCapture}), so moving objects or
    * the probe then pressing Recapture refreshes the capture without a history entry.
    */
   recaptureReflectionCapture(index: number): void {
@@ -3380,7 +3364,7 @@ export class SceneApp {
   /**
    * Builds/updates/removes the Sky Atmosphere dome to match `layout.skyAtmosphere`,
    * pushes the scattering uniforms + tone mapping, and positions the sun disc from
-   * the directional Sun light (the source of truth — Unreal's Atmosphere Sun Light).
+   * the directional Sun light (the source of truth â€” Unreal's Atmosphere Sun Light).
    */
   private applySkyAtmosphere(): void {
     const actor = this.layout?.skyAtmosphere ?? null;
@@ -3458,7 +3442,7 @@ export class SceneApp {
    * Applies a partial scattering edit to the Sky Atmosphere as one undoable
    * command. A patch value of `undefined` clears that field (reverts to its
    * default); any other value overrides it. (Sun direction lives on the Sun
-   * light — see {@link setSkySunDirection}.)
+   * light â€” see {@link setSkySunDirection}.)
    */
   setSkyAtmosphere(
     patch: { [K in keyof LayoutSkyAtmosphere]?: LayoutSkyAtmosphere[K] | undefined },
@@ -3490,7 +3474,7 @@ export class SceneApp {
       else delete this.layout.skyAtmosphere;
       this.applySkyAtmosphere();
       this.applyPostProcess();
-      // Sky/sun scattering changed → re-bake the Sky Light capture if one exists.
+      // Sky/sun scattering changed â†’ re-bake the Sky Light capture if one exists.
       this.applyReflection(true);
       if (!this.layout.skyAtmosphere && this.selection?.kind === "sky") this.select(null);
       else this.emitSelectionChanged();
@@ -3668,42 +3652,37 @@ export class SceneApp {
   }
 
   /**
-   * Captures/refreshes the Reflection Environment from the Sky Atmosphere and
-   * hangs it on `scene.environment`, so PBR materials reflect it and pick up its
-   * ambient bounce (à la Unreal's Sky Light static capture). `recapture` forces a
-   * fresh PMREM bake (first apply, or the sky/sun changed); otherwise an existing
-   * capture is reused and only the intensity is re-applied. A hidden/absent
-   * reflection — or a scene with no sky to capture from — clears the environment.
+   * Captures/refreshes the Sky Atmosphere's Sky Light Capture and hangs it on
+   * `scene.environment`, so PBR materials reflect it where no local Sphere
+   * Reflection Capture applies. `recapture` forces a fresh PMREM bake (first
+   * apply, or the sky/sun changed); otherwise an existing capture is reused and
+   * only the intensity is re-applied. A hidden/absent sky clears the environment.
    */
   private applyReflection(recapture = false): void {
-    const actor = this.layout?.reflection ?? null;
-    if (!actor) {
+    const skyActor = this.layout?.skyAtmosphere ?? null;
+    const sky = skyActor ? resolveSkyAtmosphere(skyActor) : null;
+    if (!sky || sky.hidden) {
       this.disposeReflectionTarget();
       applyReflectionEnvironment(this.scene, null, null);
-      return;
-    }
-    const resolved = resolveReflection(actor);
-    if (resolved.hidden) {
-      this.disposeReflectionTarget();
-      applyReflectionEnvironment(this.scene, null, resolved);
-      return;
-    }
-    if (recapture || !this.reflectionTarget) {
-      this.disposeReflectionTarget();
-      const skyActor = this.layout?.skyAtmosphere ?? null;
-      if (skyActor) {
+    } else {
+      if (recapture || !this.reflectionTarget) {
+        this.disposeReflectionTarget();
         const sun = this.sunLightActor();
         const sunDirection = sun
           ? sunDirectionFromLightRotation(readRotation(sun))
           : new Vector3(0, 1, 0);
-        this.reflectionTarget = captureSkyEnvironment(
-          this.renderer,
-          resolveSkyAtmosphere(skyActor),
-          sunDirection,
-        );
+        this.reflectionTarget = captureSkyEnvironment(this.renderer, sky, sunDirection);
       }
+      applyReflectionEnvironment(
+        this.scene,
+        this.reflectionTarget,
+        resolveReflection(sky.skyLightCapture),
+      );
     }
-    applyReflectionEnvironment(this.scene, this.reflectionTarget, resolved);
+    // The global env that probe boundary-blend fades toward just changed; rebind it
+    // onto the probe-covered clones. No-op during initial build (no bakes yet) and
+    // when there are no probes, so it only costs on later Sky Light Capture edits.
+    if (this.eligibleProbeBakes().length > 0) this.applyReflectionCaptureEnvMaps();
   }
 
   /** Frees the captured PMREM render target backing `scene.environment`, if any. */
@@ -3714,90 +3693,15 @@ export class SceneApp {
     }
   }
 
-  /** Adds the singleton Reflection Environment (or selects the existing one). */
-  addReflection(): void {
-    if (!this.layout) return;
-    if (this.layout.reflection) {
-      this.select({ kind: "reflection" });
-      this.onStatus?.("Reflection Environment already exists - selected it.", "info");
-      return;
-    }
-    this.commitReflection({}, "Add Reflection Environment");
-    this.select({ kind: "reflection" });
-    if (this.layout.skyAtmosphere) {
-      this.onStatus?.("Added Reflection Environment.", "info");
-    } else {
-      this.onStatus?.(
-        "Added Reflection Environment. Add a Sky Atmosphere to capture reflections from.",
-        "warning",
-      );
-    }
-  }
-
-  /** Removes the singleton Reflection Environment (undoable). */
-  removeReflection(): void {
-    if (!this.layout?.reflection) return;
-    this.commitReflection(undefined, "Delete Reflection Environment");
-  }
-
   /**
-   * Applies a partial edit to the Reflection Environment as one undoable command.
-   * A patch value of `undefined` clears that field (reverts to its default).
+   * Re-bakes the Sky Atmosphere's global sky-light capture from the current sky
+   * and Sun rotation. The captured PMREM is derived data, so recapture is not an
+   * undoable layout mutation.
    */
-  setReflection(
-    patch: { [K in keyof LayoutReflection]?: LayoutReflection[K] | undefined },
-    label = "Edit Reflection Environment",
-  ): void {
-    if (!this.layout?.reflection) return;
-    const next: LayoutReflection = { ...this.layout.reflection };
-    for (const key of Object.keys(patch) as Array<keyof LayoutReflection>) {
-      const value = patch[key];
-      if (value === undefined) delete next[key];
-      else (next as Record<string, unknown>)[key] = value;
-    }
-    this.commitReflection(next, label);
-  }
-
-  /**
-   * Re-bakes the reflection capture from the current sky/sun. Not undoable: the
-   * captured environment is a derived cache, not layout data, so rotating the Sun
-   * then pressing Recapture refreshes reflections without a history entry.
-   */
-  recaptureReflection(): void {
-    if (!this.layout?.reflection) return;
+  recaptureSkyLightCapture(): void {
+    if (!this.layout?.skyAtmosphere) return;
     this.applyReflection(true);
-    this.onStatus?.("Recaptured reflections from the sky.", "info");
-  }
-
-  /**
-   * Single undoable Reflection Environment mutation: swaps `layout.reflection`,
-   * recaptures/clears `scene.environment`, and re-emits panels. Selection is
-   * cleared if the actor disappears while it was the active selection.
-   */
-  private commitReflection(
-    nextReflection: LayoutReflection | undefined,
-    label: string,
-  ): void {
-    if (!this.layout) return;
-    const previousReflection = this.layout.reflection
-      ? { ...this.layout.reflection }
-      : undefined;
-
-    const apply = (reflection: LayoutReflection | undefined): void => {
-      if (!this.layout) return;
-      if (reflection) this.layout.reflection = { ...reflection };
-      else delete this.layout.reflection;
-      this.applyReflection();
-      if (!this.layout.reflection && this.selection?.kind === "reflection") this.select(null);
-      else this.emitSelectionChanged();
-      this.scheduleAutoSave();
-    };
-
-    this.executeCommand({
-      label,
-      redo: () => apply(nextReflection),
-      undo: () => apply(previousReflection),
-    });
+    this.onStatus?.("Recaptured Sky Light Capture from the sky.", "info");
   }
 
   /** Applies the global Post Process renderer properties after Sky tone mapping. */
@@ -3805,12 +3709,23 @@ export class SceneApp {
     const actor = this.layout?.postProcess ?? null;
     const resolved = actor ? resolvePostProcess(actor) : null;
     applyPostProcessToneMapping(this.renderer, resolved);
+    this.applySkyPostProcessExposure(resolved);
     this.postProcessPipeline?.setEffectPasses(
       createPostProcessEffectPasses(resolved, {
         width: window.innerWidth,
         height: window.innerHeight,
       }),
     );
+  }
+
+  private applySkyPostProcessExposure(post: ResolvedPostProcess | null): void {
+    if (!this.skyObject) return;
+    const sky = this.layout?.skyAtmosphere ? resolveSkyAtmosphere(this.layout.skyAtmosphere) : null;
+    if (!sky || sky.hidden || !post || post.hidden) {
+      setSkyLocalToneMappingExposure(this.skyObject, null);
+      return;
+    }
+    setSkyLocalToneMappingExposure(this.skyObject, post.exposure * sky.exposure);
   }
 
   /** Adds the singleton Post Process actor (or selects the existing one). */
@@ -3970,6 +3885,7 @@ export class SceneApp {
     // The Sky Atmosphere's visibility is applied through applySkyAtmosphere().
     if (selection.kind === "sky") {
       this.applySkyAtmosphere();
+      this.applyReflection(true);
       return;
     }
     // The Height Fog's visibility is applied through applyHeightFog().
@@ -3980,11 +3896,6 @@ export class SceneApp {
     // The Cloud Layer's visibility is applied through applyCloudLayer().
     if (selection.kind === "cloud") {
       this.applyCloudLayer();
-      return;
-    }
-    // The Reflection Environment's visibility toggles `scene.environment`.
-    if (selection.kind === "reflection") {
-      this.applyReflection();
       return;
     }
     if (selection.kind === "post") {
@@ -4205,7 +4116,7 @@ export class SceneApp {
     if (!activeTransform) return;
 
     // Pivot edit: `position` is the new pivot world point; map it back into the
-    // object's (fixed) local space and store as the pivot — the object stays put.
+    // object's (fixed) local space and store as the pivot â€” the object stays put.
     if (drag.pivotEdit && drag.pivotMatrixInverse) {
       const local = new Vector3(...position).applyMatrix4(drag.pivotMatrixInverse);
       this.applyPivotValue(drag.selection, [
@@ -4317,7 +4228,7 @@ export class SceneApp {
 
   private captureLinkedMoveStarts(active: Selection): LinkedMoveStart[] | undefined {
     // Everything that should move with the active object: the rest of the
-    // selection (groups/multi-select) plus all parent→child descendants.
+    // selection (groups/multi-select) plus all parentâ†’child descendants.
     const targets = new Map<string, Selection>();
     const add = (selection: Selection): void => {
       const id = selectionId(selection);
@@ -4339,7 +4250,7 @@ export class SceneApp {
 
   /**
    * Captures start world transforms of the active object's descendants so a
-   * parent rotate/scale can carry its children (cascade). Descendants only —
+   * parent rotate/scale can carry its children (cascade). Descendants only â€”
    * unlike captureLinkedMoveStarts, multi-selection siblings are not included.
    */
   private captureDescendantStarts(active: Selection): LinkedMoveStart[] | undefined {
@@ -4363,7 +4274,7 @@ export class SceneApp {
 
   /**
    * Re-derives each linked descendant's world transform as the parent moves:
-   * D1 = (P1 · P0⁻¹) · D0, so children keep their start offset/orientation
+   * D1 = (P1 Â· P0â»Â¹) Â· D0, so children keep their start offset/orientation
    * relative to the parent (UE-style hierarchy). Lights skip scale.
    */
   private applyCascadeToLinks(
@@ -4461,9 +4372,6 @@ export class SceneApp {
     if (selection.kind === "cloud") {
       return resolveCloudLayer(this.layout?.cloudLayer ?? null).name;
     }
-    if (selection.kind === "reflection") {
-      return resolveReflection(this.layout?.reflection ?? null).name;
-    }
     if (selection.kind === "post") {
       return resolvePostProcess(this.layout?.postProcess ?? null).name;
     }
@@ -4552,7 +4460,6 @@ export class SceneApp {
       selection.kind === "sky" ||
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
-      selection.kind === "reflection" ||
       selection.kind === "post"
     ) {
       return null;
@@ -4631,7 +4538,7 @@ export class SceneApp {
       return this.selectionOutline.cloneRenderableMeshes(actorObject);
     }
 
-    if (selection.kind === "reflection" || selection.kind === "post") {
+    if (selection.kind === "post") {
       return null;
     }
 
@@ -4910,7 +4817,6 @@ export class SceneApp {
       selection.kind === "sky" ||
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
-      selection.kind === "reflection" ||
       selection.kind === "post"
     ) {
       return null;
@@ -5075,7 +4981,6 @@ export class SceneApp {
     if (selection.kind === "sky") return Boolean(this.layout.skyAtmosphere);
     if (selection.kind === "fog") return Boolean(this.layout.heightFog);
     if (selection.kind === "cloud") return Boolean(this.layout.cloudLayer);
-    if (selection.kind === "reflection") return Boolean(this.layout.reflection);
     if (selection.kind === "post") return Boolean(this.layout.postProcess);
     if (selection.kind === "reflectionPlane") {
       return Boolean(this.layout.reflectionPlanes?.[selection.index]);

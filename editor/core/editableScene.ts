@@ -21,9 +21,10 @@ export interface EditableTransform {
 }
 
 /**
- * Resolved Sky Atmosphere fields for the Details panel (singleton actor). Only
- * scattering/exposure live here; the sun direction is owned by the directional
- * Sun light and edited via its own transform, not this panel.
+ * Resolved Sky Atmosphere fields for the Details panel (singleton actor). The
+ * sun direction is owned by the directional Sun light and edited via its own
+ * transform, not this panel. The global sky-light capture is authored here too,
+ * replacing the old separate Reflection Environment actor.
  */
 export interface EditableSky {
   name: string;
@@ -33,6 +34,9 @@ export interface EditableSky {
   mie: number;
   mieDirectionalG: number;
   exposure: number;
+  skyLightCapture: {
+    intensity: number;
+  };
 }
 
 /**
@@ -64,18 +68,6 @@ export interface EditableCloud {
   softness: number;
   scale: number;
   speed: number;
-}
-
-/**
- * Resolved Reflection Environment (Sky Light) fields for the Details panel. The
- * environment is captured from the sky; `intensity` scales the reflection +
- * ambient bounce.
- */
-export interface EditableReflection {
-  name: string;
-  hidden: boolean;
-  source: "sky";
-  intensity: number;
 }
 
 /**
@@ -168,8 +160,6 @@ export interface EditableSelection {
   fog?: EditableFog;
   /** Resolved Cloud Layer settings; present only when `kind === "cloud"`. */
   cloud?: EditableCloud;
-  /** Resolved Reflection Environment settings; present only when `kind === "reflection"`. */
-  reflection?: EditableReflection;
   /** Resolved Sphere Reflection Capture settings; present only when `kind === "reflectionCapture"`. */
   reflectionCapture?: EditableReflectionCapture;
   /** Resolved Post Process settings; present only when `kind === "post"`. */
