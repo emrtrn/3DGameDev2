@@ -259,6 +259,7 @@ import {
   createSphereReflectionCaptureObject,
   disposeSphereReflectionCaptureBake,
   resolveSphereReflectionCapture,
+  selectNearestReflectionCapture,
   uniqueSphereReflectionCaptureId,
   uniqueSphereReflectionCaptureName,
   SPHERE_REFLECTION_CAPTURE_DEFAULTS,
@@ -6586,6 +6587,65 @@ check("createSphereReflectionCaptureObject builds a helper scaled by radius", ()
   applySphereReflectionCaptureTransform(helper, { ...item, hidden: true, radius: 9 });
   assert.equal(helper.visible, false);
   assert.equal(helper.scale.x, 9);
+});
+
+check("selectNearestReflectionCapture scores by distance/radius and gates on radius", () => {
+  // No probes / out of every radius → null (global environment fallback).
+  assert.equal(selectNearestReflectionCapture([0, 0, 0], []), null);
+  assert.equal(
+    selectNearestReflectionCapture([100, 0, 0], [{ position: [0, 0, 0], radius: 5, priority: 0 }]),
+    null,
+  );
+  // A single covering probe wins; the boundary (score === 1) still counts.
+  assert.equal(
+    selectNearestReflectionCapture([3, 0, 0], [{ position: [0, 0, 0], radius: 5, priority: 0 }]),
+    0,
+  );
+  assert.equal(
+    selectNearestReflectionCapture([5, 0, 0], [{ position: [0, 0, 0], radius: 5, priority: 0 }]),
+    0,
+  );
+  // Lowest score wins: the point is closer (relative to radius) to probe 1.
+  assert.equal(
+    selectNearestReflectionCapture([4, 0, 0], [
+      { position: [0, 0, 0], radius: 5, priority: 0 },
+      { position: [5, 0, 0], radius: 5, priority: 0 },
+    ]),
+    1,
+  );
+  // Radius <= 0 probes are ignored.
+  assert.equal(
+    selectNearestReflectionCapture([0, 0, 0], [{ position: [0, 0, 0], radius: 0, priority: 0 }]),
+    null,
+  );
+});
+
+check("selectNearestReflectionCapture tie-breaks by priority, then radius, then order", () => {
+  const point: [number, number, number] = [0, 0, 0];
+  // Equal score (both at distance 0) → higher priority wins.
+  assert.equal(
+    selectNearestReflectionCapture(point, [
+      { position: [0, 0, 0], radius: 5, priority: 0 },
+      { position: [0, 0, 0], radius: 5, priority: 2 },
+    ]),
+    1,
+  );
+  // Equal score + priority → smaller radius wins (more local).
+  assert.equal(
+    selectNearestReflectionCapture(point, [
+      { position: [0, 0, 0], radius: 8, priority: 1 },
+      { position: [0, 0, 0], radius: 4, priority: 1 },
+    ]),
+    1,
+  );
+  // Equal score + priority + radius → earliest layout order wins.
+  assert.equal(
+    selectNearestReflectionCapture(point, [
+      { position: [0, 0, 0], radius: 5, priority: 1 },
+      { position: [0, 0, 0], radius: 5, priority: 1 },
+    ]),
+    0,
+  );
 });
 
 check("disposeSphereReflectionCaptureBake frees the cached PMREM target", () => {

@@ -196,7 +196,7 @@ AI tarafindan yazilan behavior:
 
 ### Faz 0 - Dokuman ve Sozlesme
 
-- [x] `docs/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md` olustur.
+- [x] `docs/completed/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md` olustur.
 - [x] `docs/UNREAL_BASICS_LESSONS.md` Progress Log'a bu mimari fazi kaydet.
 - [x] Kanonik dosya listesine yeni checklist'i ekle.
 - [x] Actor Script checklist'inde mevcut `EventBus later` kararini bu dokumana

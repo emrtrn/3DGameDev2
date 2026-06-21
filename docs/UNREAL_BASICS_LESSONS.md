@@ -97,7 +97,7 @@ tutkalı shell'lerde ince kalır.
   iletişim sözleşmesini taşır; behavior mantığı `src/game/` TypeScript kodunda
   yaşar; aktörler arası haberleşme direct reference, interface/capability,
   dispatcher/message binding ve BehaviorContext API'i üzerinden kurulacaktır.
-  Takip dokümanı: `docs/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md`.
+  Takip dokümanı: `docs/completed/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md`.
 
 ## Mevcut runtime taban çizgisi (kanıt)
 
@@ -289,7 +289,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 - *2026-06-20* — **Script Communication System checklist'i açıldı.** Actor
   Script'lerin büyük projelerde hardcoded `RuntimeSceneApp` aksiyonları yerine
   message/interface/dispatcher sözleşmesiyle haberleşmesi için ayrı takip
-  dokümanı oluşturuldu: `docs/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md`.
+  dokümanı oluşturuldu: `docs/completed/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md`.
   **Karar:** lamba testindeki özel `toggle-actor-light` akışı küçük test için
   kabul edilebilir; kalıcı model, AI tarafından yazılan `src/game/` behavior
   kodunun `BehaviorContext` içindeki `messages/world/state` API'lerini kullanması
@@ -317,7 +317,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 
 - *2026-06-20* — **Actor Script Faz 6 + Faz 8 — Browse/Play toolbar + AI behavior stub (tamam).**
   Checklist'in deferred-olmayan kalan maddeleri kapatıldı
-  (`docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 6 + Faz 8). **Toolbar Browse:**
+  (`docs/completed/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 6 + Faz 8). **Toolbar Browse:**
   `onBrowse` artık `EditorUi.revealContentAsset` — drawer'ı açar, asset'in
   klasörüne gider (ataları açar, tip/arama filtresini temizler), kartı seçer ve
   `flashContentCard` ile kısa süre vurgular (`is-revealed` CSS animasyonu); tek
@@ -341,7 +341,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 - *2026-06-20* — **Actor Script Faz 10.7 — Mesh seçici + viewport transform gizmo'ları (tamam).**
   Kullanıcı geri bildirimi ("Content'teki modeli MeshRenderer'a nasıl alacağım?
   viewport'ta transform aracı yok") üzerine iki UX boşluğu kapatıldı (checklist:
-  `docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 4 + Slice 10.7). **Mesh seçici:**
+  `docs/completed/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 4 + Slice 10.7). **Mesh seçici:**
   MeshRenderer Details formuna model varlıklarını isimleriyle listeleyen **Mesh**
   açılır listesi (`modelAssets()` → `isModelAssetType` süzme); seçim `props.assetId`'ye
   yazılır, viewport gerçek mesh'i gösterir; elle yazılmış/bilinmeyen id `... (unknown)`
@@ -364,7 +364,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 - *2026-06-19* — **Actor Script Faz 10 — editör 3D viewport (tamam).**
   `ActorScriptEditor`'ın placeholder kartı, sınıfın component-ağacını canlı render
   eden gerçek bir 3D viewport ile değiştirildi (checklist:
-  `docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 10). **Mimari:** saf, three.js'siz,
+  `docs/completed/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 10). **Mimari:** saf, three.js'siz,
   test edilebilir `engine/scene/actorPreview.ts` (`actorPreviewNodes(def)` → tüm
   ağacı koruyan flat preview-node listesi; runtime `actorInstanceToEntity`'nin
   flat-collapse'inin aksine **çoklu node + parent-child** korunur). Render tarafı
@@ -391,7 +391,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 
 - *2026-06-19* — **Actor Script Faz 7 Slice 3 — editör-içi yerleştirme (tamam).**
   Placed Actor Script class instance'ları artık editörde birinci-sınıf nesne
-  (checklist: `docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 7 Slice 3). **Kullanıcı
+  (checklist: `docs/completed/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 7 Slice 3). **Kullanıcı
   kararları:** kapsam = **tam** (sürükle-bırak + seç + gizmo + sil + undo/redo);
   edit-mode görsel = **gerçek mesh (WYSIWYG)**; per-instance override = **ertele**.
   **Kimlik/seçim:** `editor/core/selection.ts`'e `actor` union üyesi (index-bazlı,
@@ -418,7 +418,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 
 - *2026-06-19* — **Actor Script Faz 7 — Instance/Spawn katmanı (runtime yarısı).**
   Placed Actor Script class → runtime spawn dikey kesiti kuruldu (checklist:
-  `docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 7). **Veri modeli:**
+  `docs/completed/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 7). **Veri modeli:**
   `LayoutActorInstance { classRef, transform, hierarchy/flags }` +
   `RoomLayout.actors?` (`engine/scene/layout.ts`); `overrides` ertelendi (Sınıf ≠
   Instance korunur). **Saf spawn çekirdeği:** yeni `engine/scene/actorInstance.ts`
@@ -444,7 +444,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 
 - *2026-06-19* — **Actor Script (Blueprint) sistemi — authoring dikey kesiti.**
   Unreal Actor Blueprint'in Forge'a uygun, **veri-odaklı** versiyonu kuruldu
-  (rapor + checklist: `docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md`). **Karar:** görsel
+  (rapor + checklist: `docs/completed/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md`). **Karar:** görsel
   node grafiği **yok** — event = `scriptId + params`, mantık TS'te (`src/game/`),
   AI yazar; editör sadece parametreleri yüzeye çıkarır. **Veri modeli:**
   `engine/scene/actorScript.ts` (`ParentClass`, `ComponentTemplateNode`,
@@ -2081,7 +2081,7 @@ docs/
   ARCHITECTURE.md
   LAUNCH_WORKFLOW.md
   UNREAL_BASICS_LESSONS.md
-  SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md
+  completed/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md
   GAMEPLAY_FRAMEWORK_CHECKLIST.md
   ACTORS_COMPONENTS_CHECKLIST.md
   PACKAGING_CHECKLIST.md

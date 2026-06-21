@@ -334,19 +334,37 @@ Kabul:
 > yaşam döngüsüdür. Transform/radius/intensity/near/far/priority değişiminde otomatik
 > yeniden bake YOK (explicit Recapture); yalnızca resolution otomatik yeniden bake eder.
 
-### Faz 3 - Nearest-Probe EnvMap Assignment
+### Faz 3 - Nearest-Probe EnvMap Assignment ✅ (tamamlandı)
 
-- [ ] Renderable object world center hesaplama helper'ı ekle.
-- [ ] Nearest-probe seçim algoritmasını test et.
-- [ ] Non-instanced/override objects için material clone + envMap ata.
-- [ ] Instanced placements için probe bucket instancing ekle.
-- [ ] RuntimeSceneApp parity ekle.
+- [x] Renderable object world center hesaplama helper'ı ekle. (`placementWorldCenter`
+  = bounds-center × placement matrix; `objectWorldCenter` = `Box3.setFromObject` — her iki app'te.)
+- [x] Nearest-probe seçim algoritmasını test et. (`selectNearestReflectionCapture`
+  pure helper — score=dist/radius, gate score≤1, tie-break priority→radius→order; 2 test.)
+- [x] Non-instanced/override objects için material clone + envMap ata. (karakter + actor
+  in-place `applyProbeEnvMapToObject`; override clone'lar `assignProbeEnvMapMaterial` ile.)
+- [x] Instanced placements için ~~probe bucket instancing~~ **clone-fallback** ekle
+  (kullanıcı kararı): probe-içi placement'lar InstancedMesh'ten gizlenir, mevcut
+  material-override klon mekanizmasıyla envMap'li ayrı obje olarak render edilir;
+  picking `userData.placementIndex` ile korunur.
+- [x] RuntimeSceneApp parity ekle. (Play'de load sonrası bake + aynı clone-fallback
+  routing + char/actor envMap; statik tek seferlik, recapture yok.)
 
 Kabul:
 
-- Probe radius içindeki parlak/metallic PBR yüzeyler local cubemap'i kullanır.
-- Probe dışında global Reflection Environment fallback'i bozulmaz.
-- Editor ve Play aynı sonucu verir.
+- Probe radius içindeki parlak/metallic (`MeshStandardMaterial`) PBR yüzeyler local
+  cubemap'i kullanır. ✅ (`MeshBasicMaterial` etkilenmez.)
+- Probe dışında global Reflection Environment fallback'i bozulmaz. ✅ (probe yok →
+  envMap temizlenir, `scene.environment` devrede.)
+- Editor ve Play aynı sonucu verir. ✅ (paylaşılan `assignProbeEnvMapMaterial` +
+  `applyProbeEnvMapToObject` engine helper'ları + aynı seçim algoritması.)
+
+> Seçilen strateji: **clone-fallback** (probe bucket instancing yerine), çünkü
+> `instanceId == placementIndex` picking sözleşmesini bozmaz ve mevcut altyapıyı
+> kullanır. Dezavantaj: çok sayıda probe-içi statik objede instancing kaybı
+> (Faz 5 refinement adayı). Editor'de envMap ataması bake değişiminde (load/add/
+> remove/recapture/hidden/resolution) tetiklenir; transform/radius/intensity/priority
+> de canlı (radius/intensity/priority cache scalar'ı güncellenir), near/far explicit
+> Recapture bekler. Material clone'ları rebuild/dispose'da serbest bırakılır.
 
 ### Faz 4 - Parallax
 

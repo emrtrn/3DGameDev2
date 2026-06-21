@@ -4,10 +4,13 @@ import {
   HalfFloatType,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   NoToneMapping,
   PMREMGenerator,
   SphereGeometry,
   WebGLCubeRenderTarget,
+  type Material,
+  type Object3D,
   type Scene,
   type WebGLRenderer,
   type WebGLRenderTarget,
@@ -18,9 +21,11 @@ import type { ResolvedSphereReflectionCapture } from "@engine/scene/reflectionCa
 
 export {
   resolveSphereReflectionCapture,
+  selectNearestReflectionCapture,
   SPHERE_REFLECTION_CAPTURE_DEFAULTS,
   uniqueSphereReflectionCaptureId,
   uniqueSphereReflectionCaptureName,
+  type ReflectionCaptureProbe,
   type ResolvedSphereReflectionCapture,
 } from "@engine/scene/reflectionCapture";
 
@@ -154,4 +159,63 @@ export function bakeSphereReflectionCapture(
 /** Frees a baked probe's PMREM render target. */
 export function disposeSphereReflectionCaptureBake(bake: SphereReflectionCaptureBake): void {
   bake.target.dispose();
+}
+
+/** A `MeshStandardMaterial` (or subclass) — the only materials that take a probe envMap. */
+function isProbeEnvMaterial(material: Material): material is MeshStandardMaterial {
+  return material instanceof MeshStandardMaterial;
+}
+
+/**
+ * Returns a material carrying the probe's local envMap: clones the standard `base`
+ * material and assigns the PMREM texture + `envMapIntensity` (tracking the clone in
+ * `clonedMaterials` for later disposal). Non-standard materials (e.g.
+ * `MeshBasicMaterial`) are returned unchanged. Shared by the editor + runtime
+ * clone-fallback paths so a probe-covered surface samples the local capture.
+ */
+export function assignProbeEnvMapMaterial(
+  base: Material,
+  bake: SphereReflectionCaptureBake,
+  clonedMaterials: Material[],
+): Material {
+  if (!isProbeEnvMaterial(base)) return base;
+  const cloned = base.clone();
+  cloned.envMap = bake.target.texture;
+  cloned.envMapIntensity = bake.intensity;
+  cloned.needsUpdate = true;
+  clonedMaterials.push(cloned);
+  return cloned;
+}
+
+/**
+ * Assigns (or clears) a probe envMap on an individual object's standard-material
+ * surfaces in place. The object's original materials are remembered on first touch
+ * (`userData.captureBaseMaterial`); with a `bake` they are cloned + given the probe
+ * envMap, without one they are restored so the global `scene.environment` applies.
+ * Prior per-object clones are disposed before re-cloning. Shared by editor +
+ * runtime so characters/actors reflect identically in both.
+ */
+export function applyProbeEnvMapToObject(
+  object: Object3D,
+  bake: SphereReflectionCaptureBake | null,
+): void {
+  const previous = object.userData.captureMaterials as Material[] | undefined;
+  if (previous) for (const material of previous) material.dispose();
+  const cloned: Material[] = [];
+  object.traverse((child) => {
+    const mesh = child as Mesh;
+    if (!mesh.isMesh) return;
+    if (mesh.userData.captureBaseMaterial === undefined) {
+      mesh.userData.captureBaseMaterial = mesh.material;
+    }
+    const base = mesh.userData.captureBaseMaterial as Material | Material[];
+    if (!bake) {
+      mesh.material = base;
+      return;
+    }
+    mesh.material = Array.isArray(base)
+      ? base.map((material) => assignProbeEnvMapMaterial(material, bake, cloned))
+      : assignProbeEnvMapMaterial(base, bake, cloned);
+  });
+  object.userData.captureMaterials = cloned;
 }

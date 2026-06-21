@@ -1,4 +1,4 @@
-import type { LayoutSphereReflectionCapture } from "./layout";
+import type { LayoutSphereReflectionCapture, Vec3 } from "./layout";
 
 /**
  * Render-agnostic Sphere Reflection Capture model: resolved settings + defaults,
@@ -73,6 +73,57 @@ export function uniqueSphereReflectionCaptureId(
   let index = 1;
   while (existing.has(`reflection-capture-${index}`)) index += 1;
   return `reflection-capture-${index}`;
+}
+
+/**
+ * A probe candidate for nearest-probe selection: its world position + influence
+ * radius + overlap priority. Render-agnostic so the selection algorithm can be
+ * unit-tested and shared by the editor + runtime envMap-assignment passes.
+ */
+export interface ReflectionCaptureProbe {
+  position: Vec3;
+  radius: number;
+  priority: number;
+}
+
+/**
+ * Picks the probe whose influence best covers `point`, returning its index in
+ * `probes` (or null when no probe reaches the point). The score is
+ * `distance / radius`; a probe covers the point only when `score <= 1`. The lowest
+ * score wins; ties break by higher `priority`, then smaller `radius`, then earlier
+ * array order (the caller passes probes in layout order). Callers should pass only
+ * eligible probes (visible + baked); hidden/unbaked probes are excluded upstream.
+ */
+export function selectNearestReflectionCapture(
+  point: Vec3,
+  probes: readonly ReflectionCaptureProbe[],
+): number | null {
+  let bestIndex: number | null = null;
+  let bestScore = Infinity;
+  let bestPriority = -Infinity;
+  let bestRadius = Infinity;
+  for (let index = 0; index < probes.length; index += 1) {
+    const probe = probes[index]!;
+    if (probe.radius <= 0) continue;
+    const dx = point[0] - probe.position[0];
+    const dy = point[1] - probe.position[1];
+    const dz = point[2] - probe.position[2];
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const score = distance / probe.radius;
+    if (score > 1) continue;
+    const better =
+      score < bestScore ||
+      (score === bestScore &&
+        (probe.priority > bestPriority ||
+          (probe.priority === bestPriority && probe.radius < bestRadius)));
+    if (better) {
+      bestIndex = index;
+      bestScore = score;
+      bestPriority = probe.priority;
+      bestRadius = probe.radius;
+    }
+  }
+  return bestIndex;
 }
 
 /** A unique display name for a new capture, suffixing on collision. */

@@ -112,7 +112,7 @@ birleştirmek.
 - **Event Dispatcher analoğu**: `src/core/events.ts` `EventBus` — yorumda zaten
   "lightweight, code-only Event Dispatcher" olarak tanımlı. Actor Script'lerin
   gerçek haberleşme katmanına bağlanması artık ayrı takip dokümanında ele
-  alınıyor: `docs/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md`.
+  alınıyor: `docs/completed/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md`.
 - **Content "new" akışı**: `CONTENT_NEW_ITEMS` (`EditorUi.ts:74`) → `Script`
   dahil; `createContent` (`1496`) sadece isim sorar; `/__content-new` endpoint'i
   (`vite.config.ts:333`) `contentStubJson` (`tools/saveValidator.ts:813`) ile

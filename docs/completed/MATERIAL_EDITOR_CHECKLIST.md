@@ -373,7 +373,7 @@ Kabul kriteri:
 - [x] Loader mapping icin unit test veya headless smoke test ekle.
 - [x] `npm run build:verify` calistir.
 - [x] Bu checklist'te tamamlanan maddeleri sadece dogrulama sonrasi isaretle.
-- [x] Gerekirse `docs/STARTER_CONTENT.md` material preset bilgisini guncelle.
+- [x] Gerekirse `docs/completed/STARTER_CONTENT.md` material preset bilgisini guncelle.
 
 Kabul kriteri:
 

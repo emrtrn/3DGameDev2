@@ -98,6 +98,16 @@ import {
   captureSkyEnvironment,
   resolveReflection,
 } from "@engine/render-three/reflection";
+import {
+  applyProbeEnvMapToObject,
+  assignProbeEnvMapMaterial,
+  bakeSphereReflectionCapture,
+  disposeSphereReflectionCaptureBake,
+  resolveSphereReflectionCapture,
+  selectNearestReflectionCapture,
+  type SphereReflectionCaptureBake,
+  type SphereReflectionCaptureRenderItem,
+} from "@engine/render-three/reflectionCapture";
 import { readRotation } from "@engine/scene/transform";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
@@ -111,7 +121,14 @@ import {
   composePlacementMatrix,
   composeTransformMatrix,
 } from "@engine/render-three/transforms";
-import type { LayoutCharacter, LayoutLightActor, LayoutPlacement, RoomLayout } from "@engine/scene/layout";
+import type {
+  LayoutCharacter,
+  LayoutLightActor,
+  LayoutPlacement,
+  LayoutSphereReflectionCapture,
+  RoomLayout,
+  Vec3,
+} from "@engine/scene/layout";
 import {
   characterEntityId,
   roomLayoutToSceneDocument,
@@ -221,6 +238,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly assetMaterialSlots = new Map<string, AssetMaterialSlotsDef>();
   /** Cloned override mesh per overridden placement, keyed by `assetId:placementIndex`. */
   private readonly instanceOverrideObjects = new Map<string, Object3D>();
+  /** Baked PMREM cache per Sphere Reflection Capture, by index (null = hidden / unbaked). */
+  private reflectionCaptureBakes: (SphereReflectionCaptureBake | null)[] = [];
+  /** Per-asset materials cloned to carry a probe envMap; disposed on rebuild. */
+  private readonly instanceProbeMaterials = new Map<string, Material[]>();
   private characterObjects: Object3D[] = [];
   private characterRefs: RuntimeCharacterRef[] = [];
   private lightObjects: LightObjectRecord[] = [];
@@ -384,6 +405,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
     this.disposeReflectionTarget();
+    for (const bake of this.reflectionCaptureBakes) {
+      if (bake) disposeSphereReflectionCaptureBake(bake);
+    }
+    this.reflectionCaptureBakes = [];
+    this.disposeInstanceProbeMaterials();
     this.interactionPromptElement.remove();
     void this.engineApp.dispose();
     this.renderer.dispose();
@@ -496,6 +522,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.applyRuntimePostProcess();
     this.applyRuntimeFog();
     this.applyRuntimeClouds();
+    // Bake placed Sphere Reflection Captures from the finished scene + environment,
+    // then assign nearest-probe envMaps (Play parity with the editor).
+    this.buildRuntimeReflectionCaptures();
 
     const bytes = await this.assetLoader.totalBytesForGroups(this.layout.loadGroups);
     const materialStats = collectMaterialStats(this.models);
@@ -930,16 +959,24 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private createInstancedModel(assetId: string, placements: LayoutPlacement[]): Group {
     const gltf = this.models.get(assetId);
     if (!gltf) throw new Error(`Runtime asset missing: ${assetId}`);
-    // Placements with a loaded material override are hidden in the instanced mesh
-    // (its base material would otherwise draw) and rendered as a separate clone
-    // carrying the override material below.
-    const instancedPlacements = placements.map((placement) => {
+    const clonedMaterials: Material[] = [];
+    // Placements with a material override and/or a reflection-capture probe envMap
+    // are hidden in the instanced mesh and rendered as a separate clone (clone-
+    // fallback), matching the editor so Play renders identically.
+    const decisions = placements.map((placement) => {
       const materialSlot = this.resolvePlacementMaterialSlot(assetId, placement);
-      if (materialSlot && this.materialCache.has(materialSlot)) {
-        return { ...placement, hidden: true };
-      }
-      return placement;
+      const overrideMaterial =
+        materialSlot && this.materialCache.has(materialSlot)
+          ? this.materialCache.get(materialSlot)
+          : undefined;
+      const bake = placement.hidden
+        ? null
+        : this.probeBakeForPoint(this.placementWorldCenter(assetId, placement));
+      return { placement, overrideMaterial, bake, asClone: Boolean(overrideMaterial) || Boolean(bake) };
     });
+    const instancedPlacements = decisions.map((decision) =>
+      decision.asClone ? { ...decision.placement, hidden: true } : decision.placement,
+    );
     const { group, meshes } = buildSceneInstancedModel({
       assetId,
       gltf,
@@ -947,16 +984,23 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       castShadow: this.staticObjectsCastShadow(),
       receiveShadow: this.staticObjectsReceiveShadow(),
     });
-    placements.forEach((placement, placementIndex) => {
-      const materialSlot = this.resolvePlacementMaterialSlot(assetId, placement);
-      const material = materialSlot ? this.materialCache.get(materialSlot) : undefined;
-      if (!material || placement.hidden) return;
-      const object = this.createMaterialOverrideObject(assetId, placementIndex, placement, gltf, material);
+    decisions.forEach((decision, placementIndex) => {
+      if (!decision.asClone || decision.placement.hidden) return;
+      const object = this.createInstancedCloneObject(
+        assetId,
+        placementIndex,
+        decision.placement,
+        gltf,
+        decision.overrideMaterial,
+        decision.bake,
+        clonedMaterials,
+      );
       group.add(object);
       this.instanceOverrideObjects.set(overrideObjectKey(assetId, placementIndex), object);
     });
     this.instanceGroups.set(assetId, group);
     this.instanceMeshes.set(assetId, meshes);
+    this.instanceProbeMaterials.set(assetId, clonedMaterials);
     return group;
   }
 
@@ -965,19 +1009,23 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * A clone of the asset mesh carrying the override material, used for placements
-   * whose instanced slot is hidden. Matches the editor's authoring-time override
-   * object so Play renders identically.
+   * A clone of the asset mesh used for placements excluded from the shared
+   * InstancedMesh: those with a material override and/or a reflection-capture probe
+   * envMap. The base material is the override (when set) else the GLTF's own; a
+   * `bake` clones that base per-mesh and assigns the probe's PMREM envMap. Matches
+   * the editor's authoring-time clone so Play renders identically.
    */
-  private createMaterialOverrideObject(
+  private createInstancedCloneObject(
     assetId: string,
     placementIndex: number,
     placement: LayoutPlacement,
     gltf: GLTF,
-    material: Material,
+    overrideMaterial: Material | undefined,
+    bake: SphereReflectionCaptureBake | null,
+    clonedMaterials: Material[],
   ): Object3D {
     const object = gltf.scene.clone(true);
-    object.name = `${assetId}-material-override-${placementIndex}`;
+    object.name = `${assetId}-clone-${placementIndex}`;
     object.matrix.copy(composePlacementMatrix(placement));
     object.matrixAutoUpdate = false;
     object.visible = !(placement.hidden ?? false);
@@ -985,13 +1033,117 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     object.userData.placementIndex = placementIndex;
     object.traverse((child) => {
       if (!isRenderableMesh(child)) return;
+      const resolveMaterial = (source: Material): Material => {
+        const base = overrideMaterial ?? source;
+        return bake ? assignProbeEnvMapMaterial(base, bake, clonedMaterials) : base;
+      };
       child.material = Array.isArray(child.material)
-        ? child.material.map(() => material)
-        : material;
+        ? child.material.map(resolveMaterial)
+        : resolveMaterial(child.material);
       child.castShadow = this.staticObjectsCastShadow();
       child.receiveShadow = this.staticObjectsReceiveShadow();
     });
     return object;
+  }
+
+  /** Resolved settings + world transform for a reflection-capture layout actor. */
+  private reflectionCaptureItem(
+    actor: LayoutSphereReflectionCapture,
+  ): SphereReflectionCaptureRenderItem {
+    return {
+      ...resolveSphereReflectionCapture(actor),
+      position: [...actor.position],
+      rotation: readRotation(actor),
+    };
+  }
+
+  /** The baked, visible probes in layout order (the eligible nearest-probe pool). */
+  private eligibleProbeBakes(): SphereReflectionCaptureBake[] {
+    return this.reflectionCaptureBakes.filter(
+      (bake): bake is SphereReflectionCaptureBake => bake !== null,
+    );
+  }
+
+  /** The baked probe whose influence best covers `point`, or null for global fallback. */
+  private probeBakeForPoint(point: Vec3): SphereReflectionCaptureBake | null {
+    const bakes = this.eligibleProbeBakes();
+    if (bakes.length === 0) return null;
+    const index = selectNearestReflectionCapture(
+      point,
+      bakes.map((bake) => ({ position: bake.position, radius: bake.radius, priority: bake.priority })),
+    );
+    return index === null ? null : bakes[index]!;
+  }
+
+  /** World-space center of a static placement (bounds center if known, else its origin). */
+  private placementWorldCenter(assetId: string, placement: LayoutPlacement): Vec3 {
+    const matrix = composePlacementMatrix(placement);
+    const bounds = this.localBounds.get(assetId);
+    const center = bounds ? bounds.getCenter(new Vector3()) : new Vector3();
+    center.applyMatrix4(matrix);
+    return [center.x, center.y, center.z];
+  }
+
+  /** World-space center of an existing scene object (its current bounding box). */
+  private objectWorldCenter(object: Object3D): Vec3 {
+    const center = new Box3().setFromObject(object).getCenter(new Vector3());
+    return [center.x, center.y, center.z];
+  }
+
+  private disposeInstanceProbeMaterials(): void {
+    for (const materials of this.instanceProbeMaterials.values()) {
+      for (const material of materials) material.dispose();
+    }
+    this.instanceProbeMaterials.clear();
+  }
+
+  /**
+   * Bakes every visible Sphere Reflection Capture from the fully-built scene, then
+   * assigns nearest-probe envMaps for Play (parity with the editor): instance groups
+   * are rebuilt so probe-covered placements route to envMap clones (clone-fallback),
+   * and characters/actors get an in-place material clone + envMap. Static, one-shot
+   * at load — no recapture in Play. There are no editor aids in the runtime scene, so
+   * the cubemap render needs no visibility juggling.
+   */
+  private buildRuntimeReflectionCaptures(): void {
+    const captures = this.layout?.reflectionCaptures ?? [];
+    this.reflectionCaptureBakes = captures.map(() => null);
+    captures.forEach((actor, index) => {
+      const item = this.reflectionCaptureItem(actor);
+      if (item.hidden) return;
+      this.reflectionCaptureBakes[index] = bakeSphereReflectionCapture(
+        this.renderer,
+        this.scene,
+        item,
+      );
+    });
+    if (this.eligibleProbeBakes().length === 0) return;
+    this.applyRuntimeReflectionCaptureEnvMaps();
+  }
+
+  /** Re-routes instanced statics to probe envMap clones and assigns char/actor envMaps. */
+  private applyRuntimeReflectionCaptureEnvMaps(): void {
+    if (!this.layout) return;
+    this.disposeInstanceProbeMaterials();
+    this.instanceOverrideObjects.clear();
+    for (const instance of this.layout.instances) {
+      if (isPlayerStartAssetId(instance.assetId)) continue;
+      const previous = this.instanceGroups.get(instance.assetId);
+      if (previous) this.scene.remove(previous);
+      this.scene.add(this.createInstancedModel(instance.assetId, instance.placements));
+    }
+    this.characterObjects.forEach((object, index) => {
+      const character = this.layout?.characters[index];
+      if (!object || !character) return;
+      const bake = character.hidden ? null : this.probeBakeForPoint(this.objectWorldCenter(object));
+      applyProbeEnvMapToObject(object, bake);
+    });
+    for (const [index, object] of this.actorObjects) {
+      const actor = this.layout?.actors?.[index];
+      if (!actor) continue;
+      const bake = actor.hidden ? null : this.probeBakeForPoint(this.objectWorldCenter(object));
+      applyProbeEnvMapToObject(object, bake);
+    }
   }
 
   /**
