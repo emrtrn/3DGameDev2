@@ -34,6 +34,15 @@ export function isRenderableMesh(
   return object instanceof Mesh;
 }
 
+/**
+ * Emissive is authored in intuitive ~1-based units (1 starts to read as bloom) but
+ * the scene tone-maps from large linear-HDR values, so a small authored number must
+ * map to a large actual emissive to glow/bloom. This factor scales the authored
+ * `emissiveIntensity` to the three.js material's emissive strength (authored 1 →
+ * 1000). It is the counterpart to the bloom strength scale in `postProcess.ts`.
+ */
+export const EMISSIVE_INTENSITY_SCALE = 1000;
+
 export function createThreeMaterialFromForgeDef(
   def: ForgeMaterialDef,
   textures: ForgeMaterialTextureMaps = {},
@@ -55,7 +64,7 @@ export function createThreeMaterialFromForgeDef(
           roughness: def.roughness,
           metalness: def.metalness,
           emissive: new Color(def.emissive),
-          emissiveIntensity: def.emissiveIntensity,
+          emissiveIntensity: def.emissiveIntensity * EMISSIVE_INTENSITY_SCALE,
         });
 
   if (textures.baseColorTexture) {

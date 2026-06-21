@@ -223,7 +223,7 @@
     "density": 0.3,
     "softness": 0.3,
     "scale": 3,
-    "speed": 0.1
+    "speed": 0.2
   },
   "reflection": {
     "intensity": 0.5
@@ -259,8 +259,8 @@
         12.1,
         3.3
       ],
-      "color": "#fef2d2",
-      "intensity": 1,
+      "color": "#ffffff",
+      "intensity": 2,
       "castShadow": true
     }
   ],

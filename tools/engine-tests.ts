@@ -176,7 +176,10 @@ import {
 } from "../engine/scene/actorScript";
 import { actorPreviewNodes } from "../engine/scene/actorPreview";
 import { normalizeForgeMaterialDef } from "../engine/assets/material";
-import { createThreeMaterialFromForgeDef } from "../engine/render-three/materials";
+import {
+  createThreeMaterialFromForgeDef,
+  EMISSIVE_INTENSITY_SCALE,
+} from "../engine/render-three/materials";
 import {
   actorInstanceEntityId,
   actorInstanceToEntity,
@@ -4755,7 +4758,7 @@ check("forge material mapping creates matching Three material types and fields",
   assert.equal(standard.alphaTest, 0);
   assert.equal(standard.side, DoubleSide);
   assert.equal(standard.emissive.getHexString(), "101010");
-  assert.equal(standard.emissiveIntensity, 2);
+  assert.equal(standard.emissiveIntensity, 2 * EMISSIVE_INTENSITY_SCALE);
   standard.dispose();
 
   const baseColorTexture = new Texture();
