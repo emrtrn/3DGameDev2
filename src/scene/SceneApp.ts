@@ -121,11 +121,14 @@ import {
 } from "@engine/render-three/reflectionPlane";
 import {
   applySphereReflectionCaptureTransform,
+  bakeSphereReflectionCapture,
   createSphereReflectionCaptureObject,
+  disposeSphereReflectionCaptureBake,
   disposeSphereReflectionCaptureObject,
   resolveSphereReflectionCapture,
   uniqueSphereReflectionCaptureId,
   uniqueSphereReflectionCaptureName,
+  type SphereReflectionCaptureBake,
   type SphereReflectionCaptureObject,
   type SphereReflectionCaptureRenderItem,
 } from "@engine/render-three/reflectionCapture";
@@ -381,6 +384,8 @@ export class SceneApp {
   private reflectionPlaneObjects: ReflectionPlaneObject[] = [];
   /** Editor wireframe-sphere helpers for placed Sphere Reflection Capture actors, by index. */
   private reflectionCaptureObjects: SphereReflectionCaptureObject[] = [];
+  /** Baked PMREM cache per Sphere Reflection Capture, by index (null = not baked / hidden). */
+  private reflectionCaptureBakes: (SphereReflectionCaptureBake | null)[] = [];
   private postProcessPipeline: PostProcessPipeline | null = null;
   private autoSaveTimer = 0;
   private frameHandle = 0;
@@ -704,6 +709,7 @@ export class SceneApp {
     this.selectionOutline = null;
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
+    this.disposeReflectionCaptureBakes();
     this.lightOutlineGeometry.dispose();
     // EngineApp.dispose() is async (subsystems may release async resources);
     // SceneApp.dispose() is sync, so fire-and-forget like the renderer teardown.
@@ -2734,14 +2740,71 @@ export class SceneApp {
       this.scene.remove(helper);
       disposeSphereReflectionCaptureObject(helper);
     }
+    this.disposeReflectionCaptureBakes();
     this.reflectionCaptureObjects = [];
     const captures = this.layout?.reflectionCaptures ?? [];
+    this.reflectionCaptureBakes = captures.map(() => null);
     captures.forEach((actor, index) => {
       const helper = createSphereReflectionCaptureObject(this.reflectionCaptureItem(actor));
       helper.userData.reflectionCaptureIndex = index;
       this.reflectionCaptureObjects.push(helper);
       this.scene.add(helper);
     });
+    // Bake each probe once the whole scene is in place (helpers stay hidden during
+    // the cubemap render so they never pollute the reflection).
+    captures.forEach((_actor, index) => this.bakeReflectionCaptureAt(index));
+  }
+
+  /**
+   * Bakes (or re-bakes) one probe's PMREM cache, disposing any prior bake first.
+   * Hidden probes are not baked — their cache stays null so they never feed an
+   * envMap. Editor-only aids (helpers, gizmo, light icons, mirrors) are hidden for
+   * the duration of the cubemap render so the capture sees only the real scene.
+   */
+  private bakeReflectionCaptureAt(index: number): void {
+    const previous = this.reflectionCaptureBakes[index];
+    if (previous) disposeSphereReflectionCaptureBake(previous);
+    this.reflectionCaptureBakes[index] = null;
+    const actor = this.layout?.reflectionCaptures?.[index];
+    if (!actor) return;
+    const item = this.reflectionCaptureItem(actor);
+    if (item.hidden) return;
+    this.reflectionCaptureBakes[index] = this.withEditorAidsHidden(() =>
+      bakeSphereReflectionCapture(this.renderer, this.scene, item),
+    );
+  }
+
+  /** Disposes every cached probe bake and clears the cache array. */
+  private disposeReflectionCaptureBakes(): void {
+    for (const bake of this.reflectionCaptureBakes) {
+      if (bake) disposeSphereReflectionCaptureBake(bake);
+    }
+    this.reflectionCaptureBakes = [];
+  }
+
+  /**
+   * Runs `fn` with the editor-only visual aids hidden, restoring exactly the
+   * objects it hid. Used so a reflection-capture cubemap bake sees only the real
+   * scene (sky/instances/characters), not the gizmo, probe helpers, light icons,
+   * or planar mirrors.
+   */
+  private withEditorAidsHidden<T>(fn: () => T): T {
+    const hidden: Object3D[] = [];
+    const hide = (object: Object3D | null | undefined): void => {
+      if (object && object.visible) {
+        object.visible = false;
+        hidden.push(object);
+      }
+    };
+    hide(this.gizmoGroup);
+    for (const helper of this.reflectionCaptureObjects) hide(helper);
+    for (const reflector of this.reflectionPlaneObjects) hide(reflector);
+    for (const record of this.lightObjects) hide(record.gizmo);
+    try {
+      return fn();
+    } finally {
+      for (const object of hidden) object.visible = true;
+    }
   }
 
   /** Cheap transform/visibility/radius sync for one capture helper (gizmo drag + radius edit). */
@@ -2765,14 +2828,18 @@ export class SceneApp {
     this.layout.reflectionCaptures.splice(insertionIndex, 0, cloneSphereReflectionCapture(actor));
     const helper = createSphereReflectionCaptureObject(this.reflectionCaptureItem(actor));
     this.reflectionCaptureObjects.splice(insertionIndex, 0, helper);
+    this.reflectionCaptureBakes.splice(insertionIndex, 0, null);
     this.scene.add(helper);
     this.refreshReflectionCaptureIndices();
+    this.bakeReflectionCaptureAt(insertionIndex);
   }
 
   private removeReflectionCaptureAt(index: number): LayoutSphereReflectionCapture | null {
     if (!this.layout?.reflectionCaptures) return null;
     const [removed] = this.layout.reflectionCaptures.splice(index, 1);
     const [helper] = this.reflectionCaptureObjects.splice(index, 1);
+    const [bake] = this.reflectionCaptureBakes.splice(index, 1);
+    if (bake) disposeSphereReflectionCaptureBake(bake);
     if (helper) {
       this.scene.remove(helper);
       disposeSphereReflectionCaptureObject(helper);
@@ -2866,6 +2933,13 @@ export class SceneApp {
       if (!this.layout?.reflectionCaptures?.[index]) return;
       this.layout.reflectionCaptures[index] = cloneSphereReflectionCapture(value);
       this.refreshReflectionCaptureObject(index);
+      // Resolution is baked into the cube target, so a resolution change disposes
+      // the old bake and re-captures; other scalar edits wait for explicit Recapture.
+      const baked = this.reflectionCaptureBakes[index];
+      const resolved = resolveSphereReflectionCapture(this.layout.reflectionCaptures[index]);
+      if (!resolved.hidden && (!baked || baked.resolution !== resolved.resolution)) {
+        this.bakeReflectionCaptureAt(index);
+      }
       this.emitSelectionChanged();
       this.emitSceneObjectsChanged();
       this.scheduleAutoSave();
@@ -2890,6 +2964,31 @@ export class SceneApp {
   }): void {
     if (this.selection?.kind !== "reflectionCapture") return;
     this.setReflectionCapture(this.selection.index, patch);
+  }
+
+  /**
+   * Re-bakes one probe's cubemap from the current scene. Not undoable: the cached
+   * PMREM is derived data (like {@link recaptureReflection}), so moving objects or
+   * the probe then pressing Recapture refreshes the capture without a history entry.
+   */
+  recaptureReflectionCapture(index: number): void {
+    if (!this.layout?.reflectionCaptures?.[index]) return;
+    this.bakeReflectionCaptureAt(index);
+    this.onStatus?.("Recaptured Sphere Reflection Capture.", "info");
+  }
+
+  /** Re-bakes the currently selected probe (Details panel Recapture button). */
+  recaptureSelectedReflectionCapture(): void {
+    if (this.selection?.kind !== "reflectionCapture") return;
+    this.recaptureReflectionCapture(this.selection.index);
+  }
+
+  /** Re-bakes every placed probe from the current scene (bulk Recapture command). */
+  recaptureAllReflectionCaptures(): void {
+    const captures = this.layout?.reflectionCaptures ?? [];
+    if (captures.length === 0) return;
+    captures.forEach((_actor, index) => this.bakeReflectionCaptureAt(index));
+    this.onStatus?.(`Recaptured ${captures.length} Sphere Reflection Capture(s).`, "info");
   }
 
   private duplicateSelectionForDrag(selection: Selection): Selection | null {
@@ -3690,6 +3789,8 @@ export class SceneApp {
     }
     if (selection.kind === "reflectionCapture") {
       this.refreshReflectionCaptureObject(selection.index);
+      // Hiding disposes the probe bake (it leaves the envMap pool); showing re-bakes.
+      this.bakeReflectionCaptureAt(selection.index);
       return;
     }
     // The Sky Atmosphere's visibility is applied through applySkyAtmosphere().

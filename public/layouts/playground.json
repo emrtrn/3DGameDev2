@@ -274,7 +274,8 @@
         1.55
       ],
       "name": "Sphere Reflection Capture",
-      "radius": 4
+      "radius": 5,
+      "resolution": 512
     }
   ],
   "actors": [

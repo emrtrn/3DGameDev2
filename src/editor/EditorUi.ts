@@ -3340,7 +3340,9 @@ export class EditorUi {
             ${capture.parallax ? "checked" : ""} disabled />
           <span>Parallax Correction (planned)</span>
         </label>
-        <div class="detail-hint">Surfaces within the radius use this probe's local capture.</div>
+        <button type="button" data-capture-recapture class="detail-button">Recapture</button>
+        <button type="button" data-capture-recapture-all class="detail-button">Recapture All</button>
+        <div class="detail-hint">Static capture: bakes a cubemap from this point — press Recapture after moving the probe or scene.</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Actor</div>
@@ -3380,6 +3382,18 @@ export class EditorUi {
           patch[key] = value;
           this.app.setSelectedReflectionCapture(patch);
         });
+      });
+
+    this.detailsBody
+      .querySelector<HTMLButtonElement>("[data-capture-recapture]")
+      ?.addEventListener("click", () => {
+        this.app.recaptureSelectedReflectionCapture();
+      });
+
+    this.detailsBody
+      .querySelector<HTMLButtonElement>("[data-capture-recapture-all]")
+      ?.addEventListener("click", () => {
+        this.app.recaptureAllReflectionCaptures();
       });
 
     this.detailsBody

@@ -246,10 +246,12 @@ import {
 import {
   applySphereReflectionCaptureTransform,
   createSphereReflectionCaptureObject,
+  disposeSphereReflectionCaptureBake,
   resolveSphereReflectionCapture,
   uniqueSphereReflectionCaptureId,
   uniqueSphereReflectionCaptureName,
   SPHERE_REFLECTION_CAPTURE_DEFAULTS,
+  type SphereReflectionCaptureBake,
 } from "../engine/render-three/reflectionCapture";
 import {
   COLLISION_CHANNELS,
@@ -5757,6 +5759,26 @@ check("createSphereReflectionCaptureObject builds a helper scaled by radius", ()
   applySphereReflectionCaptureTransform(helper, { ...item, hidden: true, radius: 9 });
   assert.equal(helper.visible, false);
   assert.equal(helper.scale.x, 9);
+});
+
+check("disposeSphereReflectionCaptureBake frees the cached PMREM target", () => {
+  // The bake itself needs a live WebGL renderer (so it is exercised in the editor,
+  // like captureSkyEnvironment), but the dispose lifecycle is pure and testable.
+  let disposed = 0;
+  const bake = {
+    target: {
+      dispose() {
+        disposed += 1;
+      },
+    },
+    position: [0, 0, 0] as [number, number, number],
+    radius: 5,
+    intensity: 1,
+    priority: 0,
+    resolution: 256,
+  } as unknown as SphereReflectionCaptureBake;
+  disposeSphereReflectionCaptureBake(bake);
+  assert.equal(disposed, 1);
 });
 
 check("validateSphereReflectionCapture allowlists fields and round-trips through validateLayout", () => {

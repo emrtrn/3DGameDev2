@@ -3,7 +3,7 @@
   "type": "material",
   "materialType": "standard",
   "name": "Mirror",
-  "baseColor": "#7d7d7d",
+  "baseColor": "#6e6e6e",
   "baseColorTexture": null,
   "normalTexture": null,
   "maskTexture": null,

@@ -306,19 +306,33 @@ Kabul:
 > bir scale'i yoktur (boyut = `radius`), bu yüzden `applyTransform` capture için
 > `writeScale`'i atlar; `rotation` küre için kozmetiktir ama round-trip eder.
 
-### Faz 2 - CubeCamera Bake Cache
+### Faz 2 - CubeCamera Bake Cache ✅ (tamamlandı)
 
-- [ ] `engine/render-three/reflectionCapture.ts` binding ekle.
-- [ ] Probe başına cube render target + PMREM cache üret.
-- [ ] Recapture ve Recapture All komutları ekle.
-- [ ] Capture sırasında helper/editor-only görünürlüğünü güvenli yönet.
-- [ ] Dispose lifecycle testlerini ekle.
+- [x] `engine/render-three/reflectionCapture.ts` binding ekle. (`bakeSphereReflectionCapture`,
+  `SphereReflectionCaptureBake`, `disposeSphereReflectionCaptureBake`)
+- [x] Probe başına cube render target + PMREM cache üret.
+  (`WebGLCubeRenderTarget` → `CubeCamera.update` → `PMREMGenerator.fromCubemap`;
+  raw cube target bake sonunda dispose edilir, yalnızca PMREM target saklanır.)
+- [x] Recapture ve Recapture All komutları ekle. (`SceneApp.recaptureSelectedReflectionCapture`
+  / `recaptureAllReflectionCaptures`; Details panelde iki buton — undo'ya girmez, cache türetilmiş veridir.)
+- [x] Capture sırasında helper/editor-only görünürlüğünü güvenli yönet.
+  (`SceneApp.withEditorAidsHidden`: gizmo + probe helper'ları + planar mirror'lar +
+  light icon'ları bake süresince gizlenir, sonra geri açılır.)
+- [x] Dispose lifecycle testlerini ekle. (`disposeSphereReflectionCaptureBake` testi;
+  bake'in kendisi canlı WebGL gerektirir, `captureSkyEnvironment` gibi editor'de çalışır.)
 
 Kabul:
 
-- Probe capture cache oluşur.
-- Resolution değişimi eski target'ları dispose eder.
-- Hidden probe envMap seçimine katılmaz.
+- Probe capture cache oluşur. ✅ (load + add'de bake, `reflectionCaptureBakes[]` cache)
+- Resolution değişimi eski target'ları dispose eder. ✅ (`setReflectionCapture` apply'ı
+  resolution değişiminde eski bake'i dispose edip yeniden bake eder)
+- Hidden probe envMap seçimine katılmaz. ✅ (hidden probe bake edilmez; hidden toggle
+  bake'i dispose eder, görünür olunca yeniden bake eder)
+
+> Not: Faz 2'de cache oluşur ama henüz tüketilmez — nearest-probe envMap ataması Faz 3.
+> Bu yüzden Faz 2 görsel bir değişiklik üretmez; kabul kriterleri cache + dispose
+> yaşam döngüsüdür. Transform/radius/intensity/near/far/priority değişiminde otomatik
+> yeniden bake YOK (explicit Recapture); yalnızca resolution otomatik yeniden bake eder.
 
 ### Faz 3 - Nearest-Probe EnvMap Assignment
 
