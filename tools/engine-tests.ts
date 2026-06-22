@@ -7991,16 +7991,31 @@ check("resolvePostProcess fills defaults and overrides per field", () => {
   const effects = resolvePostProcess({
     bloom: { enabled: true, intensity: 1.2 },
     vignette: { enabled: true, offset: 0.8 },
+    chromaticAberration: { enabled: true, amount: 0.4 },
+    grain: { enabled: true, intensity: 0.7 },
+    dof: { enabled: true, focusDistance: 25, aperture: 1.5 },
     saturation: 1.25,
     contrast: 0.9,
+    temperature: 0.3,
+    tint: -0.2,
   });
   assert.equal(effects.bloom.enabled, true);
   assert.equal(effects.bloom.intensity, 1.2);
   assert.equal(effects.bloom.threshold, POST_PROCESS_DEFAULTS.bloom.threshold);
   assert.equal(effects.vignette.enabled, true);
   assert.equal(effects.vignette.offset, 0.8);
+  assert.equal(effects.chromaticAberration.enabled, true);
+  assert.equal(effects.chromaticAberration.amount, 0.4);
+  assert.equal(effects.grain.enabled, true);
+  assert.equal(effects.grain.intensity, 0.7);
+  assert.equal(effects.dof.enabled, true);
+  assert.equal(effects.dof.focusDistance, 25);
+  assert.equal(effects.dof.aperture, 1.5);
+  assert.equal(effects.dof.maxBlur, POST_PROCESS_DEFAULTS.dof.maxBlur);
   assert.equal(effects.saturation, 1.25);
   assert.equal(effects.contrast, 0.9);
+  assert.equal(effects.temperature, 0.3);
+  assert.equal(effects.tint, -0.2);
 });
 
 check("applyPostProcessToneMapping maps tonemapper enum and ignores hidden/null", () => {
@@ -8098,6 +8113,16 @@ check("hasPostProcessEffectPasses tracks enabled pass effects only", () => {
   assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ vignette: { enabled: true } })), true);
   assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ saturation: 1.1 })), true);
   assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ contrast: 0.9 })), true);
+  assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ chromaticAberration: { enabled: true } })), true);
+  assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ grain: { enabled: true } })), true);
+  assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ dof: { enabled: true } })), true);
+  assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ temperature: 0.5 })), true);
+  assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ tint: -0.5 })), true);
+  // Disabled DoF/CA/grain plus neutral white balance leave the chain empty.
+  assert.equal(
+    hasPostProcessEffectPasses(resolvePostProcess({ dof: { focusDistance: 30 }, temperature: 0 })),
+    false,
+  );
 });
 
 check("validatePostProcess allowlists fields and round-trips through validateLayout", () => {
@@ -8111,8 +8136,13 @@ check("validatePostProcess allowlists fields and round-trips through validateLay
     toneMapping: "neutral",
     bloom: { enabled: true, threshold: 0.7, intensity: 1.1, radius: 0.3 },
     vignette: { enabled: true, intensity: 0.45, offset: 0.9 },
+    chromaticAberration: { enabled: true, amount: 0.6 },
+    grain: { enabled: true, intensity: 0.4 },
+    dof: { enabled: true, focusDistance: 20, aperture: 1.2, maxBlur: 0.8 },
     saturation: 1.2,
     contrast: 0.85,
+    temperature: 0.25,
+    tint: -0.15,
     bogusField: "dropped",
   });
   assert.deepEqual(post, {
@@ -8122,13 +8152,24 @@ check("validatePostProcess allowlists fields and round-trips through validateLay
     toneMapping: "neutral",
     bloom: { enabled: true, threshold: 0.7, intensity: 1.1, radius: 0.3 },
     vignette: { enabled: true, intensity: 0.45, offset: 0.9 },
+    chromaticAberration: { enabled: true, amount: 0.6 },
+    grain: { enabled: true, intensity: 0.4 },
+    dof: { enabled: true, focusDistance: 20, aperture: 1.2, maxBlur: 0.8 },
     saturation: 1.2,
     contrast: 0.85,
+    temperature: 0.25,
+    tint: -0.15,
   });
   assert.throws(() => validatePostProcess({ exposure: 99 }));
   assert.throws(() => validatePostProcess({ toneMapping: "filmic" }));
   assert.throws(() => validatePostProcess({ bloom: { enabled: "yes" } }));
   assert.throws(() => validatePostProcess({ vignette: { intensity: 99 } }));
+  assert.throws(() => validatePostProcess({ chromaticAberration: { amount: 99 } }));
+  assert.throws(() => validatePostProcess({ grain: { intensity: 99 } }));
+  assert.throws(() => validatePostProcess({ dof: { focusDistance: 999 } }));
+  assert.throws(() => validatePostProcess({ dof: { enabled: "yes" } }));
+  assert.throws(() => validatePostProcess({ temperature: 5 }));
+  assert.throws(() => validatePostProcess({ tint: -5 }));
 
   const layout = validateLayout({
     schema: 1,
@@ -8140,14 +8181,18 @@ check("validatePostProcess allowlists fields and round-trips through validateLay
       exposure: 1.2,
       toneMapping: "none",
       bloom: { enabled: true, intensity: 0.6 },
+      dof: { enabled: true, focusDistance: 15 },
       saturation: 1.1,
+      temperature: 0.2,
     },
   }) as RoomLayout;
   assert.deepEqual(layout.postProcess, {
     exposure: 1.2,
     toneMapping: "none",
     bloom: { enabled: true, intensity: 0.6 },
+    dof: { enabled: true, focusDistance: 15 },
     saturation: 1.1,
+    temperature: 0.2,
   });
   assert.deepEqual(validateLayout(layout), layout);
 });

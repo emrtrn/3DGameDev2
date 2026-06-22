@@ -4,15 +4,19 @@ import {
   NoToneMapping,
   Vector2,
   type Camera,
+  type PerspectiveCamera,
   type Scene,
   type WebGLRenderer,
 } from "three";
+import { BokehPass } from "three/examples/jsm/postprocessing/BokehPass.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { FilmPass } from "three/examples/jsm/postprocessing/FilmPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import type { Pass } from "three/examples/jsm/postprocessing/Pass.js";
+import { RGBShiftShader } from "three/examples/jsm/shaders/RGBShiftShader.js";
 import { VignetteShader } from "three/examples/jsm/shaders/VignetteShader.js";
 
 import type { ResolvedPostProcess } from "@engine/scene/postProcess";
@@ -51,6 +55,8 @@ const COLOR_GRADING_SHADER = {
     tDiffuse: { value: null },
     saturation: { value: 1 },
     contrast: { value: 1 },
+    temperature: { value: 0 },
+    tint: { value: 0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -63,10 +69,16 @@ const COLOR_GRADING_SHADER = {
     uniform sampler2D tDiffuse;
     uniform float saturation;
     uniform float contrast;
+    uniform float temperature;
+    uniform float tint;
     varying vec2 vUv;
 
     void main() {
       vec4 color = texture2D(tDiffuse, vUv);
+      // White balance: temperature warms (+) / cools (-); tint shifts magenta (+) / green (-).
+      color.r += temperature * 0.1;
+      color.b -= temperature * 0.1;
+      color.g -= tint * 0.1;
       color.rgb = (color.rgb - 0.5) * contrast + 0.5;
       float luma = dot(color.rgb, vec3(0.299, 0.587, 0.114));
       color.rgb = mix(vec3(luma), color.rgb, saturation);
@@ -83,33 +95,84 @@ const COLOR_GRADING_SHADER = {
  */
 const BLOOM_INTENSITY_SCALE = 0.001;
 
+/**
+ * Authored chromatic-aberration amount (~1-based) maps to the RGBShift shader's
+ * UV shift distance, which is tiny (its default 0.005 is already visible). This
+ * factor keeps the authored slider intuitive (0.5 → the 0.005 default look).
+ */
+const CHROMATIC_ABERRATION_AMOUNT_SCALE = 0.01;
+
+/**
+ * DoF is authored against the 100u far-plane scale. `focusDistance` is passed
+ * straight through as world units; `aperture`/`maxBlur` are authored ~1-based and
+ * scaled to the BokehShader's much smaller blur units (factor·aperture clamped to
+ * maxblur, where the depth `factor` can reach ~90 in this scene).
+ */
+const DOF_APERTURE_SCALE = 0.0002;
+const DOF_MAXBLUR_SCALE = 0.01;
+
+/** Returns true when the grading ShaderPass would change the image at all. */
+function hasColorGrading(resolved: ResolvedPostProcess): boolean {
+  return (
+    resolved.saturation !== 1 ||
+    resolved.contrast !== 1 ||
+    resolved.temperature !== 0 ||
+    resolved.tint !== 0
+  );
+}
+
 export function createPostProcessEffectPasses(
   resolved: ResolvedPostProcess | null,
-  size: { width: number; height: number },
+  context: { scene: Scene; camera: PerspectiveCamera; width: number; height: number },
 ): Pass[] {
   if (!resolved || resolved.hidden) return [];
+  const { width, height } = context;
   const passes: Pass[] = [];
+  // Order (Section E): DoF near beauty → Bloom → grading → chromatic aberration →
+  // vignette → grain, with OutlinePass/OutputPass appended later by the pipeline.
+  if (resolved.dof.enabled) {
+    const bokehPass = new BokehPass(context.scene, context.camera, {
+      focus: resolved.dof.focusDistance,
+      aperture: resolved.dof.aperture * DOF_APERTURE_SCALE,
+      maxblur: resolved.dof.maxBlur * DOF_MAXBLUR_SCALE,
+    });
+    // BokehPass starts with a 1x1 depth target; size it before it enters the chain.
+    bokehPass.setSize(width, height);
+    passes.push(bokehPass);
+  }
   if (resolved.bloom.enabled) {
     passes.push(
       new UnrealBloomPass(
-        new Vector2(size.width, size.height),
+        new Vector2(width, height),
         resolved.bloom.intensity * BLOOM_INTENSITY_SCALE,
         resolved.bloom.radius,
         resolved.bloom.threshold,
       ),
     );
   }
-  if (resolved.saturation !== 1 || resolved.contrast !== 1) {
+  if (hasColorGrading(resolved)) {
     const gradingPass = new ShaderPass(COLOR_GRADING_SHADER);
     gradingPass.uniforms.saturation!.value = resolved.saturation;
     gradingPass.uniforms.contrast!.value = resolved.contrast;
+    gradingPass.uniforms.temperature!.value = resolved.temperature;
+    gradingPass.uniforms.tint!.value = resolved.tint;
     passes.push(gradingPass);
+  }
+  if (resolved.chromaticAberration.enabled) {
+    const caPass = new ShaderPass(RGBShiftShader);
+    caPass.uniforms.amount!.value =
+      resolved.chromaticAberration.amount * CHROMATIC_ABERRATION_AMOUNT_SCALE;
+    passes.push(caPass);
   }
   if (resolved.vignette.enabled) {
     const vignettePass = new ShaderPass(VignetteShader);
     vignettePass.uniforms.offset!.value = resolved.vignette.offset;
     vignettePass.uniforms.darkness!.value = resolved.vignette.intensity;
     passes.push(vignettePass);
+  }
+  if (resolved.grain.enabled) {
+    // FilmShader is pure grain (no scanlines) in three r150+, so no toggle needed.
+    passes.push(new FilmPass(resolved.grain.intensity, false));
   }
   return passes;
 }
@@ -120,8 +183,10 @@ export function hasPostProcessEffectPasses(resolved: ResolvedPostProcess | null)
       !resolved.hidden &&
       (resolved.bloom.enabled ||
         resolved.vignette.enabled ||
-        resolved.saturation !== 1 ||
-        resolved.contrast !== 1),
+        resolved.dof.enabled ||
+        resolved.chromaticAberration.enabled ||
+        resolved.grain.enabled ||
+        hasColorGrading(resolved)),
   );
 }
 

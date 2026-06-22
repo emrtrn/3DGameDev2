@@ -1718,6 +1718,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
     this.postProcessPipeline.setEffectPasses(
       createPostProcessEffectPasses(resolved, {
+        scene: this.scene,
+        camera: this.camera,
         width: window.innerWidth,
         height: window.innerHeight,
       }),

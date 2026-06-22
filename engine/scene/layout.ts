@@ -382,10 +382,31 @@ export interface LayoutPostProcess {
     intensity?: number;
     offset?: number;
   };
+  /** Chromatic aberration (RGB channel shift) pass settings. */
+  chromaticAberration?: {
+    enabled?: boolean;
+    amount?: number;
+  };
+  /** Film grain pass settings. */
+  grain?: {
+    enabled?: boolean;
+    intensity?: number;
+  };
+  /** Depth of field (bokeh) pass settings; distances are world units. */
+  dof?: {
+    enabled?: boolean;
+    focusDistance?: number;
+    aperture?: number;
+    maxBlur?: number;
+  };
   /** Global color saturation multiplier; 1 is neutral. */
   saturation?: number;
   /** Global contrast multiplier; 1 is neutral. */
   contrast?: number;
+  /** White-balance temperature; 0 is neutral, positive warms, negative cools. */
+  temperature?: number;
+  /** White-balance tint; 0 is neutral, positive shifts magenta, negative green. */
+  tint?: number;
 }
 
 export interface LayoutLightActor {

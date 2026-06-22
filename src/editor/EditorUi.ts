@@ -3989,6 +3989,16 @@ export class EditorUi {
           <input data-post-number="contrast" type="number" step="0.05" min="0" max="2"
             value="${post.contrast}" />
         </label>
+        <label class="detail-row">
+          <span>Temperature</span>
+          <input data-post-number="temperature" type="number" step="0.05" min="-1" max="1"
+            value="${post.temperature}" />
+        </label>
+        <label class="detail-row">
+          <span>Tint</span>
+          <input data-post-number="tint" type="number" step="0.05" min="-1" max="1"
+            value="${post.tint}" />
+        </label>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Vignette</div>
@@ -4005,6 +4015,52 @@ export class EditorUi {
           <span>Offset</span>
           <input data-post-vignette-number="offset" type="number" step="0.05" min="0" max="2"
             value="${post.vignette.offset}" />
+        </label>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Depth of Field</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-post-dof-enabled ${post.dof.enabled ? "checked" : ""} />
+          <span>Enabled</span>
+        </label>
+        <label class="detail-row">
+          <span>Focus Distance</span>
+          <input data-post-dof-number="focusDistance" type="number" step="0.5" min="0" max="100"
+            value="${post.dof.focusDistance}" />
+        </label>
+        <label class="detail-row">
+          <span>Aperture</span>
+          <input data-post-dof-number="aperture" type="number" step="0.05" min="0" max="2"
+            value="${post.dof.aperture}" />
+        </label>
+        <label class="detail-row">
+          <span>Max Blur</span>
+          <input data-post-dof-number="maxBlur" type="number" step="0.05" min="0" max="2"
+            value="${post.dof.maxBlur}" />
+        </label>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Chromatic Aberration</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-post-ca-enabled ${post.chromaticAberration.enabled ? "checked" : ""} />
+          <span>Enabled</span>
+        </label>
+        <label class="detail-row">
+          <span>Amount</span>
+          <input data-post-ca-number="amount" type="number" step="0.05" min="0" max="2"
+            value="${post.chromaticAberration.amount}" />
+        </label>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Film Grain</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-post-grain-enabled ${post.grain.enabled ? "checked" : ""} />
+          <span>Enabled</span>
+        </label>
+        <label class="detail-row">
+          <span>Intensity</span>
+          <input data-post-grain-number="intensity" type="number" step="0.05" min="0" max="1"
+            value="${post.grain.intensity}" />
         </label>
       </div>
     `;
@@ -4063,7 +4119,12 @@ export class EditorUi {
 
     this.detailsBody.querySelectorAll<HTMLInputElement>("[data-post-number]").forEach((input) => {
       input.addEventListener("change", () => {
-        const key = input.dataset.postNumber as "saturation" | "contrast" | undefined;
+        const key = input.dataset.postNumber as
+          | "saturation"
+          | "contrast"
+          | "temperature"
+          | "tint"
+          | undefined;
         const value = Number(input.value);
         if (!key || !Number.isFinite(value)) return;
         this.app.setPostProcess({ [key]: value }, "Edit Post Process Color Grading");
@@ -4100,6 +4161,79 @@ export class EditorUi {
           );
         });
       });
+
+    this.detailsBody.querySelector<HTMLInputElement>("[data-post-dof-enabled]")?.addEventListener(
+      "change",
+      (event) => {
+        this.app.setPostProcess(
+          { dof: { ...post.dof, enabled: (event.currentTarget as HTMLInputElement).checked } },
+          "Edit Post Process Depth of Field",
+        );
+      },
+    );
+
+    this.detailsBody.querySelectorAll<HTMLInputElement>("[data-post-dof-number]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.postDofNumber as keyof LayoutPostProcess["dof"] | undefined;
+        const value = Number(input.value);
+        if (!key || !Number.isFinite(value)) return;
+        this.app.setPostProcess(
+          { dof: { ...post.dof, [key]: value } },
+          "Edit Post Process Depth of Field",
+        );
+      });
+    });
+
+    this.detailsBody.querySelector<HTMLInputElement>("[data-post-ca-enabled]")?.addEventListener(
+      "change",
+      (event) => {
+        this.app.setPostProcess(
+          {
+            chromaticAberration: {
+              ...post.chromaticAberration,
+              enabled: (event.currentTarget as HTMLInputElement).checked,
+            },
+          },
+          "Edit Post Process Chromatic Aberration",
+        );
+      },
+    );
+
+    this.detailsBody.querySelectorAll<HTMLInputElement>("[data-post-ca-number]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.postCaNumber as
+          | keyof LayoutPostProcess["chromaticAberration"]
+          | undefined;
+        const value = Number(input.value);
+        if (!key || !Number.isFinite(value)) return;
+        this.app.setPostProcess(
+          { chromaticAberration: { ...post.chromaticAberration, [key]: value } },
+          "Edit Post Process Chromatic Aberration",
+        );
+      });
+    });
+
+    this.detailsBody.querySelector<HTMLInputElement>("[data-post-grain-enabled]")?.addEventListener(
+      "change",
+      (event) => {
+        this.app.setPostProcess(
+          { grain: { ...post.grain, enabled: (event.currentTarget as HTMLInputElement).checked } },
+          "Edit Post Process Film Grain",
+        );
+      },
+    );
+
+    this.detailsBody.querySelectorAll<HTMLInputElement>("[data-post-grain-number]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.postGrainNumber as keyof LayoutPostProcess["grain"] | undefined;
+        const value = Number(input.value);
+        if (!key || !Number.isFinite(value)) return;
+        this.app.setPostProcess(
+          { grain: { ...post.grain, [key]: value } },
+          "Edit Post Process Film Grain",
+        );
+      });
+    });
   }
 
   private handleDetailAction(action: string): void {

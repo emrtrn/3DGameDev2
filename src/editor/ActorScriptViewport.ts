@@ -17,7 +17,6 @@ import {
   AmbientLight,
   Box3,
   BoxGeometry,
-  BoxHelper,
   BufferGeometry,
   CanvasTexture,
   Color,
@@ -51,6 +50,10 @@ import { MeshoptDecoder } from "meshoptimizer";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { OutlinePass } from "three/examples/jsm/postprocessing/OutlinePass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 
 import {
   actorPreviewNodes,
@@ -98,7 +101,8 @@ const GIZMO_BUTTONS: ReadonlyArray<{ mode: GizmoMode; glyph: string; title: stri
 const PLACEHOLDER_COLOR = 0x8a8f96;
 const COLLIDER_COLOR = 0x49e6a2;
 const SENSOR_COLOR = 0xffb648;
-const SELECT_COLOR = 0xffd166;
+// Matches the main scene's selection outline (editorSelectionOutline.ts).
+const SELECT_OUTLINE_COLOR = 0xff9a1f;
 const MARKER_GLYPHS: Record<string, string> = {
   Audio: "♪",
   ParticleEmitter: "✺",
@@ -128,7 +132,8 @@ export class ActorScriptViewport {
 
   /** node id → its group (root of that node's local subtree). */
   private readonly nodeObjects = new Map<string, Group>();
-  private selectionHelper: BoxHelper | null = null;
+  private composer: EffectComposer | null = null;
+  private outlinePass: OutlinePass | null = null;
   private selectedNodeId: string | null = null;
 
   /** Loaded GLTF cache keyed by public-relative model path. */
@@ -194,7 +199,29 @@ export class ActorScriptViewport {
     this.scene.add(controls.getHelper());
     this.transformControls = controls;
 
+    this.setupComposer();
     this.updateCamera();
+  }
+
+  /**
+   * Post-process pipeline (RenderPass → OutlinePass → OutputPass) so a selected
+   * node is drawn with the same glowing outline as the main scene's selection,
+   * instead of a bounding box. Sized lazily by {@link resize}.
+   */
+  private setupComposer(): void {
+    const composer = new EffectComposer(this.renderer);
+    composer.addPass(new RenderPass(this.scene, this.camera));
+    const outline = new OutlinePass(new Vector2(1, 1), this.scene, this.camera, []);
+    outline.visibleEdgeColor.set(SELECT_OUTLINE_COLOR);
+    outline.hiddenEdgeColor.set(SELECT_OUTLINE_COLOR);
+    outline.edgeStrength = 4.5;
+    outline.edgeThickness = 1.5;
+    outline.edgeGlow = 0;
+    outline.pulsePeriod = 0;
+    composer.addPass(outline);
+    composer.addPass(new OutputPass());
+    this.composer = composer;
+    this.outlinePass = outline;
   }
 
   // --- gizmo (move / rotate / scale) -------------------------------------
@@ -264,9 +291,10 @@ export class ActorScriptViewport {
   private startRenderLoop(): void {
     const tick = (): void => {
       if (this.disposed) return;
-      // Keep the selection box tracking async-loaded meshes / live edits.
-      this.selectionHelper?.update();
-      this.renderer.render(this.scene, this.camera);
+      // The OutlinePass reads the selected group live, so async-loaded meshes and
+      // gizmo edits update the outline automatically.
+      if (this.composer) this.composer.render();
+      else this.renderer.render(this.scene, this.camera);
       this.rafId = requestAnimationFrame(tick);
     };
     this.rafId = requestAnimationFrame(tick);
@@ -278,6 +306,8 @@ export class ActorScriptViewport {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+    // Composer.setSize propagates to the OutlinePass's internal render targets.
+    this.composer?.setSize(width, height);
   }
 
   // --- camera controls (orbit / pan / dolly) -----------------------------
@@ -378,7 +408,7 @@ export class ActorScriptViewport {
     }
 
     this.hintEl.style.display = visibleCount > 0 ? "none" : "";
-    this.refreshSelectionHelper();
+    this.refreshOutline();
     this.attachGizmo();
     if (!this.userAdjustedCamera) this.frameToContent();
   }
@@ -524,25 +554,15 @@ export class ActorScriptViewport {
 
   setSelection(nodeId: string | null): void {
     this.selectedNodeId = nodeId;
-    this.refreshSelectionHelper();
+    this.refreshOutline();
     this.attachGizmo();
   }
 
-  private refreshSelectionHelper(): void {
-    if (this.selectionHelper) {
-      this.scene.remove(this.selectionHelper);
-      this.selectionHelper.geometry.dispose();
-      (this.selectionHelper.material as Material).dispose();
-      this.selectionHelper = null;
-    }
-    if (!this.selectedNodeId) return;
-    const group = this.nodeObjects.get(this.selectedNodeId);
-    if (!group || group.children.length === 0) return;
-    const helper = new BoxHelper(group, SELECT_COLOR);
-    helper.material.depthTest = false;
-    helper.renderOrder = 5;
-    this.scene.add(helper);
-    this.selectionHelper = helper;
+  /** Points the OutlinePass at the selected node's group (the scene's selection look). */
+  private refreshOutline(): void {
+    if (!this.outlinePass) return;
+    const group = this.selectedNodeId ? this.nodeObjects.get(this.selectedNodeId) : undefined;
+    this.outlinePass.selectedObjects = group ? [group] : [];
   }
 
   private pickAt(event: PointerEvent): void {
@@ -587,12 +607,8 @@ export class ActorScriptViewport {
   private clearBuild(): void {
     // Detach the gizmo before the node groups it points at are removed.
     this.transformControls?.detach();
-    if (this.selectionHelper) {
-      this.scene.remove(this.selectionHelper);
-      this.selectionHelper.geometry.dispose();
-      (this.selectionHelper.material as Material).dispose();
-      this.selectionHelper = null;
-    }
+    // The node groups are about to be removed; drop the outline's stale references.
+    if (this.outlinePass) this.outlinePass.selectedObjects = [];
     // Remove every node group; cloned model children share cached resources, so
     // they are detached (not disposed) — only build-created resources dispose.
     for (const group of this.nodeObjects.values()) {
@@ -626,6 +642,10 @@ export class ActorScriptViewport {
       void promise.then((gltf) => disposeGltf(gltf)).catch(() => {});
     }
     this.modelCache.clear();
+    this.outlinePass?.dispose();
+    this.composer?.dispose();
+    this.outlinePass = null;
+    this.composer = null;
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.hintEl.remove();

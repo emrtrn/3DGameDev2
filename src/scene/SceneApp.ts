@@ -4134,6 +4134,8 @@ export class SceneApp {
     this.applySkyPostProcessExposure(resolved);
     this.postProcessPipeline?.setEffectPasses(
       createPostProcessEffectPasses(resolved, {
+        scene: this.scene,
+        camera: this.camera,
         width: window.innerWidth,
         height: window.innerHeight,
       }),

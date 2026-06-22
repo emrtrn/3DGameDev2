@@ -123,8 +123,24 @@ export interface EditablePostProcess {
     intensity: number;
     offset: number;
   };
+  chromaticAberration: {
+    enabled: boolean;
+    amount: number;
+  };
+  grain: {
+    enabled: boolean;
+    intensity: number;
+  };
+  dof: {
+    enabled: boolean;
+    focusDistance: number;
+    aperture: number;
+    maxBlur: number;
+  };
   saturation: number;
   contrast: number;
+  temperature: number;
+  tint: number;
 }
 
 export interface EditableSelection {

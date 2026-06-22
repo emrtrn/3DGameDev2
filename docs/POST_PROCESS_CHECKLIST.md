@@ -383,14 +383,20 @@ Film Grain, AO, opsiyonel SMAA. Faz 1 yeşil geçtikten sonra; istenmezse iptal.
 Mevcut çekirdeğe (Bloom/Vignette/Saturation/Contrast) eklenecek, "tam paket"
 hissini tamamlayan düşük-maliyetli üçlü + en büyük eksik DoF (2026-06-20 onaylı).
 
-- [ ] **Chromatic Aberration** (`RGBShiftShader` ShaderPass):
-      `chromaticAberration{enabled,amount}` + Details + validator
-- [ ] **Film Grain** (`FilmPass`, yalnız gren — scanline kapalı):
-      `grain{enabled,intensity}` + Details + validator
-- [ ] **White Balance** (grading shader'a temp/tint uniform): `temperature`,
-      `tint` (Saturation/Contrast grading pass'ine eklenir) + Details + validator
-- [ ] **Depth of Field** (`BokehPass`): `dof{enabled,focusDistance,aperture,
-      maxBlur}`, 100u ölçeğine tune + Details + validator
+- [x] **Chromatic Aberration** (`RGBShiftShader` ShaderPass):
+      `chromaticAberration{enabled,amount}` + Details + validator (amount ×0.01
+      ölçek; nötr 0.5 → RGBShift varsayılan 0.005)
+- [x] **Film Grain** (`FilmPass`, yalnız gren — three r150+ FilmShader scanline'sız):
+      `grain{enabled,intensity}` (0..1, doğrudan) + Details + validator
+- [x] **White Balance** (grading shader'a temp/tint uniform): `temperature`,
+      `tint` (Saturation/Contrast grading pass'ine eklendi; nötr 0, aralık -1..1) +
+      Details + validator. Grading pass artık temp/tint ≠ 0 iken de zincire girer.
+- [x] **Depth of Field** (`BokehPass`): `dof{enabled,focusDistance,aperture,
+      maxBlur}`, 100u ölçeğine tune (focusDistance dünya birimi; aperture ×0.0002,
+      maxBlur ×0.01) + Details + validator. **DoF + BokehPass `scene`+`camera`
+      gerektirdiğinden `createPostProcessEffectPasses(resolved, {scene,camera,
+      width,height})` fabrikası bu oturumda genişletildi** (F2.4 AO bunu hazır
+      bulur). `bokehPass.setSize` pass kurulurken + composer resize'ında çağrılır.
 
 #### F2.3 — Bloom kalitesi (karar: global bloom korunuyor)
 
@@ -411,13 +417,15 @@ hissini tamamlayan düşük-maliyetli üçlü + en büyük eksik DoF (2026-06-20
 
 - [ ] **Ambient Occlusion** (`GTAOPass`): `ao{enabled,radius,intensity}` → GTAO
       (SSAOPass/SAOPass yerine seçildi, 2026-06-22). **Mimari not:** AO pass'i
-      `scene` + `camera` ister; mevcut `createPostProcessEffectPasses(resolved,
-      size)` fabrikasına bu ikisi geçirilmeli (Bloom/Vignette yalnız `size`
-      alıyor). RenderPass'ten hemen sonra, Bloom'dan **önce** girer; `radius` 100u
-      far-plane ölçeğine tune edilir; resize'da `gtaoPass.setSize`. Faz-1 pattern
-      ikizi: model alanı → `resolve` → fabrika → Details → `saveValidator`
-      allowlist → engine-tests. **Runtime'da kullanıcı tarafından kapatılabilir**
-      (maliyet yüksekse); o ayar UI'si **sonraki/ayrı iş** (ölçek dışı bırakıldı)
+      `scene` + `camera` ister; F2.2'de DoF için fabrika imzası zaten
+      `createPostProcessEffectPasses(resolved, {scene,camera,width,height})`
+      olarak genişletildi — AO `context.scene`/`context.camera`'yı doğrudan
+      kullanır, ek imza değişikliği gerekmez. AO, RenderPass'ten hemen sonra,
+      DoF/Bloom'dan **önce** girer; `radius` 100u far-plane ölçeğine tune edilir;
+      resize'da `gtaoPass.setSize`. Faz-1 pattern ikizi: model alanı → `resolve` →
+      fabrika → Details → `saveValidator` allowlist → engine-tests. **Runtime'da
+      kullanıcı tarafından kapatılabilir** (maliyet yüksekse); o ayar UI'si
+      **sonraki/ayrı iş** (ölçek dışı bırakıldı)
 - [ ] **Anti-alias** toggle (`SMAAPass`): `antialias: "none" | "smaa"`
 - [ ] Bölgesel grading: shadows/midtones/highlights (lift/gamma/gain)
 

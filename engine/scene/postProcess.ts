@@ -18,8 +18,26 @@ export interface ResolvedPostProcess {
     intensity: number;
     offset: number;
   };
+  chromaticAberration: {
+    enabled: boolean;
+    amount: number;
+  };
+  grain: {
+    enabled: boolean;
+    intensity: number;
+  };
+  dof: {
+    enabled: boolean;
+    focusDistance: number;
+    aperture: number;
+    maxBlur: number;
+  };
   saturation: number;
   contrast: number;
+  /** White-balance temperature; 0 is neutral, positive warms, negative cools. */
+  temperature: number;
+  /** White-balance tint; 0 is neutral, positive shifts magenta, negative green. */
+  tint: number;
 }
 
 export const POST_PROCESS_DEFAULTS: ResolvedPostProcess = {
@@ -38,8 +56,24 @@ export const POST_PROCESS_DEFAULTS: ResolvedPostProcess = {
     intensity: 0.35,
     offset: 1,
   },
+  chromaticAberration: {
+    enabled: false,
+    amount: 0.5,
+  },
+  grain: {
+    enabled: false,
+    intensity: 0.5,
+  },
+  dof: {
+    enabled: false,
+    focusDistance: 10,
+    aperture: 1,
+    maxBlur: 1,
+  },
   saturation: 1,
   contrast: 1,
+  temperature: 0,
+  tint: 0,
 };
 
 /** Fills every Post Process field with its default, decoupled from the layout. */
@@ -61,7 +95,21 @@ export function resolvePostProcess(
       ...defaults.vignette,
       ...actor.vignette,
     },
+    chromaticAberration: {
+      ...defaults.chromaticAberration,
+      ...actor.chromaticAberration,
+    },
+    grain: {
+      ...defaults.grain,
+      ...actor.grain,
+    },
+    dof: {
+      ...defaults.dof,
+      ...actor.dof,
+    },
     saturation: actor.saturation ?? defaults.saturation,
     contrast: actor.contrast ?? defaults.contrast,
+    temperature: actor.temperature ?? defaults.temperature,
+    tint: actor.tint ?? defaults.tint,
   };
 }

@@ -875,10 +875,20 @@ export function validatePostProcess(value: unknown): Record<string, unknown> | n
   if (bloom) post.bloom = bloom;
   const vignette = validatePostProcessVignette(input.vignette);
   if (vignette) post.vignette = vignette;
+  const chromaticAberration = validatePostProcessChromaticAberration(input.chromaticAberration);
+  if (chromaticAberration) post.chromaticAberration = chromaticAberration;
+  const grain = validatePostProcessGrain(input.grain);
+  if (grain) post.grain = grain;
+  const dof = validatePostProcessDof(input.dof);
+  if (dof) post.dof = dof;
   const saturation = validateOptionalNumber(input.saturation, "postProcess.saturation", 0, 2);
   if (saturation !== undefined) post.saturation = saturation;
   const contrast = validateOptionalNumber(input.contrast, "postProcess.contrast", 0, 2);
   if (contrast !== undefined) post.contrast = contrast;
+  const temperature = validateOptionalNumber(input.temperature, "postProcess.temperature", -1, 1);
+  if (temperature !== undefined) post.temperature = temperature;
+  const tint = validateOptionalNumber(input.tint, "postProcess.tint", -1, 1);
+  if (tint !== undefined) post.tint = tint;
 
   return post;
 }
@@ -919,6 +929,62 @@ function validatePostProcessVignette(value: unknown): Record<string, unknown> | 
   const offset = validateOptionalNumber(input.offset, "postProcess.vignette.offset", 0, 2);
   if (offset !== undefined) vignette.offset = offset;
   return Object.keys(vignette).length > 0 ? vignette : undefined;
+}
+
+function validatePostProcessChromaticAberration(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("postProcess.chromaticAberration must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const ca: Record<string, unknown> = {};
+  if (input.enabled !== undefined) {
+    if (typeof input.enabled !== "boolean") {
+      throw new Error("postProcess.chromaticAberration.enabled must be boolean");
+    }
+    if (input.enabled) ca.enabled = true;
+  }
+  const amount = validateOptionalNumber(input.amount, "postProcess.chromaticAberration.amount", 0, 2);
+  if (amount !== undefined) ca.amount = amount;
+  return Object.keys(ca).length > 0 ? ca : undefined;
+}
+
+function validatePostProcessGrain(value: unknown): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("postProcess.grain must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const grain: Record<string, unknown> = {};
+  if (input.enabled !== undefined) {
+    if (typeof input.enabled !== "boolean") throw new Error("postProcess.grain.enabled must be boolean");
+    if (input.enabled) grain.enabled = true;
+  }
+  const intensity = validateOptionalNumber(input.intensity, "postProcess.grain.intensity", 0, 1);
+  if (intensity !== undefined) grain.intensity = intensity;
+  return Object.keys(grain).length > 0 ? grain : undefined;
+}
+
+function validatePostProcessDof(value: unknown): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("postProcess.dof must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const dof: Record<string, unknown> = {};
+  if (input.enabled !== undefined) {
+    if (typeof input.enabled !== "boolean") throw new Error("postProcess.dof.enabled must be boolean");
+    if (input.enabled) dof.enabled = true;
+  }
+  const focusDistance = validateOptionalNumber(input.focusDistance, "postProcess.dof.focusDistance", 0, 100);
+  if (focusDistance !== undefined) dof.focusDistance = focusDistance;
+  const aperture = validateOptionalNumber(input.aperture, "postProcess.dof.aperture", 0, 2);
+  if (aperture !== undefined) dof.aperture = aperture;
+  const maxBlur = validateOptionalNumber(input.maxBlur, "postProcess.dof.maxBlur", 0, 2);
+  if (maxBlur !== undefined) dof.maxBlur = maxBlur;
+  return Object.keys(dof).length > 0 ? dof : undefined;
 }
 
 export function validateLayout(value: unknown): unknown {
