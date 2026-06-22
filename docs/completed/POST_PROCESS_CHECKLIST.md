@@ -530,15 +530,16 @@ target yolu yalnızca SMAA yetersiz kalırsa ayrı kalite deneyi olarak ele alı
       lifecycle'ına bağlı
 - [x] `hasPostProcessEffectPasses` anti-alias açıkken composer yolunu aktif eder;
       anti-alias kapalı ve diğer pass'ler nötrse runtime düz render yoluna döner
-- [ ] Manuel kontrol: Play + editor kenarları, OutlinePass çizgileri, yüksek
+- [x] Manuel kontrol: Play + editor kenarları, OutlinePass çizgileri, yüksek
       kontrastlı mesh kenarları ve performans/draw-call etkisi
 
 #### F2.6 — Test & doğrulama
 
-- [ ] Pass sırası + resize + dispose her efekt için doğrulanmış
-- [ ] `tools/engine-tests.ts`: `applyPostProcess` enabled-set'e göre pass ekleme/
+- [x] Pass sırası + resize + dispose her efekt için doğrulanmış
+- [x] `tools/engine-tests.ts`: `applyPostProcess` enabled-set'e göre pass ekleme/
       çıkarma + her efekt lifecycle testi
-- [ ] `npx tsc --noEmit` temiz + akış doğrulaması
+- [x] `npx tsc --noEmit` temiz + akış doğrulaması (`npm run build:verify`,
+      277 engine-test, dist strict temiz)
 
 ---
 

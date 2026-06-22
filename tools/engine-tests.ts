@@ -15,12 +15,16 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
+  PerspectiveCamera,
   PointLight,
   RepeatWrapping,
   SRGBColorSpace,
+  Scene,
   Texture,
+  Vector2,
   type Material,
 } from "three";
+import { Pass } from "three/examples/jsm/postprocessing/Pass.js";
 import {
   characterEntity,
   characterEntityId,
@@ -265,7 +269,10 @@ import {
 } from "../engine/render-three/cloudLayer";
 import {
   applyPostProcessToneMapping,
+  createPostProcessAntialiasPass,
+  createPostProcessEffectPasses,
   hasPostProcessEffectPasses,
+  PostProcessPipeline,
   postProcessToneMappingExposure,
   resolvePostProcess,
   POST_PROCESS_DEFAULTS,
@@ -8132,6 +8139,181 @@ check("hasPostProcessEffectPasses tracks enabled pass effects only", () => {
     hasPostProcessEffectPasses(resolvePostProcess({ dof: { focusDistance: 30 }, temperature: 0 })),
     false,
   );
+});
+
+class TrackedPass extends Pass {
+  disposed = 0;
+  lastSize: [number, number] | null = null;
+
+  constructor(readonly label: string) {
+    super();
+  }
+
+  override setSize(width: number, height: number): void {
+    this.lastSize = [width, height];
+  }
+
+  override dispose(): void {
+    this.disposed += 1;
+  }
+}
+
+function postProcessPipelinePassLabels(pipeline: PostProcessPipeline): string[] {
+  const composer = (pipeline as unknown as { composer: { passes: Pass[] } }).composer;
+  return composer.passes.map((pass) =>
+    pass instanceof TrackedPass ? pass.label : pass.constructor.name,
+  );
+}
+
+function createPostProcessPipelineForTest(): PostProcessPipeline {
+  const renderer = {
+    getPixelRatio: () => 1,
+    getSize: (target: Vector2) => target.set(320, 180),
+  } as unknown as import("three").WebGLRenderer;
+  return new PostProcessPipeline({
+    renderer,
+    scene: new Scene(),
+    camera: new PerspectiveCamera(60, 1, 0.1, 100),
+    width: 320,
+    height: 180,
+  });
+}
+
+check("createPostProcessEffectPasses follows enabled-set ordering", () => {
+  const context = {
+    scene: new Scene(),
+    camera: new PerspectiveCamera(60, 1, 0.1, 100),
+    width: 320,
+    height: 180,
+  };
+  assert.deepEqual(createPostProcessEffectPasses(null, context), []);
+  assert.deepEqual(createPostProcessEffectPasses(resolvePostProcess({ hidden: true, bloom: { enabled: true } }), context), []);
+  assert.deepEqual(createPostProcessEffectPasses(resolvePostProcess({}), context), []);
+
+  const passes = createPostProcessEffectPasses(
+    resolvePostProcess({
+      ao: { enabled: true },
+      dof: { enabled: true },
+      bloom: { enabled: true },
+      saturation: 1.1,
+      chromaticAberration: { enabled: true },
+      vignette: { enabled: true },
+      grain: { enabled: true },
+    }),
+    context,
+  );
+  assert.deepEqual(
+    passes.map((pass) => pass.constructor.name.replace(/^_/, "")),
+    [
+      "ForgeGtaoPass",
+      "BokehPass",
+      "UnrealBloomPass",
+      "ShaderPass",
+      "ShaderPass",
+      "ShaderPass",
+      "FilmPass",
+    ],
+  );
+  passes.forEach((pass) => pass.dispose());
+});
+
+check("createPostProcessAntialiasPass creates SMAA only when enabled", () => {
+  assert.equal(createPostProcessAntialiasPass(null, { width: 320, height: 180 }), null);
+  assert.equal(
+    createPostProcessAntialiasPass(resolvePostProcess({ hidden: true, antialias: "smaa" }), {
+      width: 320,
+      height: 180,
+    }),
+    null,
+  );
+  assert.equal(
+    createPostProcessAntialiasPass(resolvePostProcess({ antialias: "none" }), {
+      width: 320,
+      height: 180,
+    }),
+    null,
+  );
+
+  const previousImage = (globalThis as unknown as { Image?: typeof Image }).Image;
+  class TestImage {
+    onload: (() => void) | null = null;
+    set src(_value: string) {
+      this.onload?.();
+    }
+  }
+  (globalThis as unknown as { Image?: typeof Image }).Image = TestImage as unknown as typeof Image;
+  try {
+    const pass = createPostProcessAntialiasPass(resolvePostProcess({ antialias: "smaa" }), {
+      width: 320,
+      height: 180,
+    });
+    assert.equal(pass?.constructor.name, "SMAAPass");
+    pass?.dispose();
+  } finally {
+    (globalThis as unknown as { Image?: typeof Image }).Image = previousImage;
+  }
+});
+
+check("PostProcessPipeline keeps effect, outline, SMAA, output order and lifecycles", () => {
+  const pipeline = createPostProcessPipelineForTest();
+  assert.deepEqual(postProcessPipelinePassLabels(pipeline), ["RenderPass", "OutputPass"]);
+
+  const outline = new TrackedPass("outline");
+  pipeline.addPassBeforeOutput(outline);
+  assert.deepEqual(postProcessPipelinePassLabels(pipeline), ["RenderPass", "outline", "OutputPass"]);
+
+  const bloom = new TrackedPass("bloom");
+  const vignette = new TrackedPass("vignette");
+  pipeline.setEffectPasses([bloom, vignette]);
+  assert.deepEqual(postProcessPipelinePassLabels(pipeline), [
+    "RenderPass",
+    "bloom",
+    "vignette",
+    "outline",
+    "OutputPass",
+  ]);
+
+  const smaa = new TrackedPass("smaa");
+  pipeline.setAntialiasPass(smaa);
+  assert.deepEqual(postProcessPipelinePassLabels(pipeline), [
+    "RenderPass",
+    "bloom",
+    "vignette",
+    "outline",
+    "smaa",
+    "OutputPass",
+  ]);
+
+  const grain = new TrackedPass("grain");
+  pipeline.setEffectPasses([grain]);
+  assert.equal(bloom.disposed, 1);
+  assert.equal(vignette.disposed, 1);
+  assert.deepEqual(postProcessPipelinePassLabels(pipeline), [
+    "RenderPass",
+    "grain",
+    "outline",
+    "smaa",
+    "OutputPass",
+  ]);
+
+  pipeline.setAntialiasPass(null);
+  assert.equal(smaa.disposed, 1);
+  assert.deepEqual(postProcessPipelinePassLabels(pipeline), [
+    "RenderPass",
+    "grain",
+    "outline",
+    "OutputPass",
+  ]);
+
+  pipeline.setSize(640, 360);
+  assert.deepEqual(grain.lastSize, [640, 360]);
+  assert.deepEqual(outline.lastSize, [640, 360]);
+
+  pipeline.dispose();
+  assert.equal(grain.disposed, 1);
+  assert.equal(outline.disposed, 1);
+  assert.equal(bloom.disposed, 1);
+  assert.equal(vignette.disposed, 1);
 });
 
 check("validatePostProcess allowlists fields and round-trips through validateLayout", () => {
