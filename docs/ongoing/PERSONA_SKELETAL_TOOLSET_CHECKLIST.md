@@ -79,6 +79,13 @@ paylaşır; üstteki mod/asset anahtarıyla geçiş yapılır.
     — `gltf.animations` içinden **tek bir isimli klibi** oynatır.
   - [`createCharacterSceneObject`](../../engine/render-three/models.ts) (≈satır 168)
     — `gltf.scene`'i klonlar, transform uygular (`ensureVertexNormals`).
+- **Animasyon mantığı zaten saf kod (Anim BP'nin işlevi):**
+  [`locomotionAnimation.ts`](../../src/game/locomotionAnimation.ts) — iki katman:
+  `classifyLocomotion` (kinematik → idle/walk/run/jump/fall state machine) +
+  `resolveLocomotionClip` (state → klip ismi, fallback zinciriyle). Bu, bir Unreal
+  **Animation Blueprint**'inin state-machine + klip-eşleme işlevidir; blend'i
+  `CrossfadeAnimator` yapar. Yani Anim BP'nin *işlevi* var, *görsel node-graph
+  editörü* yok — ve bu Forge'un "oyun kuralları game runtime'da" ilkesiyle uyumlu.
 - **Asset tipleri zaten var:** [`manifest.ts`](../../engine/assets/manifest.ts)
   `skeletalMesh` ve `animation` tiplerini tanımlar (satır 1-9).
 - **Routing boşluğu:** `isModelAssetType` (manifest.ts:153) hem `staticMesh` hem
@@ -109,6 +116,8 @@ paylaşır; üstteki mod/asset anahtarıyla geçiş yapılır.
 Forge web-first ve hafif; Persona'nın tamamı (cloth, LOD reduction, ragdoll,
 retargeting) aşırı. Faithful ama sadeleştirilmiş, fazlı bir model:
 
+### C.1 Persona editör modları / mesh özellikleri
+
 | Unreal kavramı | Forge karşılığı | Karar |
 | --- | --- | --- |
 | Skeleton Tree + kemik görselleştirme | bone traverse ağacı + `SkeletonHelper` | **Al (Faz 1)** |
@@ -124,6 +133,26 @@ retargeting) aşırı. Faithful ama sadeleştirilmiş, fazlı bir model:
 | Cloth Paint | bez simülasyonu | **Atla** |
 | Skeleton retargeting | iskeletler arası remap | **Atla** (gerekirse çok sonra) |
 | Make Static Mesh / Reimport | (web import akışı farklı) | **Atla / opsiyonel** |
+
+### C.2 Animasyon asset tipleri (Unreal "Animation" oluştur menüsü)
+
+Unreal'in 10 animasyon asset tipi AAA motora özgü zenginlik. Forge anim mantığını
+zaten `src/game`'de saf kod olarak tuttuğu için (bkz. Bölüm B), bunların çoğu ya
+gereksiz ya da data ile çözülür. **Yeni bir editör türü (Anim Blueprint vb.)
+gerekmiyor.**
+
+| Unreal asset | Ne işe yarar | Forge'daki durum/karşılık | Karar |
+| --- | --- | --- | --- |
+| **Animation Blueprint** | State machine + blend graph; hangi anim ne zaman | `locomotionAnimation.ts` + `CrossfadeAnimator` zaten yapıyor | **İşlevi var; görsel editör KURMA.** Gerekirse data state machine'e evril |
+| **Blend Space** | İki eksende (hız/yön) sürekli poz harmanı | Yok — tek aktif klip, eşikte walk→run *sıçrar* | **Gerçek aday ihtiyaç — Faz 2 (data)** |
+| **Animation Montage** | Tek-atış aksiyon + section + notify, base üstüne katman | Yok — sadece locomotion crossfade | **Sadeleştirilmiş gerek — Faz 3 (montage-lite)** |
+| **Animation Composite** | Klipleri tek timeline'a ardışık dizme | İhtiyaç olursa data'da diziyle | **Ertele** (montage-lite büyük ölçüde kapsar) |
+| **Aim Offset** | Nişan yönüne (pitch/yaw) additive poz harmanı | Nişan alan oyun türüne özel | **Ertele / Atla** (gerekirse Blend Space üstüne) |
+| **Pose Asset** | İsimli pozlar; yüz ifadesi / curve-driven additive | Morph previewer (Faz 2) kısmen örtüşür | **Ertele** (yüz animasyonu netleşince) |
+| **Mirror Data Table** | Sol/sağ animasyonu kemik eşlemesiyle aynalama | Az sayıda klipte gereksiz optimizasyon | **Atla** |
+| **Animation Layer Interface** | Modüler / linked anim blueprint arayüzü | Görsel Anim BP kurulmadığı için anlamsız | **Atla** |
+| **Animation Bank** | Kalabalık/instanced için anim→texture bake (Mass) | İleri AAA optimizasyonu, web'de yok | **Atla** |
+| **Variable Frame Stripping** | Platform başına frame sıyırma/sıkıştırma | Web import pipeline'ında karşılığı yok | **Atla** |
 
 ---
 
@@ -153,6 +182,14 @@ retargeting) aşırı. Faithful ama sadeleştirilmiş, fazlı bir model:
 - **Editor generic kalır:** skeletal araç seti engine-generic'tir; proje-özel
   hangi rolün hangi state'te çalacağı game runtime/data'da yaşar (locomotion
   seçici zaten `src/game`'de).
+- **Anim mantığı kod/data'da, node-graph editörü YOK:** Unreal'in Animation
+  Blueprint'ine karşılık görsel bir grafik editörü **kurulmaz** — mantık
+  `src/game`'de saf, test edilebilir kod kalır; kod seçicisini aşarsak
+  **data-driven state machine** (`*.animgraph.json`) olarak ifade ederiz, editöre
+  değil oyun verisine ait. **Blend Space** ve **Montage** de node-graph değil,
+  **data + `AnimationMixer`** (ağırlıklar / section'lar) üzerine kurulur. Persona'nın
+  Animation modu mantığı değil, yalnızca **önizleme + metadata authoring**
+  (anim-set, blend points, sockets, notifies) yapar.
 - **Bundle ayrımı:** SkeletalMeshEditor `src/editor/` altında, dinamik `?editor`
   importunun arkasında; game build'e girmez.
 
@@ -167,7 +204,8 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [x] Unreal Persona dokümanlarını incele ve özetle (Bölüm A)
 - [x] Forge mevcut durumu çıkar (Bölüm B)
 - [x] Kapsam/eşleme (Bölüm C) ve mimari karar (Bölüm D) — tek kabuk + modlar
-- [ ] Faz sıralamasını kullanıcıyla onayla
+- [x] Faz sıralamasını kullanıcıyla onayla (2026-06-22)
+- [x] Unreal animasyon asset menüsünü analiz et → kapsam (Bölüm C.2 + D)
 
 ### Faz 1 — Persona Kabuğu + Skeleton/Mesh Görüntüleme (en yüksek değer)
 
@@ -196,12 +234,22 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
       ile düzenle, `sockets[]` sidecar'a yaz
 - [ ] Socket'e preview asset takıp konumlandırma (silah/prop attach önizlemesi)
 - [ ] **Morph Target Previewer**: `morphTargetInfluences` slider'ları
+- [ ] **Blend Space (data)**: 1D/2D blend noktaları tanımla (örn. hız →
+      idle↔walk↔run sürekli harman) + viewport önizleme; runtime'da `AnimationMixer`
+      ağırlıklarıyla harman. `blendSpaces` sidecar'a yazılır. (CrossfadeAnimator'ın
+      "tek aktif klip" modelini çok-klip ağırlıklı harmana yükseltmenin authoring ucu;
+      node-graph değil, saf data.)
 
-### Faz 3 — Animation Notifies (ertelenmiş)
+### Faz 3 — Animation Notifies + Montage-lite (ertelenmiş)
 
 - [ ] Klip timeline'ında **notify** işaretleri ekle/düzenle (ayak sesi, hasar
       penceresi, efekt tetikleyici)
 - [ ] `notifies[]` sidecar formatı + runtime'da notify yayını (event akışı)
+- [ ] **Montage-lite**: tek-atış aksiyon — bir klibi (veya section dizisini) bir
+      kez oynat, base locomotion'a blend-in/out, ortasında notify yay
+      (saldırı / zıplama / reload). `montages[]` sidecar formatı + runtime tetikleme API'si
+- [ ] (opsiyonel) Montage section'ları / basit branching — Animation Composite
+      ihtiyacını da büyük ölçüde karşılar
 
 ### Faz 4 — Physics Mode / PhAT-lite (ertelenmiş, opsiyonel)
 
@@ -214,7 +262,7 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 ### Faz 5 — Persistans & Save Validator
 
 - [ ] `src/editor/assetSkeletonStore.ts` + `*.skeleton.json` formatı
-      (`sockets`, `animationSet`, `notifies`, preview prefs)
+      (`sockets`, `animationSet`, `blendSpaces`, `notifies`, `montages`, preview prefs)
 - [ ] Dev endpoint `/__save-skeleton` (yazma) + `loadAssetSkeleton` (okuma,
       eksik/bozuk → güvenli default)
 - [ ] `LayoutCharacter` yeni alanlarını `tools/saveValidator.ts` allowlist'ine ekle
@@ -240,3 +288,9 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
    küçük bir base çıkarıp iki editörün paylaşması (kod tekrarını baştan önler).
 3. **Physics mode (PhAT) gerçekten gerekli mi?** Ragdoll ihtiyacı netleşene kadar
    ertelenmiş; mod anahtarında yer tutucu olarak durur.
+4. **Unreal animasyon asset menüsü** (Anim BP / Blend Space / Montage / Aim Offset /
+   Composite / Pose / Mirror / Layer Interface / Bank / Frame Stripping): analiz
+   edildi (Bölüm C.2). Yeni editör türü gerekmiyor. Karakter sistemi için gerçek
+   genişleme yalnızca **Blend Space (Faz 2, data)** ve **Montage-lite (Faz 3)** —
+   ikisi de node-graph değil, data + `AnimationMixer`. Görsel Anim Blueprint editörü
+   bilinçli olarak kapsam dışı (Bölüm D). Kalan asset'ler ertelendi/atlandı.

@@ -29,10 +29,10 @@ engine/editor.
 
 ## Docs
 
-- `docs/ARCHITECTURE.md`: boundary contract.
-- `docs/ARCHITECTURE_PLAN_SOURCE.md`: imported source architecture plan.
-- `docs/LAUNCH_WORKFLOW.md`: practical VS Code and URL launch path.
-- `docs/UNREAL_BASICS_LESSONS.md`: the canonical roadmap. Top section is the
+- `docs/architecture/ARCHITECTURE.md`: boundary contract.
+- `docs/architecture/ARCHITECTURE_PLAN_SOURCE.md`: imported source architecture plan.
+- `docs/architecture/LAUNCH_WORKFLOW.md`: practical VS Code and URL launch path.
+- `docs/architecture/UNREAL_BASICS_LESSONS.md`: the canonical roadmap. Top section is the
   **active execution track** (Gameplay/Runtime, G1–G6, with status legend +
   Progress Log); §1–§6 are the Unreal-derived architecture lessons (north star +
   backlog). The completed post-migration cleanup checklist

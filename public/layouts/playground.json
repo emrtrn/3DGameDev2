@@ -193,18 +193,7 @@
     },
     {
       "assetId": "wallcorner",
-      "placements": [
-        {
-          "position": [
-            -2.33,
-            0.25,
-            0.22
-          ],
-          "collisionPreset": "blockAll",
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     }
   ],
   "characters": [],

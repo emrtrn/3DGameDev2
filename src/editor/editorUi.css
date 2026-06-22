@@ -2,7 +2,7 @@
  * Editor-only styles. Imported as a side effect from EditorUi.ts, which is
  * itself only reached through the dynamic, DEV-gated import in src/main.ts.
  * Vite therefore emits this CSS into the editor chunk and keeps it out of the
- * production game build (see docs/ARCHITECTURE.md: "must not contain editor UI").
+ * production game build (see docs/architecture/ARCHITECTURE.md: "must not contain editor UI").
  * Runtime/canvas/overlay styles stay in src/style.css.
  */
 
