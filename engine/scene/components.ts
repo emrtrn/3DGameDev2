@@ -1,5 +1,6 @@
 import type { Entity, SceneJsonValue } from "./entity";
 import type { LayoutPhysicsAxisLocks, ParticleMaterialMode, Vec3 } from "./layout";
+import { resolveCapsuleDimensions } from "./capsule";
 
 export type { ParticleMaterialMode };
 
@@ -134,6 +135,10 @@ export interface ColliderComponent {
   shape: ColliderShape;
   /** World-axis-aligned full size (placement scale already baked in). */
   size: Vec3;
+  /** Capsule radius before conversion to the legacy size AABB. */
+  capsuleRadius?: number;
+  /** Capsule half-height from center to top/bottom of the hemispheres. */
+  capsuleHalfHeight?: number;
   /**
    * Offset of the collider center from the entity's transform position, in world
    * space (placement scale baked in). Absent means centered on the position.
@@ -482,16 +487,30 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
   if (typeof data.shape !== "string" || !COLLIDER_SHAPES.includes(data.shape as ColliderShape)) {
     return undefined;
   }
-  const size = readVec3(data.size);
+  const shape = data.shape as ColliderShape;
+  const authoredSize = readVec3(data.size);
+  const capsuleRadius =
+    shape === "capsule" ? readFiniteNumber(data.capsuleRadius, NaN, 0) : NaN;
+  const capsuleHalfHeight =
+    shape === "capsule" ? readFiniteNumber(data.capsuleHalfHeight, NaN, 0) : NaN;
+  const capsule =
+    shape === "capsule" && Number.isFinite(capsuleRadius) && Number.isFinite(capsuleHalfHeight)
+      ? resolveCapsuleDimensions(capsuleRadius, capsuleHalfHeight)
+      : null;
+  const size = capsule?.size ?? authoredSize;
   if (!size) return undefined;
   if (typeof data.isStatic !== "boolean" || typeof data.isSensor !== "boolean") return undefined;
-  const center = readVec3(data.center);
+  const center = readVec3(data.center) ?? capsule?.center;
   const component: ColliderComponent = {
-    shape: data.shape as ColliderShape,
+    shape,
     size,
     isStatic: data.isStatic,
     isSensor: data.isSensor,
   };
+  if (capsule) {
+    component.capsuleRadius = capsule.radius;
+    component.capsuleHalfHeight = capsule.halfHeight;
+  }
   if (center) component.center = center;
   const primitives = readColliderPrimitives(data.primitives);
   if (primitives) component.primitives = primitives;

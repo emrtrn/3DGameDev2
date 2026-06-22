@@ -21,6 +21,7 @@ import type {
 import type { ColliderShape, SceneLightType } from "./components";
 import type { SceneJsonValue } from "./entity";
 import type { Vec3 } from "./layout";
+import { resolveCapsuleDimensions } from "./capsule";
 
 /** MeshRenderer preview payload (mesh resolved by the viewport from `assetId`). */
 export interface PreviewMesh {
@@ -100,12 +101,18 @@ function colliderPayload(props: Record<string, SceneJsonValue>): PreviewCollider
     typeof props.shape === "string" && COLLIDER_SHAPES.includes(props.shape as ColliderShape)
       ? (props.shape as ColliderShape)
       : "box";
+  const capsule =
+    shape === "capsule" &&
+    typeof props.capsuleRadius === "number" &&
+    typeof props.capsuleHalfHeight === "number"
+      ? resolveCapsuleDimensions(props.capsuleRadius, props.capsuleHalfHeight)
+      : null;
   const payload: PreviewCollider = {
     shape,
-    size: readVec3(props.size) ?? [1, 1, 1],
+    size: capsule?.size ?? readVec3(props.size) ?? [1, 1, 1],
     isSensor: props.isSensor === true,
   };
-  const center = readVec3(props.center);
+  const center = readVec3(props.center) ?? capsule?.center;
   if (center) payload.center = center;
   const rotation = readVec3(props.rotation);
   if (rotation) payload.rotation = rotation;

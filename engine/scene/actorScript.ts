@@ -17,6 +17,7 @@
 import type { SceneJsonValue } from "./entity";
 import type { MetadataFieldDef, MetadataFieldType } from "./metadataSchema";
 import type { MetadataValue } from "./layout";
+import { DEFAULT_CAPSULE_HALF_HEIGHT, DEFAULT_CAPSULE_RADIUS } from "./capsule";
 
 /** Parent class a user picks when creating an Actor Script (Unreal "Pick Parent Class"). */
 export const PARENT_CLASSES = [
@@ -193,8 +194,8 @@ function defaultCharacterComponents(): ComponentTemplateNode[] {
       component: "Collider",
       props: {
         shape: "capsule",
-        size: [0.6, 1.8, 0.6],
-        center: [0, 0.9, 0],
+        capsuleRadius: DEFAULT_CAPSULE_RADIUS,
+        capsuleHalfHeight: DEFAULT_CAPSULE_HALF_HEIGHT,
         isStatic: false,
         isSensor: false,
         simulatePhysics: false,

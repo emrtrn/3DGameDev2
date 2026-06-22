@@ -24,6 +24,7 @@ import {
   CylinderGeometry,
   DirectionalLight,
   EdgesGeometry,
+  Float32BufferAttribute,
   GridHelper,
   Group,
   LineBasicMaterial,
@@ -460,9 +461,8 @@ export class ActorScriptViewport {
   // --- collider -----------------------------------------------------------
 
   private buildColliderWire(collider: PreviewCollider): Object3D {
-    const solid = unitGeometryForShape(collider.shape);
-    const wireGeometry = new EdgesGeometry(solid);
-    solid.dispose();
+    const wireGeometry =
+      collider.shape === "capsule" ? capsuleWireGeometry(collider.size) : edgedUnitGeometry(collider.shape);
     const material = new LineBasicMaterial({
       color: collider.isSensor ? SENSOR_COLOR : COLLIDER_COLOR,
       transparent: true,
@@ -472,8 +472,10 @@ export class ActorScriptViewport {
     this.buildMaterials.push(material);
     const wire = new LineSegments(wireGeometry, material);
     wire.renderOrder = 3;
-    const [sx, sy, sz] = collider.size;
-    wire.scale.set(Math.max(sx, 0.001), Math.max(sy, 0.001), Math.max(sz, 0.001));
+    if (collider.shape !== "capsule") {
+      const [sx, sy, sz] = collider.size;
+      wire.scale.set(Math.max(sx, 0.001), Math.max(sy, 0.001), Math.max(sz, 0.001));
+    }
     if (collider.center) wire.position.set(...collider.center);
     if (collider.rotation) applyEulerDegrees(wire, collider.rotation);
     return wire;
@@ -636,15 +638,90 @@ export class ActorScriptViewport {
 /** Unit-sized solid geometry whose bounding box is 1×1×1 (scaled to collider size). */
 function unitGeometryForShape(shape: PreviewCollider["shape"]): BufferGeometry {
   switch (shape) {
-    // Capsule shares the sphere silhouette in the preview wireframe.
     case "sphere":
-    case "capsule":
       return new SphereGeometry(0.5, 16, 12);
+    case "capsule":
+      return capsuleWireGeometry([1, 1, 1]);
     case "cylinder":
     case "cone":
       return new CylinderGeometry(0.5, 0.5, 1, 20);
     default:
       return new BoxGeometry(1, 1, 1);
+  }
+}
+
+function edgedUnitGeometry(shape: PreviewCollider["shape"]): BufferGeometry {
+  const solid = unitGeometryForShape(shape);
+  if (shape === "capsule") return solid;
+  const wire = new EdgesGeometry(solid);
+  solid.dispose();
+  return wire;
+}
+
+function capsuleWireGeometry(size: readonly number[]): BufferGeometry {
+  const radius = Math.max(size[0] ?? 1, size[2] ?? 1, 0.001) / 2;
+  const halfHeight = Math.max((size[1] ?? 1) / 2, radius);
+  const cylinderHalfHeight = Math.max(0, halfHeight - radius);
+  const positions: number[] = [];
+  pushCapsuleProfile(positions, "x", radius, cylinderHalfHeight);
+  pushCapsuleProfile(positions, "z", radius, cylinderHalfHeight);
+  pushCapsuleRing(positions, cylinderHalfHeight, radius);
+  pushCapsuleRing(positions, -cylinderHalfHeight, radius);
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  return geometry;
+}
+
+function pushCapsuleProfile(
+  positions: number[],
+  plane: "x" | "z",
+  radius: number,
+  cylinderHalfHeight: number,
+): void {
+  const arcSteps = 16;
+  const sideSteps = 4;
+  const points: Vector3[] = [];
+  const point = (across: number, y: number): Vector3 =>
+    plane === "x" ? new Vector3(across, y, 0) : new Vector3(0, y, across);
+
+  for (let i = 0; i <= arcSteps; i += 1) {
+    const t = (i / arcSteps) * Math.PI;
+    points.push(point(radius * Math.cos(t), cylinderHalfHeight + radius * Math.sin(t)));
+  }
+  for (let i = 1; i < sideSteps; i += 1) {
+    points.push(point(-radius, cylinderHalfHeight - (i / sideSteps) * (2 * cylinderHalfHeight)));
+  }
+  for (let i = 0; i <= arcSteps; i += 1) {
+    const t = Math.PI + (i / arcSteps) * Math.PI;
+    points.push(point(radius * Math.cos(t), -cylinderHalfHeight + radius * Math.sin(t)));
+  }
+  for (let i = 1; i < sideSteps; i += 1) {
+    points.push(point(radius, -cylinderHalfHeight + (i / sideSteps) * (2 * cylinderHalfHeight)));
+  }
+  pushLoopSegments(positions, points);
+}
+
+function pushCapsuleRing(positions: number[], y: number, radius: number): void {
+  const segments = 48;
+  for (let i = 0; i < segments; i += 1) {
+    const a0 = (i / segments) * Math.PI * 2;
+    const a1 = ((i + 1) / segments) * Math.PI * 2;
+    positions.push(
+      Math.cos(a0) * radius,
+      y,
+      Math.sin(a0) * radius,
+      Math.cos(a1) * radius,
+      y,
+      Math.sin(a1) * radius,
+    );
+  }
+}
+
+function pushLoopSegments(positions: number[], points: readonly Vector3[]): void {
+  for (let i = 0; i < points.length; i += 1) {
+    const a = points[i]!;
+    const b = points[(i + 1) % points.length]!;
+    positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
   }
 }
 

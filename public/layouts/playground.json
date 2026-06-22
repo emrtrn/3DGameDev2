@@ -145,41 +145,11 @@
       "placements": [
         {
           "position": [
-            1.05,
-            1,
-            0.93
-          ],
-          "materialSlot": "starter-mat-emissive",
-          "rotationYDeg": 0,
-          "scale": 0.3
-        },
-        {
-          "position": [
-            -0.87,
-            1,
-            0.96
+            0,
+            1.5,
+            0
           ],
           "materialSlot": "mirror-material",
-          "rotationYDeg": 0,
-          "scale": 0.29
-        },
-        {
-          "position": [
-            -7.22,
-            1,
-            2.25
-          ],
-          "materialSlot": "mirror-material",
-          "rotationYDeg": 0,
-          "scale": 0.29
-        },
-        {
-          "position": [
-            -1.53,
-            1,
-            0.95
-          ],
-          "materialSlot": "starter-mat-metal",
           "rotationYDeg": 0,
           "scale": 0.29
         }
@@ -190,21 +160,11 @@
       "placements": [
         {
           "position": [
-            1.22,
+            0,
             0.75,
-            2.29
+            0
           ],
-          "materialSlot": "starter-mat-brick-clay-beveled",
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            0.06,
-            0.75,
-            0.94
-          ],
-          "materialSlot": "starter-mat-brick-clay-new",
+          "materialSlot": "gray-material",
           "rotationYDeg": 0,
           "scale": 1
         }
@@ -279,7 +239,7 @@
         -25.7
       ],
       "color": "#ffffff",
-      "intensity": 10,
+      "intensity": 5,
       "castShadow": true
     }
   ],
@@ -295,7 +255,7 @@
       ],
       "name": "Sphere Reflection Capture",
       "radius": 6,
-      "intensity": 0.8,
+      "intensity": 0.4,
       "resolution": 256,
       "near": 0.1,
       "parallax": true

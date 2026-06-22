@@ -15,16 +15,8 @@
       "component": "Collider",
       "props": {
         "shape": "capsule",
-        "size": [
-          0.6,
-          1.8,
-          0.6
-        ],
-        "center": [
-          0,
-          0.9,
-          0
-        ],
+        "capsuleRadius": 0.251,
+        "capsuleHalfHeight": 0.451,
         "isStatic": false,
         "isSensor": false,
         "simulatePhysics": false

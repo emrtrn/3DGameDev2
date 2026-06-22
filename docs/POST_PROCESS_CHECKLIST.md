@@ -174,7 +174,7 @@ ve bounded-volume karışımı **kapsam dışı**.
 | Depth of Field | `dof{enabled,focusDistance,aperture,maxBlur}` → `BokehPass` (ölçeğe uygun) | **Faz 2** |
 | Chromatic Aberration | `chromaticAberration{enabled,amount}` → `RGBShiftShader` | **Faz 2** |
 | Film Grain | `grain{enabled,intensity}` → `FilmPass` (yalnız gren) | **Faz 2** |
-| Ambient Occlusion (SSAO) | `ao{enabled,radius,intensity}` → `GTAOPass`/`SSAOPass` | **Faz 2** |
+| Ambient Occlusion | `ao{enabled,radius,intensity}` → `GTAOPass` (GTAO; SSAO/SAO değil, 2026-06-22) | **Faz 2** |
 | Anti-alias (kalite) | `antialias: "none" \| "smaa"` → `SMAAPass` | **Faz 2** |
 | White Balance (temp/tint) | grading shader'a temp/tint | **Faz 2 (ops.)** |
 | Shadows/Mid/Highlights grading | bölgesel grading (lift/gamma/gain) | **Ertele (Faz 2 sonu, ops.)** |
@@ -409,7 +409,15 @@ hissini tamamlayan düşük-maliyetli üçlü + en büyük eksik DoF (2026-06-20
 
 #### F2.4 — Kalan opsiyonel pass efektleri
 
-- [ ] **Ambient Occlusion** (`GTAOPass`/`SSAOPass`): radius/intensity
+- [ ] **Ambient Occlusion** (`GTAOPass`): `ao{enabled,radius,intensity}` → GTAO
+      (SSAOPass/SAOPass yerine seçildi, 2026-06-22). **Mimari not:** AO pass'i
+      `scene` + `camera` ister; mevcut `createPostProcessEffectPasses(resolved,
+      size)` fabrikasına bu ikisi geçirilmeli (Bloom/Vignette yalnız `size`
+      alıyor). RenderPass'ten hemen sonra, Bloom'dan **önce** girer; `radius` 100u
+      far-plane ölçeğine tune edilir; resize'da `gtaoPass.setSize`. Faz-1 pattern
+      ikizi: model alanı → `resolve` → fabrika → Details → `saveValidator`
+      allowlist → engine-tests. **Runtime'da kullanıcı tarafından kapatılabilir**
+      (maliyet yüksekse); o ayar UI'si **sonraki/ayrı iş** (ölçek dışı bırakıldı)
 - [ ] **Anti-alias** toggle (`SMAAPass`): `antialias: "none" | "smaa"`
 - [ ] Bölgesel grading: shadows/midtones/highlights (lift/gamma/gain)
 
@@ -458,3 +466,12 @@ hissini tamamlayan düşük-maliyetli üçlü + en büyük eksik DoF (2026-06-20
    **geri alındı** — güneşin bloom'u Mie halesinden daha iyi. **Global bloom**
    (güneş dahil) korunur; emissive bloom için materyalin emissive intensity
    tavanı yükseltilir (F2.3).
+8. **Ambient Occlusion (2026-06-22, onaylandı):** AO = **GTAOPass** (Ground Truth
+   AO); SSAOPass/SAOPass yerine seçildi — en iyi kalite/gürültü dengesi, dahili
+   denoise, yeni bağımlılık yok (`three/examples` içinde). Pass RenderPass'ten
+   sonra, Bloom'dan **önce** girer; `scene`+`camera` gerektirdiğinden pass
+   fabrikasına bu ikisi eklenir (mevcut ekran-uzayı pass'leri yalnız `size`
+   alıyor). `radius` 100u far-plane ölçeğine göre tune edilir. **Runtime'da
+   kullanıcı kapatabilir** (maliyet yüksekse) — o ayarlar UI'si **ayrı/sonraki
+   iş**, bu PP entegrasyonunun kapsamında değil. PP işleri başka bir oturumda
+   sırayla yapılacak.

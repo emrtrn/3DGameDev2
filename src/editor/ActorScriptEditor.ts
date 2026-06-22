@@ -32,7 +32,12 @@ import {
   type ParentClass,
 } from "@engine/scene/actorScript";
 import type { MetadataFieldDef, MetadataFieldType } from "@engine/scene/metadataSchema";
-import type { SceneLightType } from "@engine/scene/components";
+import type { ColliderShape, SceneLightType } from "@engine/scene/components";
+import {
+  DEFAULT_CAPSULE_HALF_HEIGHT,
+  DEFAULT_CAPSULE_RADIUS,
+  resolveCapsuleDimensions,
+} from "@engine/scene/capsule";
 import type { SceneJsonValue } from "@engine/scene/entity";
 import type { Vec3 } from "@engine/scene/layout";
 import { isModelAssetType, type AssetType } from "@engine/assets/manifest";
@@ -733,6 +738,7 @@ export class ActorScriptEditor {
             `<option value="${escapeHtml(other.id)}" ${other.id === node.parent ? "selected" : ""}>${escapeHtml(other.id)}</option>`,
         ),
     ].join("");
+    const colliderField = node.component === "Collider" ? colliderFields(node) : "";
     const meshField = node.component === "MeshRenderer" ? this.meshPickerField(node) : "";
     const lightField = node.component === "Light" ? lightFields(node) : "";
     const particleField = node.component === "ParticleEmitter" ? this.particleFields(node) : "";
@@ -743,6 +749,12 @@ export class ActorScriptEditor {
     const pos = readVec3Prop(node.props.position, [0, 0, 0]);
     const rot = readVec3Prop(node.props.rotation, [0, 0, 0]);
     const scl = readVec3Prop(node.props.scale, [1, 1, 1]);
+    const transformRows =
+      node.component === "Collider"
+        ? `${vec3Row("position", "Position", pos)}`
+        : `${vec3Row("position", "Position", pos)}
+      ${vec3Row("rotation", "Rotation°", rot)}
+      ${vec3Row("scale", "Scale", scl)}`;
     return `
       <div class="as-details-head">Component · ${escapeHtml(node.component)}</div>
       <label class="as-field">
@@ -757,6 +769,7 @@ export class ActorScriptEditor {
         <span>Parent</span>
         <select data-as-node-parent ${isRoot ? "disabled" : ""}>${parentOptions}</select>
       </label>
+      ${colliderField}
       ${meshField}
       ${lightField}
       ${particleField}
@@ -764,9 +777,7 @@ export class ActorScriptEditor {
       ${springArmField}
       ${cameraField}
       <div class="as-section-label">Transform <small>(preview)</small></div>
-      ${vec3Row("position", "Position", pos)}
-      ${vec3Row("rotation", "Rotation°", rot)}
-      ${vec3Row("scale", "Scale", scl)}
+      ${transformRows}
       <details class="as-advanced">
         <summary>Advanced · raw props (JSON)</summary>
         <textarea data-as-node-props rows="7">${escapeHtml(JSON.stringify(node.props, null, 2))}</textarea>
@@ -886,6 +897,7 @@ export class ActorScriptEditor {
       this.markDirty();
       this.render(); // rebuilds tree + viewport + the raw-props view
     });
+    this.bindColliderDetails(node);
     this.bindLightDetails(node);
     this.bindParticleDetails(node);
     this.bindCharacterMovementDetails(node);
@@ -932,6 +944,77 @@ export class ActorScriptEditor {
         props.classList.add("is-invalid");
       }
     });
+  }
+
+  /**
+   * Wires the Collider Details controls (no-op when the node carries no collider
+   * form). The Shape picker swaps the authoring surface: a `capsule` is sized by
+   * Capsule Radius + Capsule Half Height (Unreal-style, deriving the runtime AABB
+   * + feet-at-origin center), while other shapes keep the raw Size/Center/Rotation
+   * vectors. Switching shape converts between the two representations so no
+   * dimensions are lost. The Size/Center/Rotation vectors are bound generically
+   * (data-as-vec); only the shape/capsule/flag controls need wiring here.
+   */
+  private bindColliderDetails(node: ComponentTemplateNode): void {
+    const shape = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-collider-shape]");
+    shape?.addEventListener("change", () => {
+      const next = shape.value as ColliderShape;
+      const prev = readColliderShape(node.props.shape);
+      node.props.shape = next;
+      if (next === "capsule" && prev !== "capsule") {
+        // Adopt capsule authoring: derive radius/half-height from any prior size.
+        const dims = capsuleDimensionsFromProps(node.props);
+        setCapsuleProps(node.props, dims.radius, dims.halfHeight);
+      } else if (next !== "capsule" && prev === "capsule") {
+        // Leaving capsule: bake the derived AABB back into Size/Center.
+        const dims = capsuleDimensionsFromProps(node.props);
+        node.props.size = [...dims.size];
+        node.props.center = [...dims.center];
+        delete node.props.capsuleRadius;
+        delete node.props.capsuleHalfHeight;
+      }
+      this.markDirty();
+      this.renderDetails();
+      this.syncViewport();
+    });
+
+    const radius = this.detailsHost.querySelector<HTMLInputElement>("[data-as-capsule-radius]");
+    const halfHeight = this.detailsHost.querySelector<HTMLInputElement>(
+      "[data-as-capsule-half-height]",
+    );
+    const applyCapsule = (): void => {
+      const r = Number(radius?.value);
+      const h = Number(halfHeight?.value);
+      setCapsuleProps(
+        node.props,
+        Number.isFinite(r) ? r : DEFAULT_CAPSULE_RADIUS,
+        Number.isFinite(h) ? h : DEFAULT_CAPSULE_HALF_HEIGHT,
+      );
+      this.markDirty();
+    };
+    for (const input of [radius, halfHeight]) {
+      input?.addEventListener("input", () => {
+        applyCapsule();
+        this.scheduleViewportSync();
+      });
+      input?.addEventListener("change", () => {
+        applyCapsule();
+        this.renderDetails();
+        this.syncViewport();
+      });
+    }
+
+    const bindFlag = (selector: string, key: string): void => {
+      const input = this.detailsHost.querySelector<HTMLInputElement>(selector);
+      input?.addEventListener("change", () => {
+        node.props[key] = input.checked;
+        this.markDirty();
+        this.syncViewport();
+      });
+    };
+    bindFlag("[data-as-collider-static]", "isStatic");
+    bindFlag("[data-as-collider-sensor]", "isSensor");
+    bindFlag("[data-as-collider-simulate]", "simulatePhysics");
   }
 
   /**
@@ -1616,6 +1699,15 @@ const LIGHT_TYPE_LABELS: Record<SceneLightType, string> = {
   spot: "Spot",
 };
 
+const COLLIDER_SHAPES = ["box", "sphere", "capsule", "cylinder", "cone"] as const;
+const COLLIDER_SHAPE_LABELS: Record<(typeof COLLIDER_SHAPES)[number], string> = {
+  box: "Box",
+  sphere: "Sphere",
+  capsule: "Capsule",
+  cylinder: "Cylinder",
+  cone: "Cone",
+};
+
 const CHARACTER_MOVEMENT_MODES = ["walking", "falling", "flying", "swimming", "custom"] as const;
 
 /** Reads a light `type` prop, defaulting to directional (matches the preview/engine). */
@@ -1641,6 +1733,80 @@ function pruneLightProps(props: Record<string, SceneJsonValue>, type: SceneLight
     delete props.angle;
     delete props.penumbra;
   }
+}
+
+function readColliderShape(value: SceneJsonValue | undefined): ColliderShape {
+  return typeof value === "string" && (COLLIDER_SHAPES as readonly string[]).includes(value)
+    ? (value as ColliderShape)
+    : "box";
+}
+
+function capsuleDimensionsFromProps(props: Record<string, SceneJsonValue>) {
+  const size = readVec3Prop(props.size, [
+    DEFAULT_CAPSULE_RADIUS * 2,
+    DEFAULT_CAPSULE_HALF_HEIGHT * 2,
+    DEFAULT_CAPSULE_RADIUS * 2,
+  ]);
+  const radius = readNumberProp(props.capsuleRadius, Math.max(size[0], size[2]) / 2);
+  const halfHeight = readNumberProp(props.capsuleHalfHeight, size[1] / 2);
+  return resolveCapsuleDimensions(radius, halfHeight);
+}
+
+function setCapsuleProps(
+  props: Record<string, SceneJsonValue>,
+  radius: number,
+  halfHeight: number,
+): void {
+  const capsule = resolveCapsuleDimensions(radius, halfHeight);
+  props.capsuleRadius = capsule.radius;
+  props.capsuleHalfHeight = capsule.halfHeight;
+  delete props.size;
+  delete props.center;
+}
+
+function colliderFields(node: ComponentTemplateNode): string {
+  const props = node.props;
+  const shape = readColliderShape(props.shape);
+  const shapeOptions = COLLIDER_SHAPES.map(
+    (value) =>
+      `<option value="${value}" ${value === shape ? "selected" : ""}>${COLLIDER_SHAPE_LABELS[value]}</option>`,
+  ).join("");
+  const capsule = capsuleDimensionsFromProps(props);
+  return `
+    <div class="as-section-label">Collider</div>
+    <label class="as-field">
+      <span>Shape</span>
+      <select data-as-collider-shape>${shapeOptions}</select>
+    </label>
+    ${
+      shape === "capsule"
+        ? `
+          <label class="as-field">
+            <span>Capsule Radius</span>
+            <input type="number" data-as-capsule-radius value="${capsule.radius}" step="0.05" min="0.001" />
+          </label>
+          <label class="as-field">
+            <span>Capsule Half Height</span>
+            <input type="number" data-as-capsule-half-height value="${capsule.halfHeight}" step="0.05" min="0.001" />
+          </label>`
+        : `
+          ${vec3Row("size", "Size", readVec3Prop(props.size, [1, 1, 1]))}
+          ${vec3Row("center", "Center", readVec3Prop(props.center, [0, 0, 0]))}
+          ${vec3Row("rotation", "Collider Rotation°", readVec3Prop(props.rotation, [0, 0, 0]))}`
+    }
+    <label class="as-field as-check">
+      <input type="checkbox" data-as-collider-static ${props.isStatic === true ? "checked" : ""} />
+      <span>Static</span>
+    </label>
+    <label class="as-field as-check">
+      <input type="checkbox" data-as-collider-sensor ${props.isSensor === true ? "checked" : ""} />
+      <span>Sensor</span>
+    </label>
+    <label class="as-field as-check">
+      <input type="checkbox" data-as-collider-simulate ${props.simulatePhysics === true ? "checked" : ""} />
+      <span>Simulate Physics</span>
+    </label>
+  `;
 }
 
 /**
