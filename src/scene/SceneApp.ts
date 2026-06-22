@@ -165,6 +165,8 @@ import {
   buildSceneEntities,
   buildSceneInstancedModel,
   buildSceneLightObject,
+  computeComplexCollisionMeshes,
+  type AssetComplexCollisionMesh,
   computeModelLocalBounds,
   computeSceneRoomBounds,
   createSceneCharacterMixer,
@@ -235,10 +237,15 @@ import type {
 } from "@engine/scene/layout";
 import type {
   AssetCollisionDef,
+  CollisionComplexity,
   CollisionEnabled,
   CollisionObjectChannel,
   CollisionPresetId,
   CollisionResponseMap,
+} from "@engine/scene/collision";
+import {
+  assetCollisionDefHasCollider,
+  complexAsSimpleAssetIds,
 } from "@engine/scene/collision";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
 import {
@@ -508,6 +515,8 @@ export class SceneApp {
   private localBounds = new Map<string, Box3>();
   /** Authored asset collision definitions (sidecars) for assets that have primitives. */
   private collisionDefs = new Map<string, AssetCollisionDef>();
+  /** Render-mesh triangle data for `complexAsSimple` assets (static trimesh collider). */
+  private complexCollisionMeshes = new Map<string, AssetComplexCollisionMesh>();
   private assetMaterialSlots = new Map<string, AssetMaterialSlotsDef>();
   private assetPlacements = new Map<string, EditableAsset["placement"]>();
   /** Active selection, delegating to the store so ownership lives there. */
@@ -841,6 +850,7 @@ export class SceneApp {
     return roomLayoutToSceneDocument(this.layout, {
       colliderBox: (assetId, source) => this.colliderBoxFor(assetId, source),
       collisionDefs: this.collisionDefs,
+      complexCollisionMeshes: this.complexCollisionMeshes,
     });
   }
 
@@ -5095,7 +5105,7 @@ export class SceneApp {
     const next = new Map<string, AssetCollisionDef>();
     for (const assetId of assetIds) {
       const def = shapeAssetCollisionDef(assetId);
-      if (def && def.primitives.length > 0) next.set(assetId, def);
+      if (def && assetCollisionDefHasCollider(def)) next.set(assetId, def);
     }
     await Promise.all(
       [...assetIds].map(async (assetId) => {
@@ -5103,11 +5113,30 @@ export class SceneApp {
         const asset = this.manifest?.assets.find((entry) => entry.id === assetId);
         if (!asset) return;
         const def = await loadAssetCollision(assetPath(asset));
-        if (def.primitives.length > 0) next.set(assetId, def);
+        if (assetCollisionDefHasCollider(def)) next.set(assetId, def);
       }),
     );
     this.collisionDefs = next;
+    this.complexCollisionMeshes = computeComplexCollisionMeshes(
+      this.models,
+      complexAsSimpleAssetIds(next),
+    );
     this.updateCollisionBoxes();
+  }
+
+  /** Returns the authored collision complexity for an asset, if a sidecar is loaded. */
+  assetCollisionComplexity(assetId: string): CollisionComplexity | undefined {
+    return this.collisionDefs.get(assetId)?.complexity;
+  }
+
+  /**
+   * Reloads authored collision sidecars after the Static Mesh editor saves one,
+   * so the overlay, Play-mode physics document, and the Details collision/physics
+   * guards pick up the new preset/complexity/primitives. Reloads the whole set
+   * (cheap; mirrors the material/UVW refresh hooks).
+   */
+  async refreshAssetCollision(): Promise<void> {
+    await this.refreshCollisionDefs();
   }
 
   async refreshAssetMaterialSlots(
@@ -5191,6 +5220,7 @@ export class SceneApp {
       this.layout,
       this.localBounds,
       this.collisionDefs,
+      this.complexCollisionMeshes,
     )) {
       if (box.isEmpty() || segments.length === 0) continue;
       const geometry = new BufferGeometry();

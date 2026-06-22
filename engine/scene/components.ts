@@ -23,7 +23,14 @@ export const SCRIPT_REFERENCES_COMPONENT = "ScriptReferences";
 export const SCRIPT_DISPATCHERS_COMPONENT = "ScriptDispatchers";
 
 export type SceneLightType = "directional" | "point" | "spot";
-export type ColliderShape = "box" | "sphere" | "capsule" | "cylinder" | "cone" | "convex";
+export type ColliderShape =
+  | "box"
+  | "sphere"
+  | "capsule"
+  | "cylinder"
+  | "cone"
+  | "convex"
+  | "trimesh";
 
 export interface TransformComponent {
   position: Vec3;
@@ -129,6 +136,10 @@ export interface ColliderPrimitive {
   rotation?: Vec3;
   /** Baked convex hull points (world-scaled, relative to body origin) for `shape === "convex"`. */
   points?: Vec3[];
+  /** Baked triangle vertices (world-scaled, relative to body origin) for `shape === "trimesh"`. */
+  vertices?: Vec3[];
+  /** Triangle index buffer into `vertices`, grouped by threes, for `shape === "trimesh"`. */
+  indices?: number[];
 }
 
 export interface ColliderComponent {
@@ -445,6 +456,7 @@ const COLLIDER_SHAPES: readonly ColliderShape[] = [
   "cylinder",
   "cone",
   "convex",
+  "trimesh",
 ];
 
 /** Parses the optional compound-collider `primitives` array. */
@@ -474,6 +486,19 @@ function readColliderPrimitives(
         .map((point) => readVec3(point))
         .filter((point): point is Vec3 => point !== undefined);
       if (points.length > 0) primitive.points = points;
+    }
+    if (Array.isArray(record.vertices)) {
+      const vertices = record.vertices
+        .map((point) => readVec3(point))
+        .filter((point): point is Vec3 => point !== undefined);
+      if (vertices.length > 0) primitive.vertices = vertices;
+    }
+    if (Array.isArray(record.indices)) {
+      const indices = record.indices.filter(
+        (index): index is number =>
+          typeof index === "number" && Number.isInteger(index) && index >= 0,
+      );
+      if (indices.length > 0) primitive.indices = indices;
     }
     primitives.push(primitive);
   }

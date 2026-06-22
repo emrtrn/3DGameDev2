@@ -8,9 +8,11 @@ import {
   Vector3,
 } from "three";
 import type {
+  BufferGeometry,
   DirectionalLight,
   Group,
   InstancedMesh,
+  Mesh,
   Object3D,
   PerspectiveCamera,
   WebGLRenderer,
@@ -334,6 +336,76 @@ export function computeModelLocalBounds(
     localBounds.set(assetId, new Box3().setFromObject(gltf.scene));
   }
   return localBounds;
+}
+
+export interface AssetComplexCollisionMesh {
+  vertices: Vec3[];
+  indices: number[];
+  size: Vec3;
+  center: Vec3;
+}
+
+/**
+ * Triangle data (render-mesh) for every model in `assetIds`, used by the
+ * `complexAsSimple` collision complexity to build a static trimesh collider.
+ * `assetIds` is required so we never pay the per-vertex flatten for models that
+ * don't opt in (the common case).
+ */
+export function computeComplexCollisionMeshes(
+  models: ReadonlyMap<string, GLTF>,
+  assetIds: ReadonlySet<string>,
+): Map<string, AssetComplexCollisionMesh> {
+  const meshes = new Map<string, AssetComplexCollisionMesh>();
+  for (const assetId of assetIds) {
+    const gltf = models.get(assetId);
+    if (!gltf) continue;
+    const mesh = complexCollisionMeshFromGltf(gltf);
+    if (mesh) meshes.set(assetId, mesh);
+  }
+  return meshes;
+}
+
+function complexCollisionMeshFromGltf(gltf: GLTF): AssetComplexCollisionMesh | null {
+  gltf.scene.updateMatrixWorld(true);
+  const vertices: Vec3[] = [];
+  const indices: number[] = [];
+  gltf.scene.traverse((object) => {
+    const mesh = object as Mesh;
+    const geometry = mesh.geometry as BufferGeometry | undefined;
+    if (!geometry || typeof geometry.getAttribute !== "function") return;
+    const position = geometry.getAttribute("position");
+    if (!position) return;
+    const base = vertices.length;
+    const vertex = new Vector3();
+    for (let index = 0; index < position.count; index += 1) {
+      vertex.fromBufferAttribute(position, index).applyMatrix4(mesh.matrixWorld);
+      vertices.push([vertex.x, vertex.y, vertex.z]);
+    }
+    const indexAttr = geometry.getIndex();
+    if (indexAttr) {
+      for (let index = 0; index < indexAttr.count; index += 3) {
+        indices.push(
+          base + indexAttr.getX(index),
+          base + indexAttr.getX(index + 1),
+          base + indexAttr.getX(index + 2),
+        );
+      }
+    } else {
+      for (let index = 0; index < position.count - 2; index += 3) {
+        indices.push(base + index, base + index + 1, base + index + 2);
+      }
+    }
+  });
+  if (vertices.length < 3 || indices.length < 3) return null;
+  const box = new Box3().setFromPoints(vertices.map((point) => new Vector3(point[0], point[1], point[2])));
+  const size = box.getSize(new Vector3());
+  const center = box.getCenter(new Vector3());
+  return {
+    vertices,
+    indices,
+    size: [size.x, size.y, size.z],
+    center: [center.x, center.y, center.z],
+  };
 }
 
 /**

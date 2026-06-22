@@ -51,6 +51,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private readonly backend: PhysicsBackend;
   private bodies: PhysicsBody[] = [];
   private contacts: PhysicsContact[] = [];
+  /** Cached movement blockers (static colliders don't move); rebuilt lazily. */
+  private staticBlockerCache: Aabb[] | null = null;
   private rapierModule: RapierModule | null = null;
   private rapierWorld: RapierWorld | null = null;
   private rapierBodies = new Map<EntityId, RapierBodyRecord>();
@@ -116,6 +118,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     }
     this.bodies = bodies;
     this.contacts = [];
+    this.staticBlockerCache = null;
     if (this.rapierModule) this.rebuildRapierWorld();
   }
 
@@ -123,6 +126,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const body = this.bodies.find((candidate) => candidate.id === entityId);
     if (!body) return;
     body.transform = cloneTransform(transform);
+    // A static body moving (editor drag) invalidates the cached blocker AABBs.
+    if (body.collider.isStatic) this.staticBlockerCache = null;
     const rapier = this.rapierBodies.get(entityId);
     if (!rapier) return;
     const translation = vectorFromTransform(transform);
@@ -140,13 +145,22 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     return this.contacts.filter((contact) => contact.a === entityId || contact.b === entityId);
   }
 
-  /** World-space AABBs of every static, non-sensor collider — the movement blockers. */
+  /**
+   * World-space AABBs of every static, non-sensor collider — the movement
+   * blockers fed to `resolvePlanarMovement`. A compound collider contributes one
+   * AABB per primitive, and a `trimesh` primitive (complexAsSimple) contributes
+   * one AABB per triangle, so the player collides with the actual footprint (e.g.
+   * walks into an L-shaped wall's concave corner) instead of an enclosing box.
+   * Cached because static colliders don't move.
+   */
   staticBlockerAabbs(): readonly PhysicsAabb[] {
-    const blockers: PhysicsAabb[] = [];
+    if (this.staticBlockerCache) return this.staticBlockerCache;
+    const blockers: Aabb[] = [];
     for (const body of this.bodies) {
       if (!body.collider.isStatic || body.collider.isSensor) continue;
-      blockers.push(bodyAabb(body));
+      appendBlockerAabbs(blockers, body);
     }
+    this.staticBlockerCache = blockers;
     return blockers;
   }
 
@@ -376,6 +390,76 @@ function bodyAabb(body: PhysicsBody): Aabb {
   };
 }
 
+/**
+ * Appends one or more movement-blocker AABBs for a static body. Plain colliders
+ * yield their single body AABB; compound colliders yield one per primitive; a
+ * `trimesh` primitive yields one per triangle. Rotation is ignored, matching the
+ * AABB movement model (`bodyAabb`).
+ */
+function appendBlockerAabbs(out: Aabb[], body: PhysicsBody): void {
+  const primitives = body.collider.primitives;
+  if (!primitives || primitives.length === 0) {
+    out.push(bodyAabb(body));
+    return;
+  }
+  const origin = body.transform.position;
+  for (const primitive of primitives) {
+    if (
+      primitive.shape === "trimesh" &&
+      primitive.vertices &&
+      primitive.vertices.length >= 3 &&
+      primitive.indices &&
+      primitive.indices.length >= 3
+    ) {
+      appendTriangleAabbs(out, origin, primitive.vertices, primitive.indices);
+    } else {
+      out.push(primitiveAabb(origin, primitive));
+    }
+  }
+}
+
+/** World AABB of a single non-trimesh primitive (body origin + local center ± size/2). */
+function primitiveAabb(origin: readonly number[], primitive: ColliderPrimitive): Aabb {
+  const center = primitive.center ?? [0, 0, 0];
+  const hx = primitive.size[0] / 2;
+  const hy = primitive.size[1] / 2;
+  const hz = primitive.size[2] / 2;
+  const cx = (origin[0] ?? 0) + (center[0] ?? 0);
+  const cy = (origin[1] ?? 0) + (center[1] ?? 0);
+  const cz = (origin[2] ?? 0) + (center[2] ?? 0);
+  return { min: [cx - hx, cy - hy, cz - hz], max: [cx + hx, cy + hy, cz + hz] };
+}
+
+/** One AABB per triangle of a trimesh primitive, translated by the body origin. */
+function appendTriangleAabbs(
+  out: Aabb[],
+  origin: readonly number[],
+  vertices: readonly Vec3[],
+  indices: readonly number[],
+): void {
+  const ox = origin[0] ?? 0;
+  const oy = origin[1] ?? 0;
+  const oz = origin[2] ?? 0;
+  for (let t = 0; t + 2 < indices.length; t += 3) {
+    const a = vertices[indices[t]!];
+    const b = vertices[indices[t + 1]!];
+    const c = vertices[indices[t + 2]!];
+    if (!a || !b || !c) continue;
+    out.push({
+      min: [
+        ox + Math.min(a[0], b[0], c[0]),
+        oy + Math.min(a[1], b[1], c[1]),
+        oz + Math.min(a[2], b[2], c[2]),
+      ],
+      max: [
+        ox + Math.max(a[0], b[0], c[0]),
+        oy + Math.max(a[1], b[1], c[1]),
+        oz + Math.max(a[2], b[2], c[2]),
+      ],
+    });
+  }
+}
+
 function aabbOverlaps(a: Aabb, b: Aabb): boolean {
   return (
     a.min[0] <= b.max[0] &&
@@ -428,6 +512,10 @@ function clonePrimitive(primitive: ColliderPrimitive): ColliderPrimitive {
   if (primitive.center) copy.center = [...primitive.center];
   if (primitive.rotation) copy.rotation = [...primitive.rotation];
   if (primitive.points) copy.points = primitive.points.map((point) => [...point] as typeof point);
+  // Trimesh (complexAsSimple) data — must be carried through, or the Rapier
+  // collider and the movement blockers both fall back to a box.
+  if (primitive.vertices) copy.vertices = primitive.vertices.map((point) => [...point] as typeof point);
+  if (primitive.indices) copy.indices = [...primitive.indices];
   return copy;
 }
 
@@ -456,6 +544,22 @@ function colliderDescsForBody(RAPIER: RapierModule, body: PhysicsBody) {
  * primitive's bounding box.
  */
 function primitiveColliderDesc(RAPIER: RapierModule, primitive: ColliderPrimitive) {
+  if (
+    primitive.shape === "trimesh" &&
+    primitive.vertices &&
+    primitive.vertices.length >= 3 &&
+    primitive.indices &&
+    primitive.indices.length >= 3
+  ) {
+    const vertices = new Float32Array(primitive.vertices.length * 3);
+    primitive.vertices.forEach((point, index) => {
+      vertices[index * 3] = point[0];
+      vertices[index * 3 + 1] = point[1];
+      vertices[index * 3 + 2] = point[2];
+    });
+    const indices = new Uint32Array(primitive.indices);
+    return RAPIER.ColliderDesc.trimesh(vertices, indices);
+  }
   if (primitive.shape === "convex" && primitive.points && primitive.points.length >= 4) {
     const flat = new Float32Array(primitive.points.length * 3);
     primitive.points.forEach((point, index) => {
@@ -467,7 +571,7 @@ function primitiveColliderDesc(RAPIER: RapierModule, primitive: ColliderPrimitiv
     if (hull) return hull; // points are absolute (body-local) — no extra translation
   }
   const center = primitive.center ?? [0, 0, 0];
-  const shape = primitive.shape === "convex" ? "box" : primitive.shape;
+  const shape = primitive.shape === "convex" || primitive.shape === "trimesh" ? "box" : primitive.shape;
   const desc = colliderShapeDesc(RAPIER, shape, primitive.size).setTranslation(
     center[0] ?? 0,
     center[1] ?? 0,

@@ -304,6 +304,37 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-22* - **complexAsSimple - oyuncu hareketi + kritik clone fix.** Kullanici
+  L formlu wallCorner'da test etti: Show>Collision kutu gosteriyor, Play'de L
+  bosluguna girilemiyor. Iki kok neden bulundu: (1) `physicsSubsystem.clonePrimitive`
+  trimesh `vertices`/`indices`'i kopyalamiyordu → `setEntities` klonunda veri dusuyor,
+  hem Rapier collider'i hem blocker'lar box'a fallback ediyordu (onceki oturum
+  `primitiveColliderDesc`/`readColliderPrimitives`'e trimesh ekledi ama clone'u
+  unuttu). (2) Oyuncu hareketi Rapier degil AABB-tabanli (`src/game/collision.ts`
+  `resolvePlanarMovement` + `staticBlockerAabbs`), govde basina TEK AABB
+  uretiyordu → trimesh'in tum bounding box'i. Cozum: `staticBlockerAabbs` artik
+  compound'u primitive-basina, trimesh'i **ucgen-basina AABB**'ye acar (cache'li,
+  rotasyon yok sayilir - AABB modeliyle tutarli); boylece L'nin ic kosesine
+  girilebiliyor. `collisionWireboxes` + SceneApp overlay complexAsSimple icin gercek
+  mesh wireframe cizer. Gate: tsc temiz, test:engine 283 check (yeni: per-triangle
+  blocker testi). Not: AABB hareket modeli rotasyonu yok sayar - donduruimus
+  complexAsSimple geometri icin yaklasiktir (level geometrisi tipik eksen-hizali).
+- *2026-06-22* - **Static Mesh Collision Editor - complexAsSimple (Faz 7,
+  tamam).** "Use Complex Collision As Simple" artik uctan uca calisiyor: render
+  mesh ucgenleri `computeComplexCollisionMeshes` ile cikariliyor (yalnizca
+  complexAsSimple asset'leri icin filtrelenmis), `bakeTrimeshPrimitive` placement
+  scale'i bake edip AABB cikariyor, Rapier compound `trimesh` collider'a derleniyor
+  (`physicsSubsystem`). Trimesh Rapier'da **dinamik** olamadigi icin complexAsSimple
+  **statik-only**: adapter (`legacyRoomLayoutAdapter.colliderComponent`) placement
+  Simulate Physics flag'ini gecersiz kilip sabit body uretir; `EditorUi` Physics
+  bolumunde Simulate Physics toggle'i complexAsSimple asset'lerde devre disi +
+  uyari; `StaticMeshEditor` complexity = complexAsSimple secilince statik-only ipucu
+  gosterir. Bos `primitives` ile complexAsSimple sidecar `assetCollisionDefHasCollider`
+  ile korunur (SceneApp.refreshCollisionDefs + RuntimeSceneApp.loadCollisionDefs;
+  eskiden auto-box'a dusuyordu). Gate: `npx tsc --noEmit` temiz, `npm run test:engine`
+  282 check (3 yeni: helper, statik trimesh + simulate-override, mesh yoksa box
+  fallback). Kalan: "Simple And Complex" per-poly trace, K-DOP/V-HACD, manuel UI
+  akis dogrulamasi.
 - *2026-06-22* - **Static Mesh Collision Editor - Faz 6 placement override'lari
   (tamam).** Scene Details > Collision artik asset default'unu miras alan
   placement-level override'lari tasir: Collision Enabled, Object Type, Phys

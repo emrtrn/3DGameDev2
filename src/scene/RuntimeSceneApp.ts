@@ -52,6 +52,8 @@ import {
   buildSceneEntities,
   buildSceneInstancedModel,
   buildSceneLightObject,
+  computeComplexCollisionMeshes,
+  type AssetComplexCollisionMesh,
   computeModelLocalBounds,
   computeSceneRoomBounds,
   createSceneCharacterMixer,
@@ -184,6 +186,10 @@ import {
 import { assetPath, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
+  assetCollisionDefHasCollider,
+  complexAsSimpleAssetIds,
+} from "@engine/scene/collision";
+import {
   readAudioComponent,
   readCharacterMovementComponent,
   readLightComponent,
@@ -288,6 +294,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private assetLoader: AssetLoader | null = null;
   private layout: RoomLayout | null = null;
   private collisionDefs = new Map<string, AssetCollisionDef>();
+  /** Render-mesh triangle data for `complexAsSimple` assets (static trimesh collider). */
+  private complexCollisionMeshes = new Map<string, AssetComplexCollisionMesh>();
   private models = new Map<string, GLTF>();
   private instanceGroups = new Map<string, Group>();
   private instanceMeshes = new Map<string, InstancedMesh[]>();
@@ -701,6 +709,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const baseDocument = roomLayoutToSceneDocument(this.layout, {
       colliderBox: (assetId, source) => this.colliderBoxFor(assetId, source),
       collisionDefs: this.collisionDefs,
+      complexCollisionMeshes: this.complexCollisionMeshes,
     });
     // Append flattened actor-instance entities so physics + behavior derive them
     // alongside the legacy instances/characters/lights.
@@ -998,7 +1007,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const defs = new Map<string, AssetCollisionDef>();
     for (const assetId of assetIds) {
       const def = shapeAssetCollisionDef(assetId);
-      if (def && def.primitives.length > 0) defs.set(assetId, def);
+      if (def && assetCollisionDefHasCollider(def)) defs.set(assetId, def);
     }
     await Promise.all(
       [...assetIds].map(async (assetId) => {
@@ -1006,10 +1015,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         const asset = manifest.assets.find((entry) => entry.id === assetId);
         if (!asset) return;
         const def = await loadAssetCollision(assetPath(asset));
-        if (def.primitives.length > 0) defs.set(assetId, def);
+        if (assetCollisionDefHasCollider(def)) defs.set(assetId, def);
       }),
     );
     this.collisionDefs = defs;
+    this.complexCollisionMeshes = computeComplexCollisionMeshes(
+      this.models,
+      complexAsSimpleAssetIds(defs),
+    );
   }
 
   private async loadMissingSceneModels(): Promise<void> {

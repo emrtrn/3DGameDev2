@@ -294,7 +294,20 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [x] Add Actor built-in shape'leri (`shape:sphere`, `shape:cylinder`, `shape:cone`) sidecar gerektirmeden kendi collision primitive'lerini kullanır; cube/plane box olarak kalır
 - [x] `convex` primitif gerçek Rapier `convexHull` ile çalışır (eksik/bozuk hull noktaları box fallback alır)
 - [x] Kanal yanıtları → Rapier **collision groups** (membership/filter bitmask)
-- [~] Convex hull (Rapier `convexHull`) tamam; trimesh complex collision ertelendi
+- [x] Convex hull (Rapier `convexHull`) + **complexAsSimple** trimesh tamam: render
+  mesh'ten statik trimesh collider (`computeComplexCollisionMeshes` →
+  `bakeTrimeshPrimitive` → Rapier **fixed body** + trimesh compound). Rapier dinamik
+  trimesh desteklemediği için complexAsSimple **statik-only**: adapter placement
+  Simulate Physics flag'ini geçersiz kılar, Details panelinde toggle devre dışı +
+  uyarı. "Simple And Complex" (per-poly trace ayrımı) ertelendi.
+- [x] **Kritik fix:** `physicsSubsystem.clonePrimitive` `vertices`/`indices`'i
+  kopyalamıyordu → `setEntities` klonunda trimesh verisi düşüyor, hem Rapier hem
+  blocker'lar box'a düşüyordu. Kopyalama eklendi.
+- [x] **Karakter hareketi trimesh-farkında:** `staticBlockerAabbs` artık compound
+  collider'ı primitive-başına, trimesh'i **üçgen-başına AABB**'ye açar (cache'li).
+  Oyuncu hareketi AABB-tabanlı olduğu için L formundaki duvarın iç boşluğuna
+  girilebiliyor (önceden tek sınırlayıcı kutu). `Show > Collision` overlay'i de
+  complexAsSimple için kutu yerine gerçek mesh wireframe çizer.
 - [~] Phys material → collider friction/restitution bağlandı; density henüz yok
 - [x] Overlap/Hit event bayraklarını mevcut contact/intersection akışına bağla
 
@@ -326,5 +339,9 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
    (`public/` kapsamında, model dosyasının yanında).
 3. **Editör kabuğu:** İlk sürüm **tam-ekran overlay doküman**; sonraki fazda
    gerçek sekme şeridine yükseltilir.
-4. **Complex collision:** **Ertelendi** — önce Simple (Sphere/Box/Capsule) +
-   preset + complexity enum'u tam. Convex/K-DOP/trimesh sonraki faz.
+4. **Complex collision:** **complexAsSimple tamamlandı (2026-06-22)** — render
+   mesh'ten statik trimesh collider. Statik-only (Rapier dinamik trimesh
+   desteklemez): bir asset complexAsSimple ise tüm placement'ları sabit kalır,
+   Simulate Physics geçersiz/kapalı. Boş `primitives` ile complexAsSimple sidecar
+   `assetCollisionDefHasCollider` ile korunur (auto-box'a düşmez). "Simple And
+   Complex" (per-poly trace ayrımı), K-DOP ve V-HACD hâlâ sonraki faz.

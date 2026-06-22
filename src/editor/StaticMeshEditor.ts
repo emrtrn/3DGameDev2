@@ -92,6 +92,7 @@ export interface StaticMeshEditorOptions {
   onStatus?: (message: string, tone?: "info" | "warning" | "error") => void;
   onMaterialSlotsSaved?: (assetId: string) => void;
   onAssetUvwSaved?: (assetId: string) => void;
+  onCollisionSaved?: (assetId: string) => void;
 }
 
 const PRESET_LABELS: Record<CollisionPresetId, string> = {
@@ -1176,6 +1177,11 @@ export class StaticMeshEditor {
           <span>Collision Complexity</span>
           <select data-sm-field="complexity">${complexityOptions}</select>
         </label>
+        ${
+          this.collision.complexity === "complexAsSimple"
+            ? `<div class="sm-hint">Uses the render mesh as a static trimesh collider. Static-only — placements of this asset can't Simulate Physics. Best for level geometry (walls, rooms) instead of hand-placing boxes.</div>`
+            : ""
+        }
         <label class="sm-row sm-toggle">
           <input type="checkbox" data-sm-field="doubleSided" ${this.collision.doubleSided ? "checked" : ""} />
           <span>Double Sided Geometry</span>
@@ -1220,6 +1226,8 @@ export class StaticMeshEditor {
       ?.addEventListener("change", (event) => {
         this.collision.complexity = (event.target as HTMLSelectElement).value as CollisionComplexity;
         this.markDirty();
+        // Re-render so the static-only hint appears/disappears with the choice.
+        this.renderDetails();
       });
     this.detailsHost
       .querySelector<HTMLInputElement>('[data-sm-field="doubleSided"]')
@@ -1406,6 +1414,7 @@ export class StaticMeshEditor {
       if (this.options.assetId) {
         this.options.onMaterialSlotsSaved?.(this.options.assetId);
         this.options.onAssetUvwSaved?.(this.options.assetId);
+        this.options.onCollisionSaved?.(this.options.assetId);
       }
     } catch (error) {
       this.setStatus(`Save failed: ${describeError(error)}`, "error");

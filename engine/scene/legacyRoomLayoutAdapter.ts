@@ -109,6 +109,15 @@ export interface RoomLayoutAdapterOptions {
   colliderBox?: ColliderBoxResolver;
   /** Authored asset collision definitions (sidecars) keyed by asset id. */
   collisionDefs?: ReadonlyMap<string, AssetCollisionDef>;
+  /** Render-mesh triangle data for `complexAsSimple`, keyed by asset id. Runtime-only. */
+  complexCollisionMeshes?: ReadonlyMap<string, AssetComplexCollisionMesh>;
+}
+
+export interface AssetComplexCollisionMesh {
+  vertices: Vec3[];
+  indices: number[];
+  size: Vec3;
+  center: Vec3;
 }
 
 /** Mirrors `editor/core/selection.ts#selectionId` for the instance kind. */
@@ -205,6 +214,7 @@ export function roomLayoutToSceneDocument(
             placement,
             options.colliderBox,
             options.collisionDefs?.get(instance.assetId),
+            options.complexCollisionMeshes?.get(instance.assetId),
           ),
           flagTags(placement),
         ),
@@ -224,6 +234,7 @@ export function roomLayoutToSceneDocument(
           character,
           options.colliderBox,
           options.collisionDefs?.get(character.assetId),
+          options.complexCollisionMeshes?.get(character.assetId),
         ),
         flagTags(character),
       ),
@@ -278,6 +289,7 @@ function instanceComponents(
   placement: LayoutPlacement,
   resolveBox?: ColliderBoxResolver,
   collisionDef?: AssetCollisionDef,
+  complexMesh?: AssetComplexCollisionMesh,
 ): EntityComponentMap {
   const components: EntityComponentMap = {
     [TRANSFORM_COMPONENT]: toData(transformComponent(placement)),
@@ -285,7 +297,7 @@ function instanceComponents(
       meshRendererComponent(assetId, placement.castShadow, placement.materialSlot),
     ),
   };
-  const collider = colliderComponent(assetId, placement, true, resolveBox, collisionDef);
+  const collider = colliderComponent(assetId, placement, true, resolveBox, collisionDef, complexMesh);
   if (collider) components[COLLIDER_COMPONENT] = toData(collider);
   const metadata = metadataComponent(placement.metadata);
   if (metadata) components[METADATA_COMPONENT] = toData(metadata);
@@ -304,12 +316,13 @@ function characterComponents(
   character: LayoutCharacter,
   resolveBox?: ColliderBoxResolver,
   collisionDef?: AssetCollisionDef,
+  complexMesh?: AssetComplexCollisionMesh,
 ): EntityComponentMap {
   const components: EntityComponentMap = {
     [TRANSFORM_COMPONENT]: toData(transformComponent(character)),
     [MESH_RENDERER_COMPONENT]: toData(meshRendererComponent(character.assetId, character.castShadow)),
   };
-  const collider = colliderComponent(character.assetId, character, false, resolveBox, collisionDef);
+  const collider = colliderComponent(character.assetId, character, false, resolveBox, collisionDef, complexMesh);
   if (collider) components[COLLIDER_COMPONENT] = toData(collider);
   const metadata = metadataComponent(character.metadata);
   if (metadata) components[METADATA_COMPONENT] = toData(metadata);
@@ -418,8 +431,16 @@ function colliderComponent(
   isStatic: boolean,
   resolveBox: ColliderBoxResolver | undefined,
   collisionDef?: AssetCollisionDef,
+  complexMesh?: AssetComplexCollisionMesh,
 ): ColliderComponent | null {
-  const simulatePhysics = source.simulatePhysics === true;
+  // Complex-as-simple turns the render mesh into a static trimesh collider.
+  // Rapier trimeshes can't drive a dynamic body, so it is static-only: when the
+  // asset opts in it overrides any per-placement Simulate Physics flag (and only
+  // applies to static instances, never characters) instead of silently falling
+  // back to a simple box.
+  const complexMeshActive =
+    isStatic && collisionDef?.complexity === "complexAsSimple" ? complexMesh : undefined;
+  const simulatePhysics = source.simulatePhysics === true && complexMeshActive === undefined;
   if (source.collision === false && !simulatePhysics) return null;
   // A per-placement collision preset maps onto the runtime collider: a
   // collision-disabled preset drops the collider (unless it's a simulated
@@ -457,30 +478,42 @@ function colliderComponent(
   const isStaticFinal = isStatic && !simulatePhysics;
 
   let component: ColliderComponent;
-  // Authored simple-collision primitives (Static Mesh editor sidecar) drive a
-  // compound collider; placement scale is baked into each primitive, and the
-  // top-level size/center is the encompassing AABB (broad-phase + movement).
-  const primitives =
-    collisionDef && collisionDef.primitives.length > 0
-      ? bakeColliderPrimitives(collisionDef.primitives, readScale(source))
-      : null;
-  if (primitives && primitives.length > 0) {
-    const aabb = encompassingAabb(primitives);
-    component = { shape: "box", size: aabb.size, isStatic: isStaticFinal, isSensor, primitives };
-    if (!isZeroVec3(aabb.center)) component.center = aabb.center;
-  } else {
-    // World-aligned footprint from the model's bounds when the host can supply
-    // them; otherwise a scaled unit box. Rotation intentionally does not resize
-    // the collider; placement scale is baked into `size`, since the physics
-    // layer no longer rescales.
-    const box = resolveBox?.(assetId, source);
+  if (complexMeshActive) {
+    const primitive = bakeTrimeshPrimitive(complexMeshActive, readScale(source));
     component = {
       shape: "box",
-      size: box?.size ?? readScale(source),
-      isStatic: isStaticFinal,
+      size: primitive.size,
+      isStatic: true,
       isSensor,
+      primitives: [primitive],
     };
-    if (box && !isZeroVec3(box.center)) component.center = box.center;
+    if (primitive.center && !isZeroVec3(primitive.center)) component.center = primitive.center;
+  } else {
+    // Authored simple-collision primitives (Static Mesh editor sidecar) drive a
+    // compound collider; placement scale is baked into each primitive, and the
+    // top-level size/center is the encompassing AABB (broad-phase + movement).
+    const primitives =
+      collisionDef && collisionDef.primitives.length > 0
+        ? bakeColliderPrimitives(collisionDef.primitives, readScale(source))
+        : null;
+    if (primitives && primitives.length > 0) {
+      const aabb = encompassingAabb(primitives);
+      component = { shape: "box", size: aabb.size, isStatic: isStaticFinal, isSensor, primitives };
+      if (!isZeroVec3(aabb.center)) component.center = aabb.center;
+    } else {
+      // World-aligned footprint from the model's bounds when the host can supply
+      // them; otherwise a scaled unit box. Rotation intentionally does not resize
+      // the collider; placement scale is baked into `size`, since the physics
+      // layer no longer rescales.
+      const box = resolveBox?.(assetId, source);
+      component = {
+        shape: "box",
+        size: box?.size ?? readScale(source),
+        isStatic: isStaticFinal,
+        isSensor,
+      };
+      if (box && !isZeroVec3(box.center)) component.center = box.center;
+    }
   }
   if (simulatePhysics) component.simulatePhysics = true;
   const physicalMaterialId = source.physicalMaterialId ?? collisionDef?.physicalMaterialId;
@@ -503,6 +536,24 @@ function colliderComponent(
   if (profile) component.collisionGroups = collisionInteractionGroups(profile);
   copyPhysicsSettings(component, source.physics);
   return component;
+}
+
+function bakeTrimeshPrimitive(
+  mesh: AssetComplexCollisionMesh,
+  scale: Vec3,
+): ColliderPrimitive {
+  const vertices = mesh.vertices.map(
+    (point) => [point[0] * scale[0], point[1] * scale[1], point[2] * scale[2]] as Vec3,
+  );
+  const aabb = aabbOfPoints(vertices);
+  const primitive: ColliderPrimitive = {
+    shape: "trimesh",
+    size: aabb.size,
+    center: aabb.center,
+    vertices,
+    indices: [...mesh.indices],
+  };
+  return primitive;
 }
 
 /** Bakes authored local primitives into world-scaled collider primitives. */

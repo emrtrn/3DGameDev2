@@ -318,7 +318,9 @@ import {
   COLLISION_OBJECT_CHANNEL_BITS,
   DEFAULT_COLLISION_COMPLEXITY,
   DEFAULT_COLLISION_PRESET,
+  assetCollisionDefHasCollider,
   collisionInteractionGroups,
+  complexAsSimpleAssetIds,
   defaultAssetCollisionDef,
   interactionGroupsInteract,
   resolveCollisionProfile,
@@ -4224,6 +4226,49 @@ check("physics subsystem offsets a collider AABB by its center", () => {
   });
 });
 
+// complexAsSimple builds a trimesh collider; the AABB-based player movement must
+// see one blocker per triangle (so the player can walk into an L-shaped wall's
+// concave corner), not a single enclosing box.
+check("physics subsystem expands a trimesh collider into per-triangle blockers", () => {
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([
+    {
+      id: "wall",
+      components: {
+        Transform: { position: [10, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [4, 1, 4],
+          isStatic: true,
+          isSensor: false,
+          primitives: [
+            {
+              shape: "trimesh",
+              size: [4, 1, 4],
+              // Two separate triangles (an L's two arms) with a gap between them.
+              vertices: [
+                [-2, 0, -2],
+                [-1, 0, -2],
+                [-2, 1, -2],
+                [1, 0, 2],
+                [2, 0, 2],
+                [1, 1, 2],
+              ],
+              indices: [0, 1, 2, 3, 4, 5],
+            },
+          ],
+        },
+      },
+    },
+  ]);
+  const blockers = physics.staticBlockerAabbs();
+  assert.equal(blockers.length, 2); // one AABB per triangle, not one enclosing box
+  // Each triangle's AABB is translated by the body origin (10, 0, 0); the gap
+  // between x=9 and x=11 is walkable (the concave region of the L).
+  assert.deepEqual(blockers[0], { min: [8, 0, -2], max: [9, 1, -2] });
+  assert.deepEqual(blockers[1], { min: [11, 0, 2], max: [12, 1, 2] });
+});
+
 check("input-move behavior: the player cannot walk through a static wall", () => {
   const registry = createBehaviorRegistry();
   const actions = new ActionMap({ KeyD: "move-right" });
@@ -4583,6 +4628,97 @@ check("adapter keeps convex hull points and derives their AABB", () => {
   // Placement scale 2 is baked into both the points and the derived AABB size.
   assert.deepEqual(primitive?.points?.[6], [1, 1, 1]);
   assert.deepEqual(primitive?.size, [2, 2, 2]);
+});
+
+check("assetCollisionDefHasCollider keeps complexAsSimple even with no primitives", () => {
+  const empty: AssetCollisionDef = { primitives: [], complexity: "projectDefault", preset: "blockAll" };
+  const complex: AssetCollisionDef = { primitives: [], complexity: "complexAsSimple", preset: "blockAll" };
+  const withPrims: AssetCollisionDef = {
+    primitives: [{ shape: "box", size: [1, 1, 1] }],
+    complexity: "projectDefault",
+    preset: "blockAll",
+  };
+  assert.equal(assetCollisionDefHasCollider(empty), false);
+  assert.equal(assetCollisionDefHasCollider(complex), true);
+  assert.equal(assetCollisionDefHasCollider(withPrims), true);
+  const ids = complexAsSimpleAssetIds(
+    new Map([["a", empty], ["b", complex], ["c", withPrims]]),
+  );
+  assert.deepEqual([...ids], ["b"]);
+});
+
+check("adapter builds a static trimesh collider for complexAsSimple and ignores simulate", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "complex-as-simple-fixture",
+    loadGroups: [],
+    // simulatePhysics is set, but complexAsSimple is static-only and overrides it.
+    instances: [
+      { assetId: "wall", placements: [{ position: [0, 0, 0], scale: 2, simulatePhysics: true }] },
+    ],
+    characters: [],
+    lights: [],
+  };
+  const defs = new Map<string, AssetCollisionDef>([
+    ["wall", { primitives: [], complexity: "complexAsSimple", preset: "blockAll" }],
+  ]);
+  const vertices: [number, number, number][] = [
+    [-1, 0, 0],
+    [1, 0, 0],
+    [0, 1, 0],
+  ];
+  const complexCollisionMeshes = new Map([
+    [
+      "wall",
+      {
+        vertices,
+        indices: [0, 1, 2],
+        size: [2, 1, 0] as [number, number, number],
+        center: [0, 0.5, 0] as [number, number, number],
+      },
+    ],
+  ]);
+  const doc = roomLayoutToSceneDocument(layout, { collisionDefs: defs, complexCollisionMeshes });
+  const entity = doc.entities.find((e) => e.id === instanceEntityId("wall", 0));
+  const collider = entity ? readColliderComponent(entity) : undefined;
+  const primitive = collider?.primitives?.[0];
+  assert.equal(primitive?.shape, "trimesh");
+  // Placement scale 2 bakes into the vertices and the derived AABB.
+  assert.deepEqual(primitive?.vertices?.[1], [2, 0, 0]);
+  assert.deepEqual(primitive?.indices, [0, 1, 2]);
+  assert.deepEqual(primitive?.size, [4, 2, 0]);
+  assert.deepEqual(collider?.center, [0, 1, 0]);
+  assert.equal(collider?.isStatic, true);
+  // Static-only: the simulatePhysics flag is dropped, not honored.
+  assert.equal(collider?.simulatePhysics, undefined);
+});
+
+check("complexAsSimple falls back to the auto box when no render mesh is supplied", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "complex-as-simple-no-mesh",
+    loadGroups: [],
+    instances: [{ assetId: "wall", placements: [{ position: [0, 0, 0] }] }],
+    characters: [],
+    lights: [],
+  };
+  const defs = new Map<string, AssetCollisionDef>([
+    ["wall", { primitives: [], complexity: "complexAsSimple", preset: "blockAll" }],
+  ]);
+  // No complexCollisionMeshes: the adapter can't build a trimesh, so it uses the
+  // resolver's bounding box and stays a plain box collider.
+  const doc = roomLayoutToSceneDocument(layout, {
+    collisionDefs: defs,
+    colliderBox: () => ({
+      size: [3, 3, 3] as [number, number, number],
+      center: [0, 0, 0] as [number, number, number],
+    }),
+  });
+  const entity = doc.entities.find((e) => e.id === instanceEntityId("wall", 0));
+  const collider = entity ? readColliderComponent(entity) : undefined;
+  assert.equal(collider?.shape, "box");
+  assert.equal(collider?.primitives, undefined);
+  assert.deepEqual(collider?.size, [3, 3, 3]);
 });
 
 check("built-in Add Actor shapes provide shape-specific collision defs", () => {

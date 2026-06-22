@@ -1404,6 +1404,8 @@ body.editor-mode #debug-stats {
 
 .sm-empty { padding: 10px; color: #8a949a; }
 
+.sm-hint { padding: 6px 10px; color: #d6a86a; font-size: 12px; line-height: 1.4; }
+
 .sm-editor-status {
   height: 26px;
   display: flex;

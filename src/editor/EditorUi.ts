@@ -1603,6 +1603,12 @@ export class EditorUi {
         onAssetUvwSaved: (assetId) => {
           void this.app.refreshAssetUvwMapping(assetId);
         },
+        onCollisionSaved: () => {
+          // Pick up the just-saved sidecar (preset/complexity/primitives) so the
+          // scene's Show Collision overlay, Play-mode physics, and the Details
+          // Simulate Physics guard (complexAsSimple → static-only) reflect it.
+          void this.app.refreshAssetCollision().then(() => this.renderDetails(this.selected));
+        },
       });
     } catch (error) {
       this.setStatus(
@@ -2752,16 +2758,27 @@ export class EditorUi {
     const enableGravity = physics.enableGravity ?? true;
     const lockPosition = physics.lockPosition ?? [false, false, false];
     const lockRotation = physics.lockRotation ?? [false, false, false];
+    // `complexAsSimple` collision uses the render mesh as a static trimesh, which
+    // Rapier can't drive dynamically — so Simulate Physics is unavailable and
+    // forced off for these assets (the runtime ignores the flag regardless).
+    const complexAsSimple =
+      this.app.assetCollisionComplexity(selection.assetId) === "complexAsSimple";
+    const simulateDisabled = locked || complexAsSimple ? "disabled" : "";
 
     return `
       <div class="detail-section detail-physics-section">
         <div class="detail-section-title">Physics</div>
         <label class="detail-toggle">
           <input type="checkbox" data-detail-toggle="simulatePhysics" ${
-            selection.simulatePhysics ? "checked" : ""
-          } ${disabled} />
+            selection.simulatePhysics && !complexAsSimple ? "checked" : ""
+          } ${simulateDisabled} />
           <span>Simulate Physics</span>
         </label>
+        ${
+          complexAsSimple
+            ? `<div class="detail-hint detail-hint-warning">Static-only: this asset uses “Use Complex Collision As Simple” collision.</div>`
+            : ""
+        }
         <label class="detail-row">
           <span>Mass (kg)</span>
           <input data-physics-number="massKg" type="number" step="0.1" min="0.001"

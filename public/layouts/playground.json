@@ -189,13 +189,18 @@
     },
     {
       "assetId": "bathroommirror",
+      "placements": []
+    },
+    {
+      "assetId": "wallcorner",
       "placements": [
         {
           "position": [
-            -1.38,
-            1.71,
-            0.58
+            -2.33,
+            0.25,
+            0.22
           ],
+          "collisionPreset": "blockAll",
           "rotationYDeg": 0,
           "scale": 1
         }

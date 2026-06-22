@@ -13,6 +13,12 @@ export interface CollisionWirebox {
   sensor: boolean;
 }
 
+/** Render-mesh triangle data for a `complexAsSimple` asset's collision overlay. */
+export interface ComplexCollisionMesh {
+  vertices: Vec3[];
+  indices: number[];
+}
+
 /**
  * World-aligned collider boxes for every collidable placement and character in a
  * layout: the data behind the editor's "Show > Collision" overlay.
@@ -31,6 +37,7 @@ export function collisionWireboxes(
   layout: RoomLayout,
   localBounds: ReadonlyMap<string, Box3>,
   collisionDefs?: ReadonlyMap<string, AssetCollisionDef>,
+  complexMeshes?: ReadonlyMap<string, ComplexCollisionMesh>,
 ): CollisionWirebox[] {
   const boxes: CollisionWirebox[] = [];
   const emit = (
@@ -39,9 +46,16 @@ export function collisionWireboxes(
     sensor: boolean,
   ): void => {
     if (source.collision === false && source.simulatePhysics !== true) return;
+    const def = collisionDefs?.get(assetId);
+    // `complexAsSimple` uses the render mesh: draw its triangle edges so the
+    // overlay shows the actual collision shape (e.g. an L-corner), not a box.
+    const complexMesh = complexMeshes?.get(assetId);
+    if (def?.complexity === "complexAsSimple" && complexMesh) {
+      boxes.push(complexWirebox(source, complexMesh, sensor));
+      return;
+    }
     // Authored simple-collision primitives (from the Static Mesh editor's
     // sidecar) replace the auto bounding box when present.
-    const def = collisionDefs?.get(assetId);
     if (def && def.primitives.length > 0) {
       for (const primitive of def.primitives) {
         boxes.push(authoredWirebox(source, primitive, sensor));
@@ -153,6 +167,38 @@ function authoredWirebox(
   });
   const box = new Box3().setFromPoints(world.map((p) => new Vector3(p[0], p[1], p[2])));
   return { box, segments, size: [...primitive.size], sensor };
+}
+
+/**
+ * Wire overlay for a `complexAsSimple` collision: the render mesh's triangle
+ * edges under the placement transform. Mirrors the runtime trimesh collider, so
+ * "Show Collision" shows the real shape instead of an enclosing box.
+ */
+function complexWirebox(
+  source: ColliderSource,
+  mesh: ComplexCollisionMesh,
+  sensor: boolean,
+): CollisionWirebox {
+  const place = composeTransformMatrix(source.position, readRotation(source), readScale(source));
+  const world = mesh.vertices.map((point) =>
+    new Vector3(point[0], point[1], point[2]).applyMatrix4(place),
+  );
+  const segments: Vec3[] = [];
+  const edge = (a: Vector3 | undefined, b: Vector3 | undefined): void => {
+    if (!a || !b) return;
+    segments.push([a.x, a.y, a.z], [b.x, b.y, b.z]);
+  };
+  for (let t = 0; t + 2 < mesh.indices.length; t += 3) {
+    const a = world[mesh.indices[t]!];
+    const b = world[mesh.indices[t + 1]!];
+    const c = world[mesh.indices[t + 2]!];
+    edge(a, b);
+    edge(b, c);
+    edge(c, a);
+  }
+  const box = new Box3().setFromPoints(world);
+  const size = box.getSize(new Vector3());
+  return { box, segments, size: [size.x, size.y, size.z], sensor };
 }
 
 function unitSegmentsForShape(shape: CollisionPrimitive["shape"]): Vec3[] {

@@ -206,6 +206,28 @@ export function resolvePhysicalMaterial(id: string | undefined): PhysicalMateria
   return DEFAULT_PHYSICAL_MATERIAL;
 }
 
+/**
+ * Whether an asset collision definition yields a runtime collider. Authored
+ * simple primitives always do; `complexAsSimple` does too even with no
+ * primitives, since it derives a static trimesh collider from the render mesh.
+ * Other empty definitions fall back to the engine's auto bounding box, so they
+ * are not worth keeping in the loaded sidecar map.
+ */
+export function assetCollisionDefHasCollider(def: AssetCollisionDef): boolean {
+  return def.primitives.length > 0 || def.complexity === "complexAsSimple";
+}
+
+/** The asset ids in a loaded sidecar map that use `complexAsSimple` complexity. */
+export function complexAsSimpleAssetIds(
+  defs: ReadonlyMap<string, AssetCollisionDef>,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const [assetId, def] of defs) {
+    if (def.complexity === "complexAsSimple") ids.add(assetId);
+  }
+  return ids;
+}
+
 /** A fresh, empty asset collision definition (block-all, no shapes yet). */
 export function defaultAssetCollisionDef(): AssetCollisionDef {
   return {
