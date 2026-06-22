@@ -304,6 +304,20 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-22* - **Player Controller Faz 9 - PlayerCameraManager view target/blend
+  (tamam).** `src/game/playerCameraManager.ts` eklendi: runtime camera view target
+  (`source`, pose, projection) tutar, ayni kaynakta per-frame takip pozunu anlik
+  uygular, kaynak degisince position/target/FOV/near/far icin smoothstep blend
+  yapar. `RuntimePlayerController` artik `cameraManager` sahibi; TPS session
+  SpringArm/fallback takip pozunu dogrudan `PerspectiveCamera`'ya yazmak yerine
+  controller'in camera manager'ina view target olarak verir. Bu, SpringArm
+  component'li authored kamera ile fallback follow config arasinda blend edilecek
+  tek runtime kapisini acti; Default Camera modu kendi flythrough kontrolunu
+  koruyor. **Test:** yeni engine testi PlayerCameraManager'in ayni-source takip
+  guncellemesini ve kaynaklar arasi blend/projection interpolasyonunu kapsar.
+  **Gate:** `npx.cmd tsc --noEmit` temiz; engine **273** check. **Kalan Faz 9:**
+  sprint FOV blend / camera shake gibi gameplay kamera efektleri.
+
 - *2026-06-22* - **Player Controller Faz 9 - Stateful runtime PlayerController
   (tamam).** `docs/PLAYER_CONTROLLER_CHECKLIST.md` Faz 9'un ilk maddesi kapandi.
   Yeni `src/game/playerController.ts` DOM'suz runtime controller katmani oldu:
@@ -318,8 +332,8 @@ alınan karar (sonraki oturum yeniden tartışmasın).
   sayede pointer-lock/look-axis davranisi ortuk static TPS referansina bagli
   kalmadi. **Test:** yeni engine testleri runtime controller possession/input
   policy ve mapping-context look input davranisini kapsar. **Gate:** `npx.cmd tsc
-  --noEmit` temiz; engine **272** check. **Kalan Faz 9:** PlayerCameraManager
-  benzeri view target/blend ve sprint FOV/camera shake efektleri.
+  --noEmit` temiz; engine **272** check. **Kalan Faz 9:** sprint FOV/camera shake
+  efektleri.
 
 - *2026-06-22* — **Player Character Faz 6 — Runtime debug paneli (tamam → tüm
   checklist kapandı).** `docs/completed/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md`'in son

@@ -3,6 +3,7 @@ import {
   DEFAULT_LOOK_AXIS_RATE,
   type LookAngles,
 } from "@/game/gameModes/cameraControl";
+import { PlayerCameraManager } from "@/game/playerCameraManager";
 import type {
   GameModeContext,
   MouseCursorMode,
@@ -19,6 +20,7 @@ export interface RuntimePlayerControllerOptions {
 
 export class RuntimePlayerController {
   readonly playerState: PlayerState = { pawnEntityId: null, possessed: false };
+  readonly cameraManager: PlayerCameraManager;
   private controlRotation: LookAngles;
 
   constructor(
@@ -27,6 +29,7 @@ export class RuntimePlayerController {
     options: RuntimePlayerControllerOptions = {},
   ) {
     this.controlRotation = options.initialControlRotation ?? DEFAULT_CONTROL_ROTATION;
+    this.cameraManager = new PlayerCameraManager(context.camera);
   }
 
   setPawn(entityId: string | null): void {

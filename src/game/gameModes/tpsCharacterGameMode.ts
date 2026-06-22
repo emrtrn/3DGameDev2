@@ -32,6 +32,7 @@ import {
   desiredSpringArmCameraPose,
   stepSpringArmCameraPose,
 } from "@/game/springArmCamera";
+import type { CameraProjection, CameraPose } from "@/game/playerCameraManager";
 import { RuntimePlayerController } from "@/game/playerController";
 import { DEFAULT_LOOK_AXIS_RATE, lookAnglesFromForward } from "./cameraControl";
 import type {
@@ -60,6 +61,7 @@ const INITIAL_CONTROL_ROTATION = lookAnglesFromForward(
   -FOLLOW_CAMERA_CONFIG.offset[2],
 );
 const RAD_TO_DEG = 180 / Math.PI;
+const CAMERA_SOURCE_BLEND_SECONDS = 0.25;
 
 /** Crossfade duration (seconds) between locomotion clips. */
 const ANIMATION_CROSSFADE_SECONDS = 0.18;
@@ -144,7 +146,7 @@ export class TpsCharacterSession implements GameModeSession {
     return {
       controlYawDeg: controlRotation.yaw * RAD_TO_DEG,
       controlPitchDeg: controlRotation.pitch * RAD_TO_DEG,
-      cameraSource: this.activeCameraSource,
+      cameraSource: this.controller.cameraManager.cameraSource ?? this.activeCameraSource,
     };
   }
 
@@ -159,7 +161,6 @@ export class TpsCharacterSession implements GameModeSession {
     const authored = this.authoredCamera(player);
     if (authored.springArm) {
       this.activeCameraSource = "spring arm component";
-      this.syncProjection(authored.camera);
       const desired = desiredSpringArmCameraPose({
         playerPosition: pos,
         springArm: authored.springArm,
@@ -170,14 +171,18 @@ export class TpsCharacterSession implements GameModeSession {
         ? smoothingFactor(authored.springArm.cameraLagSpeed, deltaSeconds)
         : 1;
       this.followPose = stepSpringArmCameraPose(this.followPose, desired, t);
+      this.applyCameraView(
+        this.activeCameraSource,
+        this.followPose,
+        this.cameraProjection(authored.camera),
+        deltaSeconds,
+      );
     } else {
       this.activeCameraSource = "follow config";
       const t = smoothingFactor(FOLLOW_CAMERA_RATE, deltaSeconds);
       this.followPose = stepFollowCamera(this.followPose, pos, FOLLOW_CAMERA_CONFIG, t);
+      this.applyCameraView(this.activeCameraSource, this.followPose, undefined, deltaSeconds);
     }
-    const { position, target } = this.followPose;
-    this.context.camera.position.set(position[0], position[1], position[2]);
-    this.context.camera.lookAt(target[0], target[1], target[2]);
   }
 
   private updateAnimation(player: RuntimeCharacterRef): void {
@@ -201,21 +206,26 @@ export class TpsCharacterSession implements GameModeSession {
     };
   }
 
-  private syncProjection(camera: CameraComponent | undefined): void {
+  private applyCameraView(
+    source: string,
+    pose: CameraPose,
+    projection: CameraProjection | undefined,
+    deltaSeconds: number,
+  ): void {
+    this.controller.cameraManager.setViewTarget(
+      {
+        source,
+        pose,
+        ...(projection ? { projection } : {}),
+      },
+      { blendTimeSeconds: CAMERA_SOURCE_BLEND_SECONDS },
+    );
+    this.controller.cameraManager.update(deltaSeconds);
+  }
+
+  private cameraProjection(camera: CameraComponent | undefined): CameraProjection | undefined {
     if (!camera) return;
-    const projection = cameraProjectionFromComponent(camera);
-    const live = this.context.camera;
-    if (
-      live.fov === projection.fov &&
-      live.near === projection.near &&
-      live.far === projection.far
-    ) {
-      return;
-    }
-    live.fov = projection.fov;
-    live.near = projection.near;
-    live.far = projection.far;
-    live.updateProjectionMatrix();
+    return cameraProjectionFromComponent(camera);
   }
 }
 

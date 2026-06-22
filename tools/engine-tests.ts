@@ -120,6 +120,7 @@ import {
   forwardFromLookAngles,
   lookAnglesFromForward,
 } from "../src/game/gameModes/cameraControl";
+import { PlayerCameraManager } from "../src/game/playerCameraManager";
 import { RuntimePlayerController } from "../src/game/playerController";
 import {
   computePlayerStartSpawn,
@@ -5236,6 +5237,56 @@ check("runtime PlayerController updates control rotation from mapped look input 
   assert.equal(rotation.pitch, 0.1);
   context.setInputMode("ui");
   assert.equal(controller.updateControlRotation(1), rotation);
+});
+
+check("PlayerCameraManager applies view targets and blends across camera sources", () => {
+  const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+  const manager = new PlayerCameraManager(camera);
+  manager.setViewTarget({
+    source: "follow config",
+    pose: { position: [0, 1, 4], target: [0, 0, 0] },
+    projection: { fov: 50, near: 0.1, far: 100 },
+  });
+  manager.update(0);
+  assert.deepEqual(camera.position.toArray(), [0, 1, 4]);
+  assert.equal(manager.cameraSource, "follow config");
+
+  // Same source updates are normal per-frame tracking, not source transitions.
+  manager.setViewTarget(
+    {
+      source: "follow config",
+      pose: { position: [2, 1, 4], target: [2, 0, 0] },
+      projection: { fov: 55, near: 0.2, far: 150 },
+    },
+    { blendTimeSeconds: 1 },
+  );
+  manager.update(0);
+  assert.deepEqual(camera.position.toArray(), [2, 1, 4]);
+  assert.equal(camera.fov, 55);
+  assert.equal(camera.near, 0.2);
+  assert.equal(camera.far, 150);
+
+  manager.setViewTarget(
+    {
+      source: "spring arm component",
+      pose: { position: [10, 3, 8], target: [10, 1, 0] },
+      projection: { fov: 75, near: 0.3, far: 250 },
+    },
+    { blendTimeSeconds: 1 },
+  );
+  manager.update(0.5);
+  assert.equal(manager.cameraSource, "spring arm component");
+  assert.ok(Math.abs(camera.position.x - 6) < 1e-9);
+  assert.ok(Math.abs(camera.position.y - 2) < 1e-9);
+  assert.ok(Math.abs(camera.position.z - 6) < 1e-9);
+  assert.ok(Math.abs(camera.fov - 65) < 1e-9);
+  assert.ok(Math.abs(camera.near - 0.25) < 1e-9);
+  assert.ok(Math.abs(camera.far - 200) < 1e-9);
+  manager.update(0.5);
+  assert.deepEqual(camera.position.toArray(), [10, 3, 8]);
+  assert.equal(camera.fov, 75);
+  assert.equal(camera.near, 0.3);
+  assert.equal(camera.far, 250);
 });
 
 check("default camera mode never possesses an input-move character", () => {
