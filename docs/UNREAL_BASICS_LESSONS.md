@@ -304,6 +304,22 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-22* - **Player Controller Faz 9 - Sprint FOV + camera shake
+  (tamam -> Faz 9 kapandi).** `PlayerCameraManager` artik view target'in ustune
+  transient gameplay efektleri bindiriyor: `setGameplayEffects` hedef FOV offset,
+  shake amplitude ve shake frequency alir; manager bu degerleri exponential
+  blend ile uygular, FOV'u base projection'a offset olarak ekler ve poz/target'a
+  ayni deterministic shake offset'ini basar (orientation korunur, layout'a state
+  yazilmaz). `TpsCharacterSession`, possessed pawn'in locomotion snapshot'ini
+  `classifyLocomotion` ile okur; state `run` oldugunda sprint FOV + hafif shake
+  ister, aksi halde efektleri sifira blend eder. Authored Camera component yoksa
+  bile base projection `cameraProjectionFromComponent(undefined)` ile saglanir,
+  yani FOV offset birikmez. **Test:** yeni engine testi FOV/shake blendini kapsar;
+  Actor Script sprint locomotion testi artik takip pozunun ustundeki kucuk shake'i
+  toleransla dogrular. **Gate:** `npx.cmd tsc --noEmit` temiz; engine **274**
+  check. **Durum:** `docs/PLAYER_CONTROLLER_CHECKLIST.md` Faz 7-9 tum maddeler
+  `[x]`; bir sonraki kamera isi yeni checklist/faz olarak acilmali.
+
 - *2026-06-22* - **Player Controller Faz 9 - PlayerCameraManager view target/blend
   (tamam).** `src/game/playerCameraManager.ts` eklendi: runtime camera view target
   (`source`, pose, projection) tutar, ayni kaynakta per-frame takip pozunu anlik
@@ -316,7 +332,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
   koruyor. **Test:** yeni engine testi PlayerCameraManager'in ayni-source takip
   guncellemesini ve kaynaklar arasi blend/projection interpolasyonunu kapsar.
   **Gate:** `npx.cmd tsc --noEmit` temiz; engine **273** check. **Kalan Faz 9:**
-  sprint FOV blend / camera shake gibi gameplay kamera efektleri.
+  sonraki kayitta kapatildi.
 
 - *2026-06-22* - **Player Controller Faz 9 - Stateful runtime PlayerController
   (tamam).** `docs/PLAYER_CONTROLLER_CHECKLIST.md` Faz 9'un ilk maddesi kapandi.
@@ -332,8 +348,8 @@ alınan karar (sonraki oturum yeniden tartışmasın).
   sayede pointer-lock/look-axis davranisi ortuk static TPS referansina bagli
   kalmadi. **Test:** yeni engine testleri runtime controller possession/input
   policy ve mapping-context look input davranisini kapsar. **Gate:** `npx.cmd tsc
-  --noEmit` temiz; engine **272** check. **Kalan Faz 9:** sprint FOV/camera shake
-  efektleri.
+  --noEmit` temiz; engine **272** check. **Kalan Faz 9:** sonraki kayitlarda
+  kapatildi.
 
 - *2026-06-22* — **Player Character Faz 6 — Runtime debug paneli (tamam → tüm
   checklist kapandı).** `docs/completed/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md`'in son

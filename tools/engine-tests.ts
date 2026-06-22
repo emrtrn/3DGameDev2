@@ -5289,6 +5289,29 @@ check("PlayerCameraManager applies view targets and blends across camera sources
   assert.equal(camera.far, 250);
 });
 
+check("PlayerCameraManager blends sprint FOV and camera shake effects", () => {
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  const manager = new PlayerCameraManager(camera);
+  manager.setViewTarget({
+    source: "spring arm component",
+    pose: { position: [0, 1, 4], target: [0, 1, 0] },
+    projection: { fov: 60, near: 0.1, far: 100 },
+  });
+  manager.setGameplayEffects({ fovOffset: 5, shakeAmplitude: 0.1, shakeFrequencyHz: 2 });
+  manager.update(1);
+
+  const position = camera.position.toArray();
+  assert.ok(camera.fov > 64.9 && camera.fov < 65.01);
+  assert.notDeepEqual(position, [0, 1, 4]);
+  assert.ok(Math.hypot(position[0], position[1] - 1, position[2] - 4) <= 0.15);
+  assert.ok(manager.gameplayEffects.shakeAmplitude > 0.09);
+
+  manager.setGameplayEffects({});
+  manager.update(1);
+  assert.ok(camera.fov > 59.99 && camera.fov < 60.01);
+  assert.ok(manager.gameplayEffects.shakeAmplitude < 0.001);
+});
+
 check("default camera mode never possesses an input-move character", () => {
   const camera = new PerspectiveCamera();
   const actions = new ActionMap(MOVE_BINDINGS);
@@ -5392,10 +5415,12 @@ check("tps mode animates + follows a possessed Actor Script character", () => {
   // locomotion animation bridge now spans Actor Script characters).
   assert.equal(mixers.length, 1);
   session.update(0.1);
-  // The follow camera snaps behind+above the actor object (offset [0, 1.2, 2.6]).
-  assert.ok(Math.abs(camera.position.x - 1) < 1e-6);
-  assert.ok(Math.abs(camera.position.y - 1.2) < 1e-6);
-  assert.ok(Math.abs(camera.position.z - (-4 + 2.6)) < 1e-6);
+  // The follow camera tracks behind+above the actor; the running locomotion report
+  // now adds a small gameplay shake and sprint FOV on top of that base pose.
+  assert.ok(Math.abs(camera.position.x - 1) < 0.03);
+  assert.ok(Math.abs(camera.position.y - 1.2) < 0.03);
+  assert.ok(Math.abs(camera.position.z - (-4 + 2.6)) < 0.03);
+  assert.ok(camera.fov > 44);
 });
 
 check("tps mode maps authored SpringArm and Camera components to runtime camera", () => {

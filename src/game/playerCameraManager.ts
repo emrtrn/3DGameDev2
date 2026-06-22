@@ -22,6 +22,12 @@ export interface SetViewTargetOptions {
   readonly blendTimeSeconds?: number;
 }
 
+export interface GameplayCameraEffects {
+  readonly fovOffset?: number;
+  readonly shakeAmplitude?: number;
+  readonly shakeFrequencyHz?: number;
+}
+
 interface CameraBlend {
   readonly from: CameraViewTarget;
   to: CameraViewTarget;
@@ -29,14 +35,34 @@ interface CameraBlend {
   readonly durationSeconds: number;
 }
 
+interface ResolvedGameplayCameraEffects {
+  fovOffset: number;
+  shakeAmplitude: number;
+  shakeFrequencyHz: number;
+}
+
+const EFFECT_BLEND_RATE = 8;
+const DEFAULT_EFFECTS: ResolvedGameplayCameraEffects = {
+  fovOffset: 0,
+  shakeAmplitude: 0,
+  shakeFrequencyHz: 0,
+};
+
 export class PlayerCameraManager {
   private current: CameraViewTarget | null = null;
   private blend: CameraBlend | null = null;
+  private effectTarget: ResolvedGameplayCameraEffects = { ...DEFAULT_EFFECTS };
+  private effects: ResolvedGameplayCameraEffects = { ...DEFAULT_EFFECTS };
+  private effectTimeSeconds = 0;
 
   constructor(private readonly camera: PerspectiveCamera) {}
 
   get cameraSource(): string | null {
     return this.blend?.to.source ?? this.current?.source ?? null;
+  }
+
+  get gameplayEffects(): ResolvedGameplayCameraEffects {
+    return { ...this.effects };
   }
 
   setViewTarget(target: CameraViewTarget, options: SetViewTargetOptions = {}): void {
@@ -71,7 +97,16 @@ export class PlayerCameraManager {
     this.current = next;
   }
 
+  setGameplayEffects(effects: GameplayCameraEffects): void {
+    this.effectTarget = {
+      fovOffset: finiteOrZero(effects.fovOffset),
+      shakeAmplitude: Math.max(0, finiteOrZero(effects.shakeAmplitude)),
+      shakeFrequencyHz: Math.max(0, finiteOrZero(effects.shakeFrequencyHz)),
+    };
+  }
+
   update(deltaSeconds: number): void {
+    this.updateEffects(deltaSeconds);
     const blend = this.blend;
     if (!blend) {
       if (this.current) this.applyView(this.current);
@@ -89,10 +124,45 @@ export class PlayerCameraManager {
   }
 
   private applyView(view: CameraViewTarget): void {
-    const { position, target } = view.pose;
+    const pose = this.poseWithShake(view.pose);
+    const { position, target } = pose;
     this.camera.position.set(position[0], position[1], position[2]);
     this.camera.lookAt(target[0], target[1], target[2]);
-    if (view.projection) applyProjection(this.camera, view.projection);
+    if (view.projection) applyProjection(this.camera, this.projectionWithEffects(view.projection));
+  }
+
+  private updateEffects(deltaSeconds: number): void {
+    const dt = Math.max(0, deltaSeconds);
+    this.effectTimeSeconds += dt;
+    const t = smoothingFactor(EFFECT_BLEND_RATE, dt);
+    this.effects = {
+      fovOffset: lerp(this.effects.fovOffset, this.effectTarget.fovOffset, t),
+      shakeAmplitude: lerp(this.effects.shakeAmplitude, this.effectTarget.shakeAmplitude, t),
+      shakeFrequencyHz: this.effectTarget.shakeFrequencyHz,
+    };
+  }
+
+  private poseWithShake(pose: CameraPose): CameraPose {
+    const amplitude = this.effects.shakeAmplitude;
+    const frequency = this.effects.shakeFrequencyHz;
+    if (!(amplitude > 0) || !(frequency > 0)) return pose;
+    const phase = this.effectTimeSeconds * frequency * Math.PI * 2;
+    const offset: Vec3 = [
+      Math.sin(phase * 1.31) * amplitude,
+      Math.sin(phase * 1.73 + 1.2) * amplitude * 0.55,
+      Math.cos(phase * 1.11) * amplitude,
+    ];
+    return {
+      position: addVec3(pose.position, offset),
+      target: addVec3(pose.target, offset),
+    };
+  }
+
+  private projectionWithEffects(projection: CameraProjection): CameraProjection {
+    return {
+      ...projection,
+      fov: projection.fov + this.effects.fovOffset,
+    };
   }
 }
 
@@ -167,8 +237,17 @@ function lerpVec3(a: Vec3, b: Vec3, t: number): Vec3 {
   return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 }
 
+function addVec3(a: Vec3, b: Vec3): Vec3 {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+function smoothingFactor(rate: number, dt: number): number {
+  if (!(rate > 0) || !(dt > 0)) return 0;
+  return 1 - Math.exp(-rate * dt);
 }
 
 function smoothStep(t: number): number {
@@ -179,4 +258,8 @@ function clamp01(value: number): number {
   if (value < 0) return 0;
   if (value > 1) return 1;
   return value;
+}
+
+function finiteOrZero(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }

@@ -24,6 +24,7 @@ import {
   type Vec3,
 } from "@/game/followCamera";
 import {
+  classifyLocomotion,
   selectLocomotionClip,
   DEFAULT_LOCOMOTION_THRESHOLDS,
 } from "@/game/locomotionAnimation";
@@ -62,6 +63,9 @@ const INITIAL_CONTROL_ROTATION = lookAnglesFromForward(
 );
 const RAD_TO_DEG = 180 / Math.PI;
 const CAMERA_SOURCE_BLEND_SECONDS = 0.25;
+const SPRINT_FOV_OFFSET = 6;
+const SPRINT_SHAKE_AMPLITUDE = 0.025;
+const SPRINT_SHAKE_FREQUENCY_HZ = 8;
 
 /** Crossfade duration (seconds) between locomotion clips. */
 const ANIMATION_CROSSFADE_SECONDS = 0.18;
@@ -159,6 +163,7 @@ export class TpsCharacterSession implements GameModeSession {
   private updateFollowCamera(player: RuntimeCharacterRef, deltaSeconds: number): void {
     const pos: Vec3 = [player.object.position.x, player.object.position.y, player.object.position.z];
     const authored = this.authoredCamera(player);
+    this.updateGameplayCameraEffects(player);
     if (authored.springArm) {
       this.activeCameraSource = "spring arm component";
       const desired = desiredSpringArmCameraPose({
@@ -181,7 +186,12 @@ export class TpsCharacterSession implements GameModeSession {
       this.activeCameraSource = "follow config";
       const t = smoothingFactor(FOLLOW_CAMERA_RATE, deltaSeconds);
       this.followPose = stepFollowCamera(this.followPose, pos, FOLLOW_CAMERA_CONFIG, t);
-      this.applyCameraView(this.activeCameraSource, this.followPose, undefined, deltaSeconds);
+      this.applyCameraView(
+        this.activeCameraSource,
+        this.followPose,
+        this.cameraProjection(undefined),
+        deltaSeconds,
+      );
     }
   }
 
@@ -192,6 +202,22 @@ export class TpsCharacterSession implements GameModeSession {
     if (!report) return;
     const clip = selectLocomotionClip(report, animator.clips, DEFAULT_LOCOMOTION_THRESHOLDS);
     if (clip) animator.play(clip, ANIMATION_CROSSFADE_SECONDS);
+  }
+
+  private updateGameplayCameraEffects(player: RuntimeCharacterRef): void {
+    const report = this.context.getLocomotion(player.entityId);
+    const sprinting =
+      report !== undefined &&
+      classifyLocomotion(report, DEFAULT_LOCOMOTION_THRESHOLDS) === "run";
+    this.controller.cameraManager.setGameplayEffects(
+      sprinting
+        ? {
+            fovOffset: SPRINT_FOV_OFFSET,
+            shakeAmplitude: SPRINT_SHAKE_AMPLITUDE,
+            shakeFrequencyHz: SPRINT_SHAKE_FREQUENCY_HZ,
+          }
+        : {},
+    );
   }
 
   private authoredCamera(player: RuntimeCharacterRef): {
@@ -209,22 +235,21 @@ export class TpsCharacterSession implements GameModeSession {
   private applyCameraView(
     source: string,
     pose: CameraPose,
-    projection: CameraProjection | undefined,
+    projection: CameraProjection,
     deltaSeconds: number,
   ): void {
     this.controller.cameraManager.setViewTarget(
       {
         source,
         pose,
-        ...(projection ? { projection } : {}),
+        projection,
       },
       { blendTimeSeconds: CAMERA_SOURCE_BLEND_SECONDS },
     );
     this.controller.cameraManager.update(deltaSeconds);
   }
 
-  private cameraProjection(camera: CameraComponent | undefined): CameraProjection | undefined {
-    if (!camera) return;
+  private cameraProjection(camera: CameraComponent | undefined): CameraProjection {
     return cameraProjectionFromComponent(camera);
   }
 }

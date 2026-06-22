@@ -206,7 +206,7 @@ Durum: `[ ]` yapilmadi, `[~]` devam ediyor, `[x]` tamam.
 - [x] Stateful runtime `PlayerController`: control rotation + mapping context +
       input mode + possess/unpossess sahibi.
 - [x] PlayerCameraManager benzeri view target + kameralar arasi blend.
-- [ ] Sprint'te FOV blend / camera shake gibi gameplay kamera efektleri.
+- [x] Sprint'te FOV blend / camera shake gibi gameplay kamera efektleri.
 - [x] `docs/UNREAL_BASICS_LESSONS.md` progress log + kanonik dosya listesi
       guncel kalsin.
 
@@ -230,7 +230,8 @@ Durum: `[ ]` yapilmadi, `[~]` devam ediyor, `[x]` tamam.
 - `public/assets/starter-content/Script/Player.actor.json` - SpringArm + Camera authored.
 - `engine/scene/components.ts` - `readSpringArmComponent` / `readCameraComponent`.
 - `src/game/playerController.ts` - runtime `PlayerController`: control rotation, input policy, possess/unpossess.
-- `src/game/playerCameraManager.ts` - runtime view target, projection sync ve kamera kaynaklari arasi blend.
+- `src/game/playerCameraManager.ts` - runtime view target, projection sync,
+  kamera kaynaklari arasi blend, sprint FOV offset ve camera shake efektleri.
 - `src/game/gameModes/tpsCharacterGameMode.ts` - TPS possession, spring arm camera ve locomotion bridge.
 - `src/game/gameModes/defaultCameraGameMode.ts` - live camera pawn + runtime controller kullanimi.
 - `src/game/gameModes/projectGameMode.ts` - project GameMode'un TPS controller varsayilanlarini devralmasi.
