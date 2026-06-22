@@ -34,6 +34,7 @@ import { validateSceneDocument } from "../engine/scene/sceneSerialization";
 import {
   readAudioComponent,
   readBehaviorComponent,
+  readCameraComponent,
   readCharacterMovementComponent,
   readColliderComponent,
   readInteractionComponent,
@@ -46,6 +47,7 @@ import {
   readScriptDispatchersComponent,
   readScriptInterfacesComponent,
   readScriptReferencesComponent,
+  readSpringArmComponent,
   readTransformComponent,
   INTERACTION_COMPONENT,
   MESSAGE_BINDINGS_COMPONENT,
@@ -90,14 +92,17 @@ import {
 import { initialInteractionState, stepInteractionTrigger } from "../src/game/interaction";
 import { parseEffectDefinition } from "../engine/render-three/particleEffect";
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
+import { entityCharacterItem } from "../engine/render-three/models";
 import {
   DEFAULT_GAME_MODE_ID,
   GAME_MODE_OPTIONS,
+  isGameModeClassRef,
   isKnownGameModeId,
   normalizeGameModeId,
   TPS_GAME_MODE_ID,
 } from "../src/game/gameModes/catalog";
 import { resolveGameMode } from "../src/game/gameModes/registry";
+import { createProjectGameMode } from "../src/game/gameModes/projectGameMode";
 import {
   applyMouseLook,
   cameraPlanarPan,
@@ -189,6 +194,7 @@ import {
 import {
   defaultActorScriptDef,
   normalizeActorScriptDef,
+  readGameModeDefaultPawnClassRef,
 } from "../engine/scene/actorScript";
 import { actorPreviewNodes } from "../engine/scene/actorPreview";
 import { normalizeForgeMaterialDef } from "../engine/assets/material";
@@ -918,6 +924,56 @@ check("character entity carries placement render inputs for parity", () => {
     assert.equal(renderer.castShadow ?? true, character.castShadow ?? true);
     assert.equal(entity.tags?.includes("hidden") ?? false, character.hidden ?? false);
   });
+});
+
+check("readMeshRendererComponent reads an authored local scale, else leaves it absent", () => {
+  const scaled = normalizeActorScriptDef({
+    name: "Small",
+    parentClass: "character",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "mesh", parent: "root", component: "MeshRenderer", props: { assetId: "hero", scale: [0.3, 0.3, 0.3] } },
+    ],
+  });
+  const entity = actorInstanceToEntity(scaled, { classRef: "Small.actor.json", position: [0, 0, 0] }, 0);
+  assert.deepEqual(readMeshRendererComponent(entity)?.scale, [0.3, 0.3, 0.3]);
+
+  const plain = normalizeActorScriptDef({
+    name: "Plain",
+    parentClass: "character",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "mesh", parent: "root", component: "MeshRenderer", props: { assetId: "hero" } },
+    ],
+  });
+  const plainEntity = actorInstanceToEntity(plain, { classRef: "Plain.actor.json", position: [0, 0, 0] }, 0);
+  assert.equal(readMeshRendererComponent(plainEntity)?.scale, undefined);
+});
+
+check("entityCharacterItem multiplies the MeshRenderer local scale into the placement scale", () => {
+  const def = normalizeActorScriptDef({
+    name: "Small",
+    parentClass: "character",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "mesh", parent: "root", component: "MeshRenderer", props: { assetId: "hero", scale: [0.3, 0.5, 0.3] } },
+    ],
+  });
+  // Placement scale 2 on a class authored at 0.3/0.5/0.3 -> rendered 0.6/1.0/0.6.
+  const entity = actorInstanceToEntity(def, { classRef: "Small.actor.json", position: [0, 0, 0], scale: 2 }, 0);
+  assert.deepEqual(entityCharacterItem(entity).scale, [0.6, 1, 0.6]);
+
+  // No authored mesh scale -> the placement scale is used unchanged.
+  const plain = normalizeActorScriptDef({
+    name: "Plain",
+    parentClass: "character",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "mesh", parent: "root", component: "MeshRenderer", props: { assetId: "hero" } },
+    ],
+  });
+  const plainEntity = actorInstanceToEntity(plain, { classRef: "Plain.actor.json", position: [0, 0, 0], scale: [1, 2, 3] }, 0);
+  assert.deepEqual(entityCharacterItem(plainEntity).scale, [1, 2, 3]);
 });
 
 // 7. Render parity: a light entity carries the exact transform, light, name,
@@ -4809,7 +4865,12 @@ const MOVE_BINDINGS = {
 
 function makeCharacterRef(
   index: number,
-  opts: { input?: boolean; player?: boolean; actorMovement?: boolean } = {},
+  opts: {
+    input?: boolean;
+    player?: boolean;
+    actorMovement?: boolean;
+    animations?: AnimationClip[];
+  } = {},
 ): RuntimeCharacterRef {
   const placement: LayoutCharacter = {
     assetId: "hero",
@@ -4821,7 +4882,7 @@ function makeCharacterRef(
     index,
     entityId: opts.actorMovement ? actorInstanceEntityId(index) : characterEntityId(index),
     object: new Object3D(),
-    gltf: { animations: [] } as unknown as GLTF,
+    gltf: { animations: opts.animations ?? [] } as unknown as GLTF,
     placement,
     ...(opts.actorMovement
       ? {
@@ -4874,6 +4935,32 @@ check("normalizeGameModeId / resolveGameMode fall back to the default camera mod
   assert.equal(resolveGameMode(undefined).id, DEFAULT_GAME_MODE_ID);
   assert.equal(resolveGameMode("forge.nope").id, DEFAULT_GAME_MODE_ID);
   assert.equal(resolveGameMode("forge.tpsCharacter").id, "forge.tpsCharacter");
+});
+
+check("isGameModeClassRef distinguishes project class refs from built-in ids", () => {
+  assert.ok(isGameModeClassRef("assets/Script/MyGameMode.actor.json"));
+  assert.equal(isGameModeClassRef("forge.tpsCharacter"), false);
+  assert.equal(isGameModeClassRef(undefined), false);
+});
+
+check("normalizeGameModeId passes a project Game Mode class ref through unchanged", () => {
+  const ref = "assets/Script/MyGameMode.actor.json";
+  assert.equal(normalizeGameModeId(ref), ref);
+});
+
+check("readGameModeDefaultPawnClassRef reads the authored variable default, else undefined", () => {
+  const def = normalizeActorScriptDef({
+    name: "GM",
+    parentClass: "gameMode",
+    variables: [
+      { key: "defaultPawnClassRef", type: "text", default: "assets/Script/Player.actor.json" },
+    ],
+  });
+  assert.equal(readGameModeDefaultPawnClassRef(def), "assets/Script/Player.actor.json");
+  assert.equal(
+    readGameModeDefaultPawnClassRef(defaultActorScriptDef("Empty", "gameMode")),
+    undefined,
+  );
 });
 
 check("save validator preserves worldSettings.gameMode and drops runtime state", () => {
@@ -4976,6 +5063,77 @@ check("tps mode can possess an Actor Script character with CharacterMovement", (
   const session = tpsCharacterGameMode.createSession(context);
   session.spawnDefaultPawn();
   assert.equal(session.playerState.pawnEntityId, actorInstanceEntityId(0));
+});
+
+check("tps mode animates + follows a possessed Actor Script character", () => {
+  const camera = new PerspectiveCamera();
+  const animations = [
+    new AnimationClip("idle", 1, []),
+    new AnimationClip("walk", 1, []),
+    new AnimationClip("sprint", 1, []),
+  ];
+  const characters = [makeCharacterRef(0, { actorMovement: true, animations })];
+  characters[0].object.position.set(1, 0, -4);
+  // The CharacterMovement subsystem reports the possessed actor's locomotion under
+  // its actor entity id; a running report should crossfade toward the sprint clip.
+  const locomotion = new Map<string, LocomotionInput>([
+    [actorInstanceEntityId(0), { planarSpeed: 5, grounded: true, velocityY: 0 }],
+  ]);
+  const { context, mixers } = makeGameModeContext({ camera, characters, locomotion });
+  const session = tpsCharacterGameMode.createSession(context);
+  session.spawnDefaultPawn();
+  session.possess();
+  // possess() builds a CrossfadeAnimator from the actor's own gltf clips (the
+  // locomotion animation bridge now spans Actor Script characters).
+  assert.equal(mixers.length, 1);
+  session.update(0.1);
+  // The follow camera snaps behind+above the actor object (offset [0, 1.2, 2.6]).
+  assert.ok(Math.abs(camera.position.x - 1) < 1e-6);
+  assert.ok(Math.abs(camera.position.y - 1.2) < 1e-6);
+  assert.ok(Math.abs(camera.position.z - (-4 + 2.6)) < 1e-6);
+});
+
+check("locomotion bridge selects an Actor Script character's run clip from its movement state", () => {
+  // The exact composition TpsCharacterSession.updateAnimation runs, exercised over
+  // an Actor Script character's clip vocabulary via the public CrossfadeAnimator API.
+  const clips = [
+    new AnimationClip("idle", 1, []),
+    new AnimationClip("walk", 1, []),
+    new AnimationClip("sprint", 1, []),
+  ];
+  const animator = new CrossfadeAnimator(new Object3D(), clips);
+  animator.play("idle", 0);
+  assert.equal(animator.currentClip, "idle");
+  const running: LocomotionInput = { planarSpeed: 5, grounded: true, velocityY: 0 };
+  const clip = selectLocomotionClip(running, animator.clips);
+  assert.equal(clip, "sprint"); // run state -> sprint clip via the fallback chain
+  if (clip) animator.play(clip, 0.18);
+  assert.equal(animator.currentClip, "sprint");
+});
+
+check("project game mode carries its pawn class ref and possesses an actor character", () => {
+  const mode = createProjectGameMode({
+    classRef: "assets/Script/MyGameMode.actor.json",
+    displayName: "MyGameMode",
+    defaultPawnClassRef: "assets/Script/Player.actor.json",
+  });
+  assert.equal(mode.id, "assets/Script/MyGameMode.actor.json");
+  assert.equal(mode.displayName, "MyGameMode");
+  assert.equal(mode.defaultPawn.kind, "character");
+  assert.equal(mode.defaultPawn.pawnClassRef, "assets/Script/Player.actor.json");
+
+  const characters = [makeCharacterRef(0, { actorMovement: true })];
+  const { context } = makeGameModeContext({ characters });
+  const session = mode.createSession(context);
+  session.spawnDefaultPawn();
+  session.possess();
+  assert.equal(session.playerState.pawnEntityId, actorInstanceEntityId(0));
+  assert.ok(session.playerState.possessed);
+});
+
+check("createProjectGameMode without a default pawn omits pawnClassRef", () => {
+  const mode = createProjectGameMode({ classRef: "a.actor.json", displayName: "A" });
+  assert.equal(mode.defaultPawn.pawnClassRef, undefined);
 });
 
 check("input-move behavior: an unpossessed character ignores movement input", () => {
@@ -6122,6 +6280,111 @@ check("actorInstanceToEntity flattens a class + placement into one entity", () =
   // Round-trips through the entity-id helpers.
   assert.equal(parseActorInstanceEntityIndex(actorInstanceEntityId(7)), 7);
   assert.equal(parseActorInstanceEntityIndex("character:7"), null);
+});
+
+check("readCameraComponent reads authored projection, else runtime-camera defaults", () => {
+  const def = normalizeActorScriptDef({
+    name: "Cam",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      {
+        id: "cam",
+        parent: "root",
+        component: "Camera",
+        props: { fieldOfView: 60, nearClip: 0.5, farClip: 200, isOrthographic: true, orthoWidth: 14 },
+      },
+    ],
+  });
+  const entity = actorInstanceToEntity(def, { classRef: "Cam.actor.json", position: [0, 0, 0] }, 0);
+  assert.deepEqual(readCameraComponent(entity), {
+    fieldOfView: 60,
+    nearClip: 0.5,
+    farClip: 200,
+    isOrthographic: true,
+    orthoWidth: 14,
+  });
+
+  // Empty props fall back to the runtime camera defaults (FOV 44, near 0.1, far 100).
+  const bare = normalizeActorScriptDef({
+    name: "Cam2",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "cam", parent: "root", component: "Camera", props: {} },
+    ],
+  });
+  const bareEntity = actorInstanceToEntity(bare, { classRef: "Cam2.actor.json", position: [0, 0, 0] }, 0);
+  assert.deepEqual(readCameraComponent(bareEntity), {
+    fieldOfView: 44,
+    nearClip: 0.1,
+    farClip: 100,
+    isOrthographic: false,
+    orthoWidth: 10,
+  });
+});
+
+check("readSpringArmComponent reads authored boom, else defaults; doCollisionTest defaults true", () => {
+  const def = normalizeActorScriptDef({
+    name: "Boom",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      {
+        id: "arm",
+        parent: "root",
+        component: "SpringArm",
+        props: {
+          targetArmLength: 4.5,
+          socketOffset: [0, 1, 0],
+          targetOffset: [0, 0.5, 0],
+          enableCameraLag: true,
+          cameraLagSpeed: 12,
+          doCollisionTest: false,
+        },
+      },
+    ],
+  });
+  const entity = actorInstanceToEntity(def, { classRef: "Boom.actor.json", position: [0, 0, 0] }, 0);
+  assert.deepEqual(readSpringArmComponent(entity), {
+    targetArmLength: 4.5,
+    socketOffset: [0, 1, 0],
+    targetOffset: [0, 0.5, 0],
+    enableCameraLag: true,
+    cameraLagSpeed: 12,
+    doCollisionTest: false,
+  });
+
+  const bare = normalizeActorScriptDef({
+    name: "Boom2",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "arm", parent: "root", component: "SpringArm", props: {} },
+    ],
+  });
+  const bareEntity = actorInstanceToEntity(bare, { classRef: "Boom2.actor.json", position: [0, 0, 0] }, 0);
+  assert.deepEqual(readSpringArmComponent(bareEntity), {
+    targetArmLength: 3,
+    socketOffset: [0, 0, 0],
+    targetOffset: [0, 0, 0],
+    enableCameraLag: false,
+    cameraLagSpeed: 10,
+    doCollisionTest: true, // absent means on (Unreal default)
+  });
+});
+
+check("normalizeActorScriptDef keeps SpringArm + Camera component nodes (survive save)", () => {
+  const def = normalizeActorScriptDef({
+    name: "Player",
+    parentClass: "character",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "boom", parent: "root", component: "SpringArm", props: { targetArmLength: 3 } },
+      { id: "cam", parent: "boom", component: "Camera", props: { fieldOfView: 50 } },
+    ],
+  });
+  const kinds = def.components.map((node) => node.component);
+  assert.ok(kinds.includes("SpringArm"));
+  assert.ok(kinds.includes("Camera"));
+  // The camera node hangs off the spring arm, mirroring the Unreal boom→camera chain.
+  assert.equal(def.components.find((node) => node.component === "Camera")?.parent, "boom");
 });
 
 check("attachActorLight builds a scene light from an actor's Light component", () => {

@@ -46,10 +46,21 @@ export function isKnownGameModeId(id: string | undefined): boolean {
 }
 
 /**
- * Resolves an authored (possibly unknown / undefined) Game Mode id to a known
- * id, falling back to {@link DEFAULT_GAME_MODE_ID}. Old layouts with no
- * `worldSettings.gameMode` therefore boot as the default camera mode.
+ * True when `id` references a project Game Mode Actor Script (a `*.actor.json`
+ * path stored in `worldSettings.gameMode`) rather than a built-in mode id.
+ * Built-in ids use the `forge.` namespace; project modes are class refs.
+ */
+export function isGameModeClassRef(id: string | undefined): boolean {
+  return typeof id === "string" && id.endsWith(".actor.json");
+}
+
+/**
+ * Resolves an authored (possibly unknown / undefined) Game Mode id to a usable
+ * one. Built-in ids and project Game Mode class refs pass through unchanged;
+ * anything else (old/malformed ids, absent value) falls back to
+ * {@link DEFAULT_GAME_MODE_ID}, so old layouts boot as the default camera mode.
  */
 export function normalizeGameModeId(id: string | undefined): string {
-  return isKnownGameModeId(id) ? (id as string) : DEFAULT_GAME_MODE_ID;
+  if (isKnownGameModeId(id) || isGameModeClassRef(id)) return id as string;
+  return DEFAULT_GAME_MODE_ID;
 }

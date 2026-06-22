@@ -62,7 +62,8 @@ import {
 } from "@/project/ProjectAssetTree";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { loadAssetMaterialSlots } from "@/scene/assetMaterialSlotsLoader";
-import { GAME_MODE_OPTIONS } from "@/game/gameModes/catalog";
+import { GAME_MODE_OPTIONS, type GameModeOption } from "@/game/gameModes/catalog";
+import { loadActorScript } from "@/editor/actorScriptStore";
 import { BEHAVIOR_SCRIPT_IDS } from "@/game/behaviors";
 import {
   PARENT_CLASSES,
@@ -216,6 +217,10 @@ export class EditorUi {
   private metadataSchema: MetadataSchema | null = null;
   private editableAssets: EditableAsset[] = [];
   private assetTreeRoot: ProjectDirNode | null = null;
+  /** All project Actor Script classes discovered for editor pickers (game mode / pawn). */
+  private projectActorClasses: { path: string; name: string; parentClass: ParentClass }[] = [];
+  /** Project `gameMode` Actor Scripts discovered for the World Settings dropdown. */
+  private projectGameModes: GameModeOption[] = [];
   private selectedFolder = "";
   private collapsedFolderPaths = new Set<string>();
   /** Content Browser asset card highlighted as selected (orange). */
@@ -935,11 +940,49 @@ export class EditorUi {
       this.renderFolderTree();
       this.renderContentFilters();
       this.renderContentAssets();
+      void this.refreshProjectActorClasses();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.contentStatus.textContent = message;
       if (!options.quiet) this.setStatus(message, "error");
     }
+  }
+
+  /**
+   * Scans the project's `*.actor.json` files and caches each class's name +
+   * parent class, then derives the editor pickers that depend on it: the World
+   * Settings Game Mode dropdown ({@link projectGameModes}) and (on demand) the
+   * Game Mode "Default Pawn Class" picker. Re-renders the World Settings tab when
+   * the discovered Game Mode set changed.
+   */
+  private async refreshProjectActorClasses(): Promise<void> {
+    if (!this.assetTreeRoot) return;
+    const actorPaths = flattenProjectFiles([this.assetTreeRoot])
+      .filter((file) => file.path.endsWith(".actor.json"))
+      .map((file) => normalizeProjectPath(file.path));
+    this.projectActorClasses = await Promise.all(
+      actorPaths.map(async (path) => {
+        const def = await loadActorScript(path, path);
+        return { path, name: def.name || path, parentClass: def.parentClass };
+      }),
+    );
+
+    const next: GameModeOption[] = this.projectActorClasses
+      .filter((cls) => cls.parentClass === "gameMode")
+      .map((cls) => ({
+        id: cls.path,
+        displayName: cls.name,
+        description: "Project Game Mode (Actor Script).",
+      }));
+    const changed =
+      next.length !== this.projectGameModes.length ||
+      next.some((option, index) => {
+        const prev = this.projectGameModes[index];
+        return !prev || prev.id !== option.id || prev.displayName !== option.displayName;
+      });
+    if (!changed) return;
+    this.projectGameModes = next;
+    this.renderWorldSettings(this.worldSettings ?? this.app.getWorldSettings());
   }
 
   private renderFolderTree(): void {
@@ -2006,6 +2049,12 @@ export class EditorUi {
   private async openActorScriptEditor(item: BrowserAssetItem): Promise<void> {
     try {
       const { ActorScriptEditor } = await import("@/editor/ActorScriptEditor");
+      // Freshly scan project classes so a Game Mode's Default Pawn Class picker
+      // lists the latest character/pawn Actor Scripts (incl. just-created ones).
+      await this.refreshProjectActorClasses();
+      const pawnClassRefs = this.projectActorClasses
+        .filter((cls) => cls.parentClass === "character" || cls.parentClass === "pawn")
+        .map((cls) => ({ path: cls.path, name: cls.name }));
       await ActorScriptEditor.open({
         path: item.path,
         label: item.label.replace(/\.actor\.json$/i, ""),
@@ -2017,6 +2066,7 @@ export class EditorUi {
           assetType: assetType(asset),
           path: assetPath(asset),
         })),
+        pawnClassRefs,
         onStatus: (message, tone) => this.setStatus(message, tone),
         onBrowse: () => void this.revealContentAsset(item.path),
         onPlay: () => void this.playTest(),
@@ -2113,14 +2163,27 @@ export class EditorUi {
 
   private renderWorldSettings(settings: EditorWorldSettings): void {
     this.worldSettings = settings;
-    const gameModeOptions = GAME_MODE_OPTIONS.map(
-      (option) =>
-        `<option value="${escapeHtml(option.id)}" ${
-          option.id === settings.gameMode ? "selected" : ""
-        }>${escapeHtml(option.displayName)}</option>`,
-    ).join("");
+    // Built-in modes plus discovered project `gameMode` Actor Scripts. Include the
+    // current selection even if it is a not-yet-discovered class ref so it stays
+    // selected (and round-trips) instead of silently resetting to the default.
+    const modeOptions: GameModeOption[] = [...GAME_MODE_OPTIONS, ...this.projectGameModes];
+    if (settings.gameMode && !modeOptions.some((option) => option.id === settings.gameMode)) {
+      modeOptions.push({
+        id: settings.gameMode,
+        displayName: settings.gameMode,
+        description: "Project Game Mode (Actor Script).",
+      });
+    }
+    const gameModeOptions = modeOptions
+      .map(
+        (option) =>
+          `<option value="${escapeHtml(option.id)}" ${
+            option.id === settings.gameMode ? "selected" : ""
+          }>${escapeHtml(option.displayName)}</option>`,
+      )
+      .join("");
     const gameModeDescription =
-      GAME_MODE_OPTIONS.find((option) => option.id === settings.gameMode)?.description ?? "";
+      modeOptions.find((option) => option.id === settings.gameMode)?.description ?? "";
     this.worldSettingsBody.innerHTML = `
       <div class="detail-heading">
         <strong>World Settings</strong>

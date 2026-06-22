@@ -389,20 +389,41 @@ Durum: `[ ]` yapilmadi, `[~]` devam ediyor, `[x]` tamam.
 
 ### Faz 4 - GameMode asset entegrasyonu
 
-- [ ] `parentClass: "gameMode"` Actor Script asset'leri World Settings'te
-      secilebilir olsun.
-- [ ] GameMode asset'i `defaultPawnClassRef` ile `Player.Actor` secebilsin.
-- [ ] Runtime Player Start'ta default pawn classRef spawn edebilsin.
-- [ ] Built-in `forge.tpsCharacter` korunur; project GameMode asset'i opt-in
-      olur.
+- [x] `parentClass: "gameMode"` Actor Script asset'leri World Settings'te
+      secilebilir olsun. (EditorUi `refreshProjectGameModes` sahnenin
+      `*.actor.json` dosyalarini tarar, gameMode olanlari classRef olarak
+      dropdown'a ekler; `isGameModeClassRef`/`normalizeGameModeId` classRef'i
+      gecirir.)
+- [x] GameMode asset'i `defaultPawnClassRef` ile `Player.Actor` secebilsin.
+      (Authored variable; `readGameModeDefaultPawnClassRef`. MyGameMode.actor.json
+      Player.actor.json'i isaret eder.)
+- [x] Runtime Player Start'ta default pawn classRef spawn edebilsin.
+      (`RuntimeSceneApp.spawnDefaultPawnActor` Player Start'a sentetik actor
+      instance ekler; mevcut actor-character possession yolu devralir.)
+- [x] Built-in `forge.tpsCharacter` korunur; project GameMode asset'i opt-in
+      olur. (`createProjectGameMode` TPS session'ini yeniden kullanir; registry
+      built-in'leri degismez.)
 
 ### Faz 5 - Camera ve animation
 
-- [ ] Actor Script character'lar locomotion animation bridge'ine dahil olsun.
-- [ ] Movement state -> idle/walk/run/jump/fall clip secimi Actor Script mesh'i
-      icin calissin.
-- [ ] TPS takip kamera Actor Script player'i takip edebilsin.
-- [ ] Sonraki faz icin `SpringArm` ve `Camera` component taslagi hazirlansin.
+- [x] Actor Script character'lar locomotion animation bridge'ine dahil olsun.
+      (`addActorCharacterRef` actor instance'lari `RuntimeCharacterRef` olarak
+      ekler; possess edilince TPS session `CrossfadeAnimator`'i actor'un kendi
+      gltf clip'lerinden kurar.)
+- [x] Movement state -> idle/walk/run/jump/fall clip secimi Actor Script mesh'i
+      icin calissin. (`CharacterMovementSubsystem` possessed actor'in
+      locomotion'unu `reportLocomotion` ile yazar; `selectLocomotionClip` clip
+      vocab'una gore secer. Test: "locomotion bridge selects an Actor Script
+      character's run clip".)
+- [x] TPS takip kamera Actor Script player'i takip edebilsin. (TpsCharacterSession
+      generic `RuntimeCharacterRef` uzerinden takip eder. Test: "tps mode animates
+      + follows a possessed Actor Script character".)
+- [x] Sonraki faz icin `SpringArm` ve `Camera` component taslagi hazirlansin.
+      (`engine/scene/components.ts` `CameraComponent`/`SpringArmComponent` +
+      read helper; `ACTOR_COMPONENT_KINDS`'e eklendi (save'de korunur);
+      ActorScriptEditor typed form + Add menu. Runtime kamera hala GameMode follow
+      camera; component degerleri sadece authored+persist — sonraki faz follow
+      camera'ya mapler.)
 
 ### Faz 6 - Debug, test ve gate
 

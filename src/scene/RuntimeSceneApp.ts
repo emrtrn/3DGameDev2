@@ -29,7 +29,8 @@ import { createBehaviorRegistry } from "@/game/behaviors";
 import { CharacterMovementSubsystem } from "@/game/characterMovementSystem";
 import type { LocomotionInput } from "@/game/locomotionAnimation";
 import { resolveGameMode } from "@/game/gameModes/registry";
-import { TPS_GAME_MODE_ID } from "@/game/gameModes/catalog";
+import { isGameModeClassRef } from "@/game/gameModes/catalog";
+import { createProjectGameMode } from "@/game/gameModes/projectGameMode";
 import {
   computePlayerStartSpawn,
   createDefaultPlayerCharacter,
@@ -37,6 +38,7 @@ import {
 } from "@/game/gameModes/playerSpawn";
 import type {
   GameModeContext,
+  GameModeDefinition,
   GameModeSession,
   PawnDefinition,
   RuntimeCharacterRef,
@@ -141,6 +143,7 @@ import {
   composeTransformMatrix,
 } from "@engine/render-three/transforms";
 import type {
+  LayoutActorInstance,
   LayoutCharacter,
   LayoutLightActor,
   LayoutPlacement,
@@ -159,7 +162,11 @@ import {
   actorInstanceToEntity,
   parseActorInstanceEntityIndex,
 } from "@engine/scene/actorInstance";
-import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
+import {
+  normalizeActorScriptDef,
+  readGameModeDefaultPawnClassRef,
+  type ActorScriptDef,
+} from "@engine/scene/actorScript";
 import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
 import { isPlayerStartAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
@@ -277,6 +284,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private actorEntities: Entity[] = [];
   /** Rendered object per actor instance index (absent for mesh-less logic actors). */
   private readonly actorObjects = new Map<number, Object3D>();
+  /**
+   * Authored MeshRenderer local scale per actor index, multiplied into the
+   * placement scale on every transform sync so a class's visual scale survives
+   * the per-frame override (the sync writes the placement scale, which omits it).
+   */
+  private readonly actorMeshScales = new Map<number, Vec3>();
   /** Resolved `*.actor.json` classes, cached by classRef across instances. */
   private readonly actorClassCache = new Map<string, ActorScriptDef>();
   private localBounds = new Map<string, Box3>();
@@ -295,6 +308,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private activeInteractionPromptEntityId: string | null = null;
   /** The active Game Mode session driving camera/possession this Play boot. */
   private gameModeSession: GameModeSession | null = null;
+  /**
+   * The Game Mode resolved for this Play boot (built-in registry mode, or a
+   * project `gameMode` Actor Script). Resolved once (it may load a class file),
+   * then reused by the spawn and session-start steps.
+   */
+  private activeGameMode: GameModeDefinition | null = null;
   private gravityY = DEFAULT_SCENE_GRAVITY[1];
 
   onFrame: ((deltaMs: number) => void) | null = null;
@@ -315,7 +334,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (!actorObject) return;
       actorObject.position.set(transform.position[0], transform.position[1], transform.position[2]);
       applyEulerDegrees(actorObject, transform.rotation);
-      actorObject.scale.set(transform.scale[0], transform.scale[1], transform.scale[2]);
+      // Re-apply the class's MeshRenderer scale: the synced transform carries only
+      // the placement scale, so without this the per-frame override would reset a
+      // shrunk/grown character to full size.
+      const meshScale = this.actorMeshScales.get(actorIndex) ?? [1, 1, 1];
+      actorObject.scale.set(
+        transform.scale[0] * meshScale[0],
+        transform.scale[1] * meshScale[1],
+        transform.scale[2] * meshScale[2],
+      );
       return;
     }
 
@@ -538,7 +565,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Resolve placed Actor Script classes -> entities before models load, so their
     // mesh assets join the load list (loadActorMeshModels reads these entities).
     await this.resolveActorClasses();
-    this.applyPlayerStartSpawn();
+    await this.applyPlayerStartSpawn();
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
     await this.loadMissingSceneModels();
     await this.loadActorMeshModels();
@@ -616,7 +643,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.playAutoPlayAudio(sceneDocument);
     void this.playAutoPlayParticles(sceneDocument);
 
-    this.startGameMode();
+    await this.startGameMode();
   }
 
   /** Maps manifest `sound` + effect (`.effect.json`) asset ids to fetchable file URLs. */
@@ -697,18 +724,51 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * In the TPS Game Mode, anchors the possessed player at the first Player Start
-   * marker (or the origin when none exists) before the scene is built, so render,
-   * physics and behavior all begin at the spawn point. When the scene has no
-   * authored player character, spawns the mode's default character pawn at the
-   * Player Start so Play always has someone to possess. The synthetic pawn is
-   * appended to the in-memory layout only — never written back to the saved file.
-   * No-op for other modes (the default camera mode possesses no character).
+   * Resolves the Game Mode for this Play boot, caching the result. A project Game
+   * Mode (`worldSettings.gameMode` is a `*.actor.json` class ref) is loaded and
+   * built from its Actor Script class; built-in ids resolve through the registry.
+   * A class ref that is not actually a `gameMode` class falls back to the default
+   * camera mode, so a stale/mis-typed reference can't break Play.
    */
-  private applyPlayerStartSpawn(): void {
+  private async resolveActiveGameMode(): Promise<GameModeDefinition> {
+    if (this.activeGameMode) return this.activeGameMode;
+    const id = this.layout?.worldSettings?.gameMode;
+    let mode: GameModeDefinition;
+    if (isGameModeClassRef(id)) {
+      const def = await this.loadActorClass(id as string);
+      mode =
+        def.parentClass === "gameMode"
+          ? createProjectGameMode({
+              classRef: id as string,
+              displayName: def.name,
+              defaultPawnClassRef: readGameModeDefaultPawnClassRef(def),
+            })
+          : resolveGameMode(undefined);
+    } else {
+      mode = resolveGameMode(id);
+    }
+    this.activeGameMode = mode;
+    return mode;
+  }
+
+  /**
+   * Anchors / spawns the player a character-possessing Game Mode will possess,
+   * before the scene is built so render, physics and behavior all begin at the
+   * spawn point. Preference order:
+   *  1. An authored player character (legacy `layout.characters`) is moved to the
+   *     first Player Start marker (or the origin when none exists).
+   *  2. An authored player Actor (a `character` class with CharacterMovement) is
+   *     left where it was placed.
+   *  3. Otherwise the mode's default pawn is spawned at the Player Start — a
+   *     project Game Mode spawns its `pawnClassRef` Actor Script, the built-in TPS
+   *     mode spawns its `characterAssetId` legacy character.
+   * Synthetic pawns are appended to the in-memory layout only — never persisted.
+   * No-op for non-character modes (the default camera mode possesses nothing).
+   */
+  private async applyPlayerStartSpawn(): Promise<void> {
     if (!this.layout) return;
-    const mode = resolveGameMode(this.layout.worldSettings?.gameMode);
-    if (mode.id !== TPS_GAME_MODE_ID) return;
+    const mode = await this.resolveActiveGameMode();
+    if (mode.defaultPawn.kind !== "character") return;
 
     const spawn = computePlayerStartSpawn(this.layout);
     if (spawn) {
@@ -718,10 +778,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (spawn.yawDeg !== null) character.rotation = [0, spawn.yawDeg, 0];
       return;
     }
-    // No authored player character: spawn the mode's default character pawn at
-    // the Player Start (only when one exists — the player enters at that marker).
+    // An authored player Actor (character class with movement) already is a pawn.
     if (this.actorEntities.some((entity) => readCharacterMovementComponent(entity))) return;
-    this.spawnDefaultPlayerPawn(mode.defaultPawn);
+    // No authored player: spawn the mode's default pawn at the Player Start.
+    if (mode.defaultPawn.pawnClassRef) {
+      await this.spawnDefaultPawnActor(mode.defaultPawn.pawnClassRef);
+    } else {
+      this.spawnDefaultPlayerPawn(mode.defaultPawn);
+    }
   }
 
   /**
@@ -745,16 +809,39 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
+   * Appends a project Game Mode's default pawn Actor Script to the in-memory
+   * layout at the Player Start, and resolves its entity so the later model-load,
+   * object-build and possession steps treat it like an authored player Actor (it
+   * brings its own mesh + capsule + CharacterMovement from the class template).
+   * No-op without a Player Start marker. Runtime-only; never persisted.
+   */
+  private async spawnDefaultPawnActor(classRef: string): Promise<void> {
+    if (!this.layout) return;
+    const start = findPlayerStartTransform(this.layout);
+    if (!start) return;
+    const instance: LayoutActorInstance = {
+      classRef,
+      name: "Player",
+      position: [start.position[0], start.position[1], start.position[2]],
+      rotation: [0, start.yawDeg ?? 0, 0],
+    };
+    if (!this.layout.actors) this.layout.actors = [];
+    const index = this.layout.actors.length;
+    this.layout.actors.push(instance);
+    const def = await this.loadActorClass(classRef);
+    this.actorEntities.push(actorInstanceToEntity(def, instance, index));
+  }
+
+  /**
    * Resolves the layout's selected Game Mode (Unreal's GameMode analogue),
    * spawns + possesses its default pawn, then attaches ambient single-clip
    * animation to every character the mode did not possess. Unknown/absent
    * `worldSettings.gameMode` falls back to the default camera mode.
    */
-  private startGameMode(): void {
+  private async startGameMode(): Promise<void> {
     this.applyPlayCameraHandoff();
-    const session = resolveGameMode(this.layout?.worldSettings?.gameMode).createSession(
-      this.createGameModeContext(),
-    );
+    const mode = await this.resolveActiveGameMode();
+    const session = mode.createSession(this.createGameModeContext());
     session.spawnDefaultPawn();
     session.possess();
     this.gameModeSession = session;
@@ -925,6 +1012,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       object.userData.actorIndex = index;
       this.scene.add(object);
       this.actorObjects.set(index, object);
+      const meshScale = readMeshRendererComponent(entity)?.scale;
+      if (meshScale) this.actorMeshScales.set(index, meshScale);
       this.addActorCharacterRef(entity, object);
     });
   }

@@ -45,7 +45,7 @@ const FOLLOW_CAMERA_RATE = 8;
 const ANIMATION_CROSSFADE_SECONDS = 0.18;
 
 /** Resolves the explicit player character a TPS session should possess. */
-function resolvePlayerCharacter(
+export function resolvePlayerCharacter(
   characters: readonly RuntimeCharacterRef[],
 ): RuntimeCharacterRef | undefined {
   const tagged = characters.find((ref) => ref.placement.metadata?.player === true);
@@ -55,7 +55,13 @@ function resolvePlayerCharacter(
   return characters.find((ref) => ref.placement.behavior?.script === "input-move");
 }
 
-class TpsCharacterSession implements GameModeSession {
+/**
+ * The third-person session: follow camera + locomotion crossfade over the
+ * resolved player character. Exported so project Game Modes
+ * (`projectGameMode.ts`) reuse the exact possession/camera behavior, differing
+ * only in which default pawn the runtime spawns.
+ */
+export class TpsCharacterSession implements GameModeSession {
   readonly playerState: PlayerState = { pawnEntityId: null, possessed: false };
   readonly gameState: GameState = { elapsedSeconds: 0 };
   private player: RuntimeCharacterRef | null = null;

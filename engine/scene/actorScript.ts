@@ -51,6 +51,26 @@ export function isParentClass(value: unknown): value is ParentClass {
 }
 
 /**
+ * Variable key a `gameMode` Actor Script uses to name the default pawn class the
+ * runtime spawns at the Player Start (Unreal's `DefaultPawnClass`). Authored as a
+ * normal Details variable whose `default` holds the pawn class ref, so the data
+ * model needs no dedicated field.
+ */
+export const GAME_MODE_DEFAULT_PAWN_VARIABLE = "defaultPawnClassRef";
+
+/**
+ * Reads a `gameMode` class's default pawn class ref from its authored variables
+ * ({@link GAME_MODE_DEFAULT_PAWN_VARIABLE}), or undefined when unset/blank. The
+ * runtime spawns this Actor Script class at the Player Start when the scene has
+ * no authored player.
+ */
+export function readGameModeDefaultPawnClassRef(def: ActorScriptDef): string | undefined {
+  const variable = def.variables.find((field) => field.key === GAME_MODE_DEFAULT_PAWN_VARIABLE);
+  const value = variable?.default;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/**
  * Runtime event a binding hooks into. A small fixed set mirroring the existing
  * behavior triggers (`src/game/behaviors.ts`): begin-play one-shots, per-tick
  * updates, sensor overlap, physics hit, and interaction.
@@ -90,6 +110,8 @@ export const ACTOR_COMPONENT_KINDS = [
   "Interaction",
   "Behavior",
   "CharacterMovement",
+  "SpringArm",
+  "Camera",
 ] as const;
 export type ActorComponentKind = (typeof ACTOR_COMPONENT_KINDS)[number];
 

@@ -3,7 +3,14 @@
   "type": "actor",
   "name": "MyGameMode",
   "parentClass": "gameMode",
-  "variables": [],
+  "variables": [
+    {
+      "key": "defaultPawnClassRef",
+      "label": "Default Pawn Class",
+      "type": "text",
+      "default": "assets/starter-content/Script/Player.actor.json"
+    }
+  ],
   "components": [
     {
       "id": "root",

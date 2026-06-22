@@ -28,18 +28,13 @@
       "placements": [
         {
           "position": [
-            -3.05,
-            0.24,
-            -0.36
+            -0.77,
+            0.25,
+            -2.52
           ],
           "name": "Player Start",
           "collision": false,
           "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
           "scale": 1
         }
       ]
@@ -232,7 +227,7 @@
   "worldSettings": {
     "staticObjectsCastShadow": true,
     "backgroundColor": "#ffffff",
-    "gameMode": "forge.tpsCharacter"
+    "gameMode": "assets/starter-content/Script/MyGameMode.actor.json"
   },
   "skyAtmosphere": {
     "rayleigh": 1,
@@ -289,33 +284,7 @@
     }
   ],
   "reflectionPlanes": [],
-  "reflectiveSurfaces": [
-    {
-      "id": "reflective-surface-1",
-      "position": [
-        -0.4,
-        0.26,
-        1.87
-      ],
-      "name": "Reflective Surface",
-      "rotation": [
-        -90,
-        0,
-        0
-      ],
-      "scale": [
-        4,
-        4,
-        1
-      ],
-      "material": "concratetile-material",
-      "reflectionStrength": 0.6,
-      "fresnelPower": 2,
-      "fresnelBias": 0.2,
-      "distortion": 0.2,
-      "resolution": 512
-    }
-  ],
+  "reflectiveSurfaces": [],
   "reflectionCaptures": [
     {
       "id": "reflection-capture-1",

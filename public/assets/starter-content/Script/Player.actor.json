@@ -27,7 +27,12 @@
         ],
         "isStatic": false,
         "isSensor": false,
-        "simulatePhysics": false
+        "simulatePhysics": false,
+        "scale": [
+          0.5,
+          0.5,
+          0.5
+        ]
       },
       "parent": "root"
     },
@@ -35,7 +40,12 @@
       "id": "meshRenderer",
       "component": "MeshRenderer",
       "props": {
-        "assetId": "character-a"
+        "assetId": "character-a",
+        "scale": [
+          0.3,
+          0.3,
+          0.3
+        ]
       },
       "parent": "root"
     },

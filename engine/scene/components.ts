@@ -13,6 +13,8 @@ export const AUDIO_COMPONENT = "Audio";
 export const PARTICLE_EMITTER_COMPONENT = "ParticleEmitter";
 export const INTERACTION_COMPONENT = "Interaction";
 export const CHARACTER_MOVEMENT_COMPONENT = "CharacterMovement";
+export const CAMERA_COMPONENT = "Camera";
+export const SPRING_ARM_COMPONENT = "SpringArm";
 export const MESSAGE_BINDINGS_COMPONENT = "MessageBindings";
 export const SCRIPT_INTERFACES_COMPONENT = "ScriptInterfaces";
 export const SCRIPT_ACTOR_COMPONENT = "ScriptActor";
@@ -33,6 +35,12 @@ export interface MeshRendererComponent {
   materialSlot?: string;
   castShadow?: boolean;
   receiveShadow?: boolean;
+  /**
+   * Local mesh scale authored on the MeshRenderer node (Actor Script `props.scale`),
+   * multiplied into the placement scale when the mesh is rendered. Lets a class
+   * shrink/grow its visual without changing the placement transform. Absent = unit.
+   */
+  scale?: Vec3;
 }
 
 export interface LightComponent {
@@ -222,6 +230,44 @@ export interface CharacterMovementComponent {
   capsuleHalfHeight: number;
 }
 
+/**
+ * A camera viewpoint authored on an actor (Unreal's `UCameraComponent`). Draft
+ * for the next gameplay phase (Faz 5): the runtime still frames the player with
+ * the Game Mode follow camera, but a possessed pawn carrying this — typically as
+ * a {@link SpringArmComponent} child — will drive the play camera's projection.
+ * `fieldOfView` is the vertical FOV in degrees; clip planes are in world units;
+ * `orthoWidth` applies only when `isOrthographic`. Defaults mirror the current
+ * runtime camera (FOV 44, near 0.1, far 100) so the next phase maps 1:1.
+ */
+export interface CameraComponent {
+  fieldOfView: number;
+  nearClip: number;
+  farClip: number;
+  isOrthographic: boolean;
+  orthoWidth: number;
+}
+
+/**
+ * A camera boom authored on an actor (Unreal's `USpringArmComponent`). Draft for
+ * the next gameplay phase (Faz 5): it holds a {@link CameraComponent} at a fixed
+ * distance behind a pivot, optionally lagging and collision-probing. Today the
+ * values are authored + persisted only; the next phase maps them onto the Game
+ * Mode follow camera.
+ *  - `targetArmLength`: distance from the pivot to the camera socket (world units).
+ *  - `socketOffset`: offset applied at the camera socket (end of the arm).
+ *  - `targetOffset`: offset applied to the pivot the arm orbits.
+ *  - `enableCameraLag` / `cameraLagSpeed`: exponential position smoothing.
+ *  - `doCollisionTest`: pull the camera in when the boom is blocked.
+ */
+export interface SpringArmComponent {
+  targetArmLength: number;
+  socketOffset: Vec3;
+  targetOffset: Vec3;
+  enableCameraLag: boolean;
+  cameraLagSpeed: number;
+  doCollisionTest: boolean;
+}
+
 function readVec3(value: SceneJsonValue | undefined): Vec3 | undefined {
   if (!Array.isArray(value) || value.length !== 3) return undefined;
   const [x, y, z] = value;
@@ -260,6 +306,8 @@ export function readMeshRendererComponent(entity: Entity): MeshRendererComponent
   if (typeof data.materialSlot === "string") component.materialSlot = data.materialSlot;
   if (typeof data.castShadow === "boolean") component.castShadow = data.castShadow;
   if (typeof data.receiveShadow === "boolean") component.receiveShadow = data.receiveShadow;
+  const scale = readVec3(data.scale);
+  if (scale) component.scale = scale;
   return component;
 }
 
@@ -568,6 +616,33 @@ export function readCharacterMovementComponent(
     movementMode: mode,
     capsuleRadius: readFiniteNumber(data.capsuleRadius, 0.3, 0),
     capsuleHalfHeight: readFiniteNumber(data.capsuleHalfHeight, 0.9, 0),
+  };
+}
+
+/** Reads a typed camera viewpoint from an entity's serializable component data. */
+export function readCameraComponent(entity: Entity): CameraComponent | undefined {
+  const data = entity.components[CAMERA_COMPONENT];
+  if (!data) return undefined;
+  return {
+    fieldOfView: readFiniteNumber(data.fieldOfView, 44, 0),
+    nearClip: readFiniteNumber(data.nearClip, 0.1, 0),
+    farClip: readFiniteNumber(data.farClip, 100, 0),
+    isOrthographic: data.isOrthographic === true,
+    orthoWidth: readFiniteNumber(data.orthoWidth, 10, 0),
+  };
+}
+
+/** Reads a typed camera-boom (spring arm) from an entity's serializable data. */
+export function readSpringArmComponent(entity: Entity): SpringArmComponent | undefined {
+  const data = entity.components[SPRING_ARM_COMPONENT];
+  if (!data) return undefined;
+  return {
+    targetArmLength: readFiniteNumber(data.targetArmLength, 3, 0),
+    socketOffset: readVec3(data.socketOffset) ?? [0, 0, 0],
+    targetOffset: readVec3(data.targetOffset) ?? [0, 0, 0],
+    enableCameraLag: data.enableCameraLag === true,
+    cameraLagSpeed: readFiniteNumber(data.cameraLagSpeed, 10, 0),
+    doCollisionTest: data.doCollisionTest !== false,
   };
 }
 

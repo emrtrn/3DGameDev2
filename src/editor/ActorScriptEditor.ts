@@ -18,10 +18,12 @@ import {
   ACTOR_COMPONENT_KINDS,
   ACTOR_EVENT_KINDS,
   ACTOR_EVENT_LABELS,
+  GAME_MODE_DEFAULT_PAWN_VARIABLE,
   PARENT_CLASSES,
   PARENT_CLASS_LABELS,
   defaultActorScriptDef,
   normalizeActorScriptDef,
+  readGameModeDefaultPawnClassRef,
   type ActorComponentKind,
   type ActorEventKind,
   type ActorScriptDef,
@@ -51,6 +53,11 @@ export interface ActorScriptEditorOptions {
   assetIds?: readonly string[];
   /** Manifest assets (id/name/type/path): the MeshRenderer mesh picker + viewport previews. */
   assets?: ReadonlyArray<{ id: string; name: string; assetType: string; path: string }>;
+  /**
+   * Project `character`/`pawn` Actor Script classes offered as a Game Mode's
+   * Default Pawn Class (the picker shown when editing a `gameMode` class).
+   */
+  pawnClassRefs?: ReadonlyArray<{ path: string; name: string }>;
   onStatus?: (message: string, tone?: StatusTone) => void;
   /** Reveal this asset in the Content Browser (Toolbar → Browse). */
   onBrowse?: () => void;
@@ -86,6 +93,8 @@ const COMPONENT_ICONS: Record<ActorComponentKind, string> = {
   Interaction: "☞",
   Behavior: "⚙",
   CharacterMovement: "CM",
+  SpringArm: "⌐",
+  Camera: "🎥",
 };
 
 function escapeHtml(value: string): string {
@@ -524,6 +533,7 @@ export class ActorScriptEditor {
         <span>Parent Class</span>
         <select data-as-class-parent>${parentOptions}</select>
       </label>
+      ${this.gameModeDefaultsSection()}
       <label class="as-field">
         <span>Interfaces</span>
         <input type="text" data-as-class-interfaces value="${escapeHtml(this.def.interfaces.join(", "))}" placeholder="Usable, Toggleable" />
@@ -546,6 +556,65 @@ export class ActorScriptEditor {
       ${this.actorInspectSummary()}
       <p class="as-details-note">This class is saved to <code>${escapeHtml(this.options.path)}</code>.</p>
     `;
+  }
+
+  /**
+   * Game Mode "Class Defaults" picker (Unreal's `DefaultPawnClass`): only for a
+   * `gameMode` class. Lists the project's `character`/`pawn` Actor Scripts so the
+   * user assigns the default player without typing a path. Stored in the
+   * {@link GAME_MODE_DEFAULT_PAWN_VARIABLE} variable's default, matching the
+   * runtime reader. Empty for any other parent class.
+   */
+  private gameModeDefaultsSection(): string {
+    if (this.def.parentClass !== "gameMode") return "";
+    const current = readGameModeDefaultPawnClassRef(this.def) ?? "";
+    const pawns = this.options.pawnClassRefs ?? [];
+    const options = [
+      `<option value="" ${current === "" ? "selected" : ""}>— None —</option>`,
+      ...pawns.map(
+        (pawn) =>
+          `<option value="${escapeHtml(pawn.path)}" ${
+            pawn.path === current ? "selected" : ""
+          }>${escapeHtml(pawn.name)}</option>`,
+      ),
+    ];
+    // Keep a not-yet-discovered selection visible so it round-trips on save.
+    if (current && !pawns.some((pawn) => pawn.path === current)) {
+      options.push(`<option value="${escapeHtml(current)}" selected>${escapeHtml(current)}</option>`);
+    }
+    const hint = pawns.length
+      ? "Spawned at the Player Start when the scene has no authored player."
+      : "No Character/Pawn Actor Scripts found in this project yet.";
+    return `
+      <div class="as-section-label">Game Mode <small>class defaults</small></div>
+      <label class="as-field">
+        <span>Default Pawn Class</span>
+        <select data-as-default-pawn>${options.join("")}</select>
+      </label>
+      <p class="as-details-note">${hint}</p>
+    `;
+  }
+
+  /**
+   * Writes the Game Mode default pawn class ref into the
+   * {@link GAME_MODE_DEFAULT_PAWN_VARIABLE} variable (created on demand). Empty
+   * clears it by dropping the variable, keeping the class file tidy.
+   */
+  private setDefaultPawnClassRef(classRef: string): void {
+    const others = this.def.variables.filter(
+      (field) => field.key !== GAME_MODE_DEFAULT_PAWN_VARIABLE,
+    );
+    if (classRef) {
+      others.push({
+        key: GAME_MODE_DEFAULT_PAWN_VARIABLE,
+        label: "Default Pawn Class",
+        type: "text",
+        default: classRef,
+      });
+    }
+    this.def.variables = others;
+    this.markDirty();
+    this.refreshLists();
   }
 
   private actorInspectSummary(): string {
@@ -594,7 +663,11 @@ export class ActorScriptEditor {
       this.def.parentClass = parent.value as ParentClass;
       this.markDirty();
       this.refreshLists();
+      // Show/hide the Game Mode "Default Pawn Class" picker for the new parent.
+      this.renderDetails();
     });
+    const defaultPawn = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-default-pawn]");
+    defaultPawn?.addEventListener("change", () => this.setDefaultPawnClassRef(defaultPawn.value));
     const interfaces = this.detailsHost.querySelector<HTMLInputElement>("[data-as-class-interfaces]");
     interfaces?.addEventListener("input", () => {
       this.def.interfaces = uniqueNonEmptyCsv(interfaces.value);
@@ -665,6 +738,8 @@ export class ActorScriptEditor {
     const particleField = node.component === "ParticleEmitter" ? this.particleFields(node) : "";
     const characterMovementField =
       node.component === "CharacterMovement" ? characterMovementFields(node) : "";
+    const cameraField = node.component === "Camera" ? cameraFields(node) : "";
+    const springArmField = node.component === "SpringArm" ? springArmFields(node) : "";
     const pos = readVec3Prop(node.props.position, [0, 0, 0]);
     const rot = readVec3Prop(node.props.rotation, [0, 0, 0]);
     const scl = readVec3Prop(node.props.scale, [1, 1, 1]);
@@ -686,6 +761,8 @@ export class ActorScriptEditor {
       ${lightField}
       ${particleField}
       ${characterMovementField}
+      ${springArmField}
+      ${cameraField}
       <div class="as-section-label">Transform <small>(preview)</small></div>
       ${vec3Row("position", "Position", pos)}
       ${vec3Row("rotation", "Rotation°", rot)}
@@ -812,6 +889,9 @@ export class ActorScriptEditor {
     this.bindLightDetails(node);
     this.bindParticleDetails(node);
     this.bindCharacterMovementDetails(node);
+    this.bindSpringArmDetails(node);
+    this.bindCameraDetails(node);
+    this.bindNumberProps(node);
     this.detailsHost.querySelectorAll<HTMLElement>("[data-as-vec]").forEach((rowEl) => {
       const key = rowEl.dataset.asVec as "position" | "rotation" | "scale";
       const inputs = Array.from(rowEl.querySelectorAll<HTMLInputElement>("input"));
@@ -954,6 +1034,68 @@ export class ActorScriptEditor {
           this.renderDetails();
         });
       });
+  }
+
+  /**
+   * Wires the Spring Arm Details toggles (no-op when the node carries no spring
+   * form): Camera Lag and Collision Test. `enableCameraLag` is stored only when
+   * on, and `doCollisionTest` only when off (its default is true), keeping the
+   * saved JSON lean. The arm-length/lag-speed numbers + offset vectors are bound
+   * generically (data-as-num / data-as-vec). Re-renders to toggle the lag-speed
+   * field.
+   */
+  private bindSpringArmDetails(node: ComponentTemplateNode): void {
+    const lag = this.detailsHost.querySelector<HTMLInputElement>("[data-as-spring-lag]");
+    lag?.addEventListener("change", () => {
+      if (lag.checked) node.props.enableCameraLag = true;
+      else delete node.props.enableCameraLag;
+      this.markDirty();
+      this.renderDetails();
+    });
+    const collision = this.detailsHost.querySelector<HTMLInputElement>("[data-as-spring-collision]");
+    collision?.addEventListener("change", () => {
+      if (collision.checked) delete node.props.doCollisionTest;
+      else node.props.doCollisionTest = false;
+      this.markDirty();
+      this.renderDetails();
+    });
+  }
+
+  /**
+   * Wires the Camera Details toggle (no-op when the node carries no camera form):
+   * the Orthographic switch, stored only when on. FOV/clip/ortho-width numbers are
+   * bound generically (data-as-num). Re-renders to toggle the Ortho Width field.
+   */
+  private bindCameraDetails(node: ComponentTemplateNode): void {
+    const ortho = this.detailsHost.querySelector<HTMLInputElement>("[data-as-camera-ortho]");
+    ortho?.addEventListener("change", () => {
+      if (ortho.checked) node.props.isOrthographic = true;
+      else delete node.props.isOrthographic;
+      this.markDirty();
+      this.renderDetails();
+    });
+  }
+
+  /**
+   * Binds every generic numeric prop input (`data-as-num="<key>"`) in the current
+   * Details form to `node.props[key]`, committing on change. Shared by the Spring
+   * Arm and Camera forms; only one node's form is mounted at a time.
+   */
+  private bindNumberProps(node: ComponentTemplateNode): void {
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-as-num]").forEach((input) => {
+      const key = input.dataset.asNum;
+      if (!key) return;
+      const apply = (): void => {
+        const n = Number(input.value);
+        if (Number.isFinite(n)) node.props[key] = n;
+        this.markDirty();
+      };
+      input.addEventListener("input", apply);
+      input.addEventListener("change", () => {
+        apply();
+        this.renderDetails();
+      });
+    });
   }
 
   private detailsVariable(): string {
@@ -1588,6 +1730,70 @@ function characterMovementFields(node: ComponentTemplateNode): string {
   `;
 }
 
+/** A generic numeric prop field bound by `data-as-num="<key>"`. */
+function numberPropField(
+  props: Record<string, SceneJsonValue>,
+  key: string,
+  label: string,
+  fallback: number,
+  attrs: string,
+): string {
+  return `
+    <label class="as-field">
+      <span>${label}</span>
+      <input type="number" data-as-num="${key}" value="${readNumberProp(props[key], fallback)}" ${attrs} />
+    </label>`;
+}
+
+/**
+ * The Spring Arm (camera boom) Details form. Draft for the next gameplay phase:
+ * the values are authored + persisted, mapped onto the follow camera later. Arm
+ * length + offsets place the camera socket; the lag/collision toggles shape the
+ * follow feel. Writes to `node.props`.
+ */
+function springArmFields(node: ComponentTemplateNode): string {
+  const props = node.props;
+  const lag = props.enableCameraLag === true;
+  return `
+    <div class="as-section-label">Spring Arm</div>
+    ${numberPropField(props, "targetArmLength", "Target Arm Length", 3, 'step="0.1" min="0"')}
+    ${vec3Row("socketOffset", "Socket Offset", readVec3Prop(props.socketOffset, [0, 0, 0]))}
+    ${vec3Row("targetOffset", "Target Offset", readVec3Prop(props.targetOffset, [0, 0, 0]))}
+    <label class="as-field as-check">
+      <input type="checkbox" data-as-spring-lag ${lag ? "checked" : ""} />
+      <span>Enable Camera Lag</span>
+    </label>
+    ${lag ? numberPropField(props, "cameraLagSpeed", "Camera Lag Speed", 10, 'step="0.5" min="0"') : ""}
+    <label class="as-field as-check">
+      <input type="checkbox" data-as-spring-collision ${
+        props.doCollisionTest === false ? "" : "checked"
+      } />
+      <span>Do Collision Test</span>
+    </label>
+  `;
+}
+
+/**
+ * The Camera Details form. Draft for the next gameplay phase: the projection is
+ * authored + persisted, applied to the play camera later. Defaults mirror the
+ * runtime camera (FOV 44, near 0.1, far 100). Writes to `node.props`.
+ */
+function cameraFields(node: ComponentTemplateNode): string {
+  const props = node.props;
+  const ortho = props.isOrthographic === true;
+  return `
+    <div class="as-section-label">Camera</div>
+    ${numberPropField(props, "fieldOfView", "Field of View°", 44, 'step="1" min="1" max="170"')}
+    ${numberPropField(props, "nearClip", "Near Clip", 0.1, 'step="0.01" min="0.001"')}
+    ${numberPropField(props, "farClip", "Far Clip", 100, 'step="1" min="1"')}
+    <label class="as-field as-check">
+      <input type="checkbox" data-as-camera-ortho ${ortho ? "checked" : ""} />
+      <span>Orthographic</span>
+    </label>
+    ${ortho ? numberPropField(props, "orthoWidth", "Ortho Width", 10, 'step="0.5" min="0.1"') : ""}
+  `;
+}
+
 function defaultComponentProps(kind: ActorComponentKind): Record<string, SceneJsonValue> {
   if (kind === "Collider") {
     return { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false };
@@ -1607,6 +1813,12 @@ function defaultComponentProps(kind: ActorComponentKind): Record<string, SceneJs
       capsuleRadius: 0.3,
       capsuleHalfHeight: 0.9,
     };
+  }
+  if (kind === "SpringArm") {
+    return { targetArmLength: 3, enableCameraLag: true, cameraLagSpeed: 10 };
+  }
+  if (kind === "Camera") {
+    return { fieldOfView: 44, nearClip: 0.1, farClip: 100 };
   }
   return {};
 }

@@ -123,11 +123,20 @@ export function placementCharacterItem(placement: LayoutCharacter): CharacterRen
 export function entityCharacterItem(entity: Entity): CharacterRenderItem {
   const transform = readTransformComponent(entity);
   const renderer = readMeshRendererComponent(entity);
+  // The placement Transform positions the actor in the world; the MeshRenderer's
+  // local scale (authored on the class node) shrinks/grows the visual on top of
+  // it, so a "small character" class renders small wherever it is placed/spawned.
+  const placementScale: Vec3 = transform ? transform.scale : [1, 1, 1];
+  const meshScale: Vec3 = renderer?.scale ?? [1, 1, 1];
   return {
     name: entity.name ?? renderer?.assetId ?? "character",
     position: transform ? [...transform.position] : [0, 0, 0],
     rotation: transform ? [...transform.rotation] : [0, 0, 0],
-    scale: transform ? [...transform.scale] : [1, 1, 1],
+    scale: [
+      placementScale[0] * meshScale[0],
+      placementScale[1] * meshScale[1],
+      placementScale[2] * meshScale[2],
+    ],
     hidden: entity.tags?.includes("hidden") ?? false,
     castShadow: renderer?.castShadow ?? true,
   };

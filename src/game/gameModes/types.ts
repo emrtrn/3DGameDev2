@@ -30,6 +30,13 @@ export interface PawnDefinition {
    * assign the pawn its own character asset here.) Absent for `camera` pawns.
    */
   readonly characterAssetId?: string;
+  /**
+   * For project Game Modes, the Actor Script class (`*.actor.json`, parent class
+   * `character`) spawned as the default player when the scene has no authored
+   * player. Takes precedence over {@link characterAssetId}: the spawned instance
+   * brings its own mesh + capsule + CharacterMovement from the class template.
+   */
+  readonly pawnClassRef?: string;
   /** Authored scale for the spawned default character pawn. Absent means 1. */
   readonly characterScale?: number;
   /** Movement tuning (units/s, sprint multiplier). Optional per kind. */

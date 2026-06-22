@@ -304,6 +304,79 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-22* — **Player Character Faz 5 — Camera & animation (tamam).**
+  `docs/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md` Faz 5'in 4 maddesi kapandı.
+  **Bulgu:** locomotion animation bridge + TPS takip kamerası zaten generic
+  `RuntimeCharacterRef` üzerinden çalışıyordu; `addActorCharacterRef` Actor Script
+  character instance'larını (`actor:<i>`) bu ref akışına kendi gltf'i + object'i +
+  `hasCharacterMovement` ile ekliyor, `CharacterMovementSubsystem` possessed
+  actor'ın locomotion'unu `reportLocomotion` ile yazıyor, `TpsCharacterSession`
+  possess'te `CrossfadeAnimator`'ı actor'un kendi clip'lerinden kuruyor ve her
+  tick `selectLocomotionClip` ile geçiş yapıyor. Yeni kod değil; **doğrulama testi**
+  eklendi (item 1–3): "tps mode animates + follows a possessed Actor Script
+  character" (mixer kuruldu + follow camera actor object'ini izliyor) ve
+  "locomotion bridge selects an Actor Script character's run clip" (public
+  CrossfadeAnimator API ile updateAnimation kompozisyonu). **Item 4 — SpringArm/
+  Camera taslağı:** `engine/scene/components.ts`'e `CameraComponent`
+  (fieldOfView/near/far/ortho; default'lar runtime kamerasıyla aynı: 44/0.1/100) +
+  `SpringArmComponent` (targetArmLength/socketOffset/targetOffset/lag/collision) ve
+  read helper'ları; `ACTOR_COMPONENT_KINDS`'e `SpringArm`+`Camera` eklendi —
+  `normalizeActorScriptDef` artık bu node'ları korur, yoksa `/__save-actor`'da
+  sessizce düşerlerdi. ActorScriptEditor: ikon, default props, typed Details form
+  (`springArmFields`/`cameraFields` + `bindSpringArmDetails`/`bindCameraDetails`/
+  generic `bindNumberProps`). **Karar:** runtime kamerası hâlâ GameMode follow
+  camera; SpringArm/Camera değerleri yalnızca authored+persist — sonraki faz
+  bunları follow camera'ya mapler (boom→camera zinciri Unreal'deki gibi). **Gate:**
+  tsc temiz · engine **256** check (yeni 6: animate+follow, locomotion-clip,
+  readCamera, readSpringArm, normalize survive-save) · `npm run build:verify`.
+  **Sıradaki:** Faz 6 runtime debug paneli (active GameMode, possessed pawn,
+  movement mode, grounded, velocity) — Faz 5/6'daki tek açık madde.
+
+- *2026-06-22* — **Player Character Faz 4 — Project GameMode asset entegrasyonu (tamam).**
+  `docs/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md` Faz 4'ün 4 maddesi kapandı.
+  Artık `worldSettings.gameMode` built-in id (`forge.*`) **veya** bir
+  `parentClass: "gameMode"` Actor Script'in classRef'i (`*.actor.json`) olabilir.
+  **Catalog:** `isGameModeClassRef` + `normalizeGameModeId` classRef'i geçirir
+  (built-in fallback korunur). **Veri:** GameMode `defaultPawnClassRef`'ini authored
+  bir Details variable'ında taşır → saf `readGameModeDefaultPawnClassRef`
+  (`engine/scene/actorScript.ts`), şema/validator değişmeden. **Runtime:**
+  `RuntimeSceneApp.resolveActiveGameMode` classRef'i yükleyip
+  `createProjectGameMode` (yeni `src/game/gameModes/projectGameMode.ts`) ile
+  TPS session'ını **yeniden kullanan** bir `GameModeDefinition` üretir;
+  `applyPlayerStartSpawn` artık herhangi bir character-pawn modu için genel —
+  authored player yoksa `spawnDefaultPawnActor` Player Start'a sentetik bir actor
+  instance (Player.actor.json) ekler, mevcut actor-character possession +
+  CharacterMovement subsystem devralır. **Editor:** World Settings dropdown'u
+  `refreshProjectGameModes` ile sahnenin `*.actor.json`'larını tarayıp gameMode
+  olanları classRef olarak built-in'lerin yanına ekler; seçili-ama-keşfedilmemiş
+  classRef de listede tutulur (sessizce default'a düşmez). `MyGameMode.actor.json`
+  `defaultPawnClassRef → Player.actor.json` ile güncellendi. **Gate:** tsc temiz ·
+  engine **249** check (yeni 5: classRef/normalize/defaultPawn reader + project
+  mode possession + pawnClassRef yokluğu) · `npm run build:verify` yeşil.
+  **Karar:** project GameMode davranışça TPS'tir, tek farkı spawn edilen default
+  pawn'ın bir actor *class*'ı olması; registry built-in'leri değişmez, opt-in
+  kalır. **Sıradaki:** Faz 5 (Actor Script player için locomotion/animation +
+  TPS takip kamerası zaten actor-character'ı kapsıyor; SpringArm/Camera component
+  taslağı) ve Faz 6 runtime debug paneli (possessed pawn/movement mode/velocity).
+  **Kullanıcı geri bildirimi (aynı oturum, 2 düzeltme):** (1) Actor Script
+  içinde MeshRenderer node'una yazılan `props.scale` Play'de yansımıyordu —
+  `MeshRendererComponent`'e `scale` eklendi (`engine/scene/components.ts`),
+  `entityCharacterItem` artık placement scale × mesh scale uygular
+  (`engine/render-three/models.ts`). **Headed-browser doğrulamasında yakalandı:**
+  bu tek başına yetmedi — `RuntimeSceneApp.applyEntityTransformToRender` her
+  frame host scale'ini entity Transform'tan (placement, mesh scale'siz) yeniden
+  yazıp override ediyordu; `actorMeshScales` map'i eklendi ve transform sync
+  combined scale (placement × mesh) uyguluyor. Artık "küçük karakter" sınıfı
+  runtime'da doğru render olur (0.5↔1.0 A/B ekran görüntüsüyle teyit; legacy
+  karakterler etkilenmez). (2) GameMode'un `defaultPawnClassRef`'i artık ham metin değil: ActorScriptEditor
+  Class Defaults'ta **"Default Pawn Class"** seçici (sadece `gameMode` parent) →
+  projedeki `character`/`pawn` Actor Script'lerini listeler, seçimi
+  `defaultPawnClassRef` variable'ına yazar (EditorUi `refreshProjectActorClasses`
+  tek taramayı game-mode + pawn picker için paylaşır). **Gate:** tsc temiz ·
+  engine **251** check · build:verify yeşil. **Not (tuning):** mesh scale ile
+  CharacterMovement capsule (capsuleRadius/HalfHeight) ayrı ayarlar; görsel küçük
+  ama collision büyük kalabilir — kullanıcı capsule'ı da küçültmeli.
+
 - *2026-06-20* — **Script Communication System checklist'i açıldı.** Actor
   Script'lerin büyük projelerde hardcoded `RuntimeSceneApp` aksiyonları yerine
   message/interface/dispatcher sözleşmesiyle haberleşmesi için ayrı takip
