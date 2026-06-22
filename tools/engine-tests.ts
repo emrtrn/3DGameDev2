@@ -103,6 +103,7 @@ import {
 } from "../src/game/gameModes/catalog";
 import { resolveGameMode } from "../src/game/gameModes/registry";
 import { createProjectGameMode } from "../src/game/gameModes/projectGameMode";
+import { formatGameModeDebug } from "../src/scene/debugStats";
 import {
   applyMouseLook,
   cameraPlanarPan,
@@ -5134,6 +5135,42 @@ check("project game mode carries its pawn class ref and possesses an actor chara
 check("createProjectGameMode without a default pawn omits pawnClassRef", () => {
   const mode = createProjectGameMode({ classRef: "a.actor.json", displayName: "A" });
   assert.equal(mode.defaultPawn.pawnClassRef, undefined);
+});
+
+check("formatGameModeDebug renders a possessed pawn's mode + movement state", () => {
+  const lines = formatGameModeDebug({
+    gameMode: "TPS Character",
+    possessed: "actor:0",
+    movementMode: "walking",
+    grounded: false,
+    velocityY: 3.5,
+    planarSpeed: 2,
+  });
+  assert.deepEqual(lines, [
+    "game mode",
+    "mode: TPS Character",
+    "possessed: actor:0",
+    "movement: walking (airborne)",
+    "vel y:3.50 planar:2.00",
+  ]);
+});
+
+check("formatGameModeDebug shows placeholders when nothing is possessed", () => {
+  const lines = formatGameModeDebug({
+    gameMode: "Default Camera",
+    possessed: null,
+    movementMode: null,
+    grounded: null,
+    velocityY: null,
+    planarSpeed: null,
+  });
+  assert.deepEqual(lines, [
+    "game mode",
+    "mode: Default Camera",
+    "possessed: none",
+    "movement: —",
+    "vel y:— planar:—",
+  ]);
 });
 
 check("input-move behavior: an unpossessed character ignores movement input", () => {

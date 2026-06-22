@@ -4,7 +4,7 @@
  * lil-gui (devDependency) is dynamically imported on demand later, when
  * scene parameters need live tweaking — keeps it out of the base bundle.
  */
-import type { RuntimeStatsApp } from "./RuntimeSceneApp";
+import type { GameModeDebugSnapshot, RuntimeStatsApp } from "./RuntimeSceneApp";
 
 const UPDATE_INTERVAL_MS = 500;
 
@@ -23,10 +23,35 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       `${fps.toFixed(0)} fps\n` +
       `${drawCalls} draw calls\n` +
       `${triangles} tris` +
+      gameModeDebugText(app) +
       scriptMessageDebugText(app);
     accumMs = 0;
     frames = 0;
   };
+}
+
+/** The Game Mode / possessed-pawn block, or "" when the app exposes no snapshot. */
+function gameModeDebugText(app: RuntimeStatsApp): string {
+  if (!app.getGameModeDebugSnapshot) return "";
+  return `\n${formatGameModeDebug(app.getGameModeDebugSnapshot()).join("\n")}`;
+}
+
+/**
+ * Formats a {@link GameModeDebugSnapshot} into overlay lines (pure, so it is
+ * unit-tested without the DOM): the active mode, the possessed pawn, and that
+ * pawn's movement state. Null fields render as placeholders.
+ */
+export function formatGameModeDebug(snapshot: GameModeDebugSnapshot): string[] {
+  const num = (value: number | null): string => (value === null ? "—" : value.toFixed(2));
+  const stance =
+    snapshot.grounded === null ? "" : snapshot.grounded ? " (grounded)" : " (airborne)";
+  return [
+    "game mode",
+    `mode: ${snapshot.gameMode}`,
+    `possessed: ${snapshot.possessed ?? "none"}`,
+    `movement: ${snapshot.movementMode ?? "—"}${stance}`,
+    `vel y:${num(snapshot.velocityY)} planar:${num(snapshot.planarSpeed)}`,
+  ];
 }
 
 function scriptMessageDebugText(app: RuntimeStatsApp): string {

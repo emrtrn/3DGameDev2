@@ -214,10 +214,33 @@ const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   ShiftRight: "sprint",
 };
 
+/**
+ * Live gameplay readout for the `?debug` overlay: the active Game Mode, the pawn
+ * it possessed, and that pawn's movement state (mode + grounded + velocity). Fields
+ * are null when nothing is possessed (e.g. the default camera mode) or the pawn
+ * carries no CharacterMovement / has not reported locomotion yet.
+ */
+export interface GameModeDebugSnapshot {
+  /** Active Game Mode display name (or "—" before one resolves). */
+  gameMode: string;
+  /** Possessed pawn entity id, or null when nothing is possessed. */
+  possessed: string | null;
+  /** Possessed pawn's authored CharacterMovement mode, or null. */
+  movementMode: string | null;
+  /** Whether the possessed pawn rests on the floor, or null when unknown. */
+  grounded: boolean | null;
+  /** Possessed pawn's vertical velocity (units/s, up positive), or null. */
+  velocityY: number | null;
+  /** Possessed pawn's planar speed this tick (units/s), or null. */
+  planarSpeed: number | null;
+}
+
 export interface RuntimeStatsApp {
   onFrame: ((deltaMs: number) => void) | null;
   getRenderStats(): { drawCalls: number; triangles: number };
   getScriptMessageDebugSnapshot(): ScriptMessageDebugSnapshot;
+  /** Optional: present on the runtime app, absent on the editor SceneApp. */
+  getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
 }
 
 export interface RuntimeSceneAppOptions {
@@ -513,6 +536,36 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   getScriptMessageDebugSnapshot(): ScriptMessageDebugSnapshot {
     return this.behaviorSubsystem.getScriptMessageDebugSnapshot();
+  }
+
+  /**
+   * Snapshots the active Game Mode + possessed pawn's movement state for the
+   * `?debug` overlay. The possessed pawn's grounded/velocity come from the latest
+   * locomotion report (written by the CharacterMovement subsystem or the
+   * input-move behavior); the movement mode is the pawn's authored
+   * CharacterMovement mode when it is an Actor Script character.
+   */
+  getGameModeDebugSnapshot(): GameModeDebugSnapshot {
+    const possessed = this.gameModeSession?.playerState.pawnEntityId ?? null;
+    const report = possessed ? this.locomotionReports.get(possessed) : undefined;
+    return {
+      gameMode: this.activeGameMode?.displayName ?? "—",
+      possessed,
+      movementMode: this.possessedMovementMode(possessed),
+      grounded: report ? report.grounded : null,
+      velocityY: report ? report.velocityY : null,
+      planarSpeed: report ? report.planarSpeed : null,
+    };
+  }
+
+  /** Authored CharacterMovement mode of a possessed Actor Script pawn, else null. */
+  private possessedMovementMode(entityId: string | null): string | null {
+    if (entityId === null) return null;
+    const actorIndex = parseActorInstanceEntityIndex(entityId);
+    if (actorIndex === null) return null;
+    const entity = this.actorEntities[actorIndex];
+    if (!entity) return null;
+    return readCharacterMovementComponent(entity)?.movementMode ?? null;
   }
 
   private createInteractionPromptElement(): HTMLDivElement {

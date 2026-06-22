@@ -304,6 +304,25 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-22* — **Player Character Faz 6 — Runtime debug paneli (tamam → tüm
+  checklist kapandı).** `docs/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md`'in son
+  açık maddesi kapandı; Faz 0–6 hepsi `[x]`. `?debug` overlay'ine "game mode"
+  bloğu eklendi: active GameMode, possessed pawn, movement mode, grounded,
+  velocity (y + planar). **Veri:** yeni `RuntimeSceneApp.getGameModeDebugSnapshot`
+  → `activeGameMode.displayName` + `gameModeSession.playerState.pawnEntityId` +
+  possessed pawn'in `locomotionReports` kaydından grounded/velocityY/planarSpeed +
+  actor pawn ise `readCharacterMovementComponent().movementMode`
+  (`possessedMovementMode` helper). `RuntimeStatsApp`'e **opsiyonel**
+  `getGameModeDebugSnapshot?()` eklendi — editor `SceneApp` bu metodu taşımıyor
+  (editörde canlı possession yok), overlay yalnızca metod varsa render eder, yani
+  editor `?debug` değişmedi. **Render:** `debugStats.ts` saf `formatGameModeDebug`
+  (DOM'suz, test edilebilir) + `gameModeDebugText` glue. **Gate:** tsc temiz ·
+  engine **258** check (yeni 2: possessed + unpossessed formatter) · build:verify.
+  **Not:** snapshot canlı görsel teyit `?debug` ile yapılır (headless test sadece
+  saf formatter'ı kapsar). **Karar:** dynamic walking/falling yerine authored
+  movementMode + ayrı grounded gösteriliyor (subsystem dinamik mode'u expose
+  etmiyor; grounded zaten walking/airborne ayrımını veriyor).
+
 - *2026-06-22* — **Player Character Faz 5 — Camera & animation (tamam).**
   `docs/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md` Faz 5'in 4 maddesi kapandı.
   **Bulgu:** locomotion animation bridge + TPS takip kamerası zaten generic

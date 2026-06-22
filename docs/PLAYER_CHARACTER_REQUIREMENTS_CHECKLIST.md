@@ -427,8 +427,12 @@ Durum: `[ ]` yapilmadi, `[~]` devam ediyor, `[x]` tamam.
 
 ### Faz 6 - Debug, test ve gate
 
-- [ ] Runtime debug panelde active GameMode, possessed pawn, movement mode,
-      grounded, velocity gorunsun.
+- [x] Runtime debug panelde active GameMode, possessed pawn, movement mode,
+      grounded, velocity gorunsun. (`RuntimeSceneApp.getGameModeDebugSnapshot`
+      active mode + possessed pawn + locomotion report'tan grounded/velocity/
+      planarSpeed + actor pawn'in CharacterMovement mode'unu toplar; `debugStats.ts`
+      `?debug` overlay'inde "game mode" blogu olarak render eder. Saf
+      `formatGameModeDebug` test edildi.)
 - [x] Engine tests: possession, movement, collision clamp, jump, unpossessed
       no-input.
 - [x] `npm run build:verify`.
