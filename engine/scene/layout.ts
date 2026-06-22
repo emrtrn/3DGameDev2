@@ -1,4 +1,9 @@
-import type { CollisionPresetId } from "./collision";
+import type {
+  CollisionEnabled,
+  CollisionObjectChannel,
+  CollisionPresetId,
+  CollisionResponseMap,
+} from "./collision";
 
 export type Vec3 = [number, number, number];
 export type LayoutLightType = "directional" | "point" | "spot";
@@ -111,6 +116,18 @@ export interface LayoutPlacement {
   collision?: boolean;
   /** Per-placement collision preset override; absent means inherit the asset default. */
   collisionPreset?: CollisionPresetId;
+  /** Per-placement collision enabled override; absent means inherit the preset/asset default. */
+  collisionEnabled?: CollisionEnabled;
+  /** Per-placement object channel override; absent means inherit the preset/asset default. */
+  objectType?: CollisionObjectChannel;
+  /** Per-placement response overrides, mainly for Custom collision. */
+  responses?: CollisionResponseMap;
+  /** Per-placement physical material override. */
+  physicalMaterialId?: string;
+  /** Emit begin/end overlap events for sensors. Absent means inherit/default true. */
+  generateOverlapEvents?: boolean;
+  /** Emit hit events while simulating physics. Absent means inherit/default true. */
+  simulationGeneratesHitEvents?: boolean;
   /** Per-placement material override. References a manifest material asset id. */
   materialSlot?: string;
   /** Runtime hint: collider is a non-blocking sensor (trigger zone). Absent means false. */
@@ -199,6 +216,18 @@ export interface LayoutCharacter {
   collision?: boolean;
   /** Per-placement collision preset override; absent means inherit the asset default. */
   collisionPreset?: CollisionPresetId;
+  /** Per-placement collision enabled override; absent means inherit the preset/asset default. */
+  collisionEnabled?: CollisionEnabled;
+  /** Per-placement object channel override; absent means inherit the preset/asset default. */
+  objectType?: CollisionObjectChannel;
+  /** Per-placement response overrides, mainly for Custom collision. */
+  responses?: CollisionResponseMap;
+  /** Per-placement physical material override. */
+  physicalMaterialId?: string;
+  /** Emit begin/end overlap events for sensors. Absent means inherit/default true. */
+  generateOverlapEvents?: boolean;
+  /** Emit hit events while simulating physics. Absent means inherit/default true. */
+  simulationGeneratesHitEvents?: boolean;
   /** Runtime hint: collider is a non-blocking sensor (trigger zone). Absent means false. */
   sensor?: boolean;
   /** Runtime hint: this object is a dynamic rigid body in Play mode. Absent means false. */

@@ -211,19 +211,19 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [x] Unreal collision dokümanlarını incele ve özetle (Bölüm A)
 - [x] Forge mevcut durumu çıkar (Bölüm B)
 - [x] Kapsam/eşleme kararı (Bölüm C) ve mimari karar (Bölüm D)
-- [ ] Açık soruları kullanıcıyla netleştir (aşağıdaki "Açık Sorular")
+- [x] Açık soruları kullanıcıyla netleştir (Kararlar bölümünde netleşti)
 
 ### Faz 1 — Veri Modeli (engine)
 
-- [ ] `CollisionEnabled` enum'u ekle: `none | query | physics | queryAndPhysics`
-- [ ] `CollisionComplexity` enum'u ekle: `projectDefault | simpleAndComplex | simpleAsComplex | complexAsSimple`
-- [ ] Yerleşik `CollisionPreset` kataloğu + `Custom`
-- [ ] Azaltılmış kanal seti tanımla (örn. `WorldStatic`, `WorldDynamic`, `Pawn`, `PhysicsBody`, `Trigger` + trace: `Visibility`, `Camera`)
-- [ ] `CollisionResponse` (`ignore | overlap | block`) ve per-kanal yanıt haritası tipi
-- [ ] **Asset-düzeyi** collision tanımı tipi: simple collider listesi (`primitives[]`), complexity, preset, phys material, double-sided
-- [ ] `ColliderComponent`'i çok-primitifli destekleyecek şekilde genişlet (tek implicit collider → `primitives[]`), geriye dönük uyumlu
-- [ ] `LayoutPlacement` override alanları: `collisionPreset?`, `collisionEnabled?`, `objectType?`, `responses?` (mevcut `collision`/`sensor`/`simulatePhysics` korunur)
-- [ ] `readColliderComponent` / okuyucuları yeni alanlara genişlet + birim testleri (`tools/engine-tests.ts`)
+- [x] `CollisionEnabled` enum'u ekle: `none | query | physics | queryAndPhysics`
+- [x] `CollisionComplexity` enum'u ekle: `projectDefault | simpleAndComplex | simpleAsComplex | complexAsSimple`
+- [x] Yerleşik `CollisionPreset` kataloğu + `Custom`
+- [x] Azaltılmış kanal seti tanımla (`WorldStatic`, `WorldDynamic`, `Pawn`, `PhysicsBody`, `Trigger` + trace: `Visibility`, `Camera`)
+- [x] `CollisionResponse` (`ignore | overlap | block`) ve per-kanal yanıt haritası tipi
+- [x] **Asset-düzeyi** collision tanımı tipi: simple collider listesi (`primitives[]`), complexity, preset, phys material, double-sided
+- [x] `ColliderComponent`'i çok-primitifli destekleyecek şekilde genişlet (tek implicit collider → `primitives[]`), geriye dönük uyumlu
+- [x] `LayoutPlacement` override alanları: `collisionPreset?`, `collisionEnabled?`, `objectType?`, `responses?` (mevcut `collision`/`sensor`/`simulatePhysics` korunur)
+- [x] `readColliderComponent` / okuyucuları yeni alanlara genişlet + birim testleri (`tools/engine-tests.ts`)
 
 ### Faz 2 — Static Mesh Editor Kabuğu (overlay + viewport)
 
@@ -281,10 +281,10 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [x] **Collision Presets** override dropdown (Inherit = asset default / preset id)
 - [x] Override yokken "Inherit (asset default)" gösterimi; undo/redo destekli
 - [x] Placement-düzeyi `collisionPreset` alanı + save validator allowlist
-- [ ] **Collision Enabled** durumu (none/query/physics/queryAndPhysics) — sonra
-- [ ] **Generate Overlap Events** / **Simulation Generates Hit Events** (bool) — sonra
-- [ ] **Phys Material Override** (referans) — sonra
-- [ ] Custom seçilince per-kanal yanıt matrisi (Block/Overlap/Ignore) — sonra
+- [x] **Collision Enabled** durumu (none/query/physics/queryAndPhysics)
+- [x] **Generate Overlap Events** / **Simulation Generates Hit Events** (bool)
+- [x] **Phys Material Override** (referans)
+- [x] Custom seçilince per-kanal yanıt matrisi (Block/Overlap/Ignore)
 
 ### Faz 7 — Runtime Bağlama (Rapier)
 
@@ -292,26 +292,26 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [x] Asset sidecar'larını async yükle (SceneApp `refreshCollisionDefs` + RuntimeSceneApp `loadCollisionDefs`, manifest dosya yolundan)
 - [x] Asset primitiflerini runtime **fizik** collider'ına derle: `ColliderComponent.primitives[]`, adapter scale-baked + AABB, Rapier **compound** (primitif başına collider). Editör (SceneApp) ve oyun (RuntimeSceneApp) ikisinde de bağlı
 - [x] Add Actor built-in shape'leri (`shape:sphere`, `shape:cylinder`, `shape:cone`) sidecar gerektirmeden kendi collision primitive'lerini kullanır; cube/plane box olarak kalır
-- [ ] `convex` primitif şu an bounding-box ile yaklaşık (gerçek convex hull sonra)
-- [ ] Kanal yanıtları → Rapier **collision groups** (membership/filter bitmask)
-- [ ] Convex hull (Rapier `convexHull`) ve (ertele) trimesh complex collision
-- [ ] Phys material → collider friction/restitution/density (sabit 0.8/0 yerine)
-- [ ] Overlap/Hit event bayraklarını mevcut contact/intersection akışına bağla
+- [x] `convex` primitif gerçek Rapier `convexHull` ile çalışır (eksik/bozuk hull noktaları box fallback alır)
+- [x] Kanal yanıtları → Rapier **collision groups** (membership/filter bitmask)
+- [~] Convex hull (Rapier `convexHull`) tamam; trimesh complex collision ertelendi
+- [~] Phys material → collider friction/restitution bağlandı; density henüz yok
+- [x] Overlap/Hit event bayraklarını mevcut contact/intersection akışına bağla
 
 ### Faz 8 — Persistans & Save Validator
 
 - [x] Asset-düzeyi collision tanımı için saklama formatı (`*.collision.json` sidecar) + `/__save-collision` yazma yolu (`vite.config.ts`)
-- [ ] `applyTransformFields`'e yeni placement override alanlarını ekle (`tools/saveValidator.ts`) — Faz 6 ile
+- [x] `applyTransformFields`'e yeni placement override alanlarını ekle (`tools/saveValidator.ts`) — Faz 6 ile
 - [x] Asset collision tanımı için validator (`validateAssetCollisionDef`) + normalizer (`normalizeAssetCollisionDef`)
 - [x] Geriye dönük uyum: eksik/bozuk sidecar güvenli default'a düşer (`loadAssetCollision`)
-- [ ] CLAUDE.md "save-validator allowlist gotcha" notunu yeni alanlarla güncelle — Faz 6 ile
+- [x] CLAUDE.md "save-validator allowlist gotcha" notunu yeni alanlarla güncelle — Faz 6 ile
 
 ### Faz 9 — Test & Doküman
 
-- [ ] `tools/engine-tests.ts`: collision model okuma/yazma + complexity/preset çözümleme testleri
-- [ ] Save round-trip testi (yeni alanlar düşmüyor)
-- [ ] `npx tsc --noEmit` temiz
-- [ ] `docs/UNREAL_BASICS_LESSONS.md` Progress Log'a giriş
+- [x] `tools/engine-tests.ts`: collision model okuma/yazma + complexity/preset çözümleme testleri
+- [x] Save round-trip testi (yeni alanlar düşmüyor)
+- [x] `npx tsc --noEmit` temiz
+- [x] `docs/UNREAL_BASICS_LESSONS.md` Progress Log'a giriş
 - [ ] Kullanıcı akışı doğrulaması: Content → çift tık → SM Editor → collision ekle → kaydet → sahnede yansıma
 
 ---

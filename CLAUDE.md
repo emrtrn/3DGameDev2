@@ -59,7 +59,10 @@ engine/editor.
   (`applyTransformFields` / `validateLightActor` / `validateReflectionPlane` /
   `validateSkyAtmosphere` / `validateHeightFog` / `validateCloudLayer` /
   `validateReflection` / `validatePostProcess`, imported by `vite.config.ts`) or it
-  is silently dropped on save.
+  is silently dropped on save. Current placement collision overrides
+  (`collisionPreset`, `collisionEnabled`, `objectType`, `responses`,
+  `physicalMaterialId`, `generateOverlapEvents`, `simulationGeneratesHitEvents`)
+  live in `applyTransformFields`.
 
 ## Authoring Data Flow
 

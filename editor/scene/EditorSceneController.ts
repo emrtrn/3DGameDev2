@@ -55,7 +55,12 @@ import type {
   RoomLayout,
 } from "@engine/scene/layout";
 import { metadataValuesEqual } from "@engine/scene/metadataSchema";
-import type { CollisionPresetId } from "@engine/scene/collision";
+import type {
+  CollisionEnabled,
+  CollisionObjectChannel,
+  CollisionPresetId,
+  CollisionResponseMap,
+} from "@engine/scene/collision";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
@@ -70,6 +75,12 @@ type MutableHierarchyTransform = {
   castShadow?: boolean;
   collision?: boolean;
   collisionPreset?: CollisionPresetId;
+  collisionEnabled?: CollisionEnabled;
+  objectType?: CollisionObjectChannel;
+  responses?: CollisionResponseMap;
+  physicalMaterialId?: string;
+  generateOverlapEvents?: boolean;
+  simulationGeneratesHitEvents?: boolean;
   materialSlot?: string;
   simulatePhysics?: boolean;
   physics?: LayoutPhysics;
@@ -81,6 +92,117 @@ type MutableHierarchyTransform = {
   nodeId?: string;
   parentId?: string;
 };
+
+type CollisionOverrideSettings = Pick<
+  LayoutPlacement,
+  | "collisionEnabled"
+  | "objectType"
+  | "responses"
+  | "physicalMaterialId"
+  | "generateOverlapEvents"
+  | "simulationGeneratesHitEvents"
+>;
+
+type CollisionOverridePatch = {
+  [Key in keyof CollisionOverrideSettings]?: CollisionOverrideSettings[Key] | undefined;
+};
+
+function isPlacementCollisionSelection(selection: Selection): boolean {
+  return selection.kind === "instance" || selection.kind === "character";
+}
+
+function cloneCollisionOverrides(
+  source: LayoutPlacement | LayoutCharacter,
+): CollisionOverrideSettings | undefined {
+  const draft: CollisionOverridePatch = {};
+  if (source.collisionEnabled !== undefined) draft.collisionEnabled = source.collisionEnabled;
+  if (source.objectType !== undefined) draft.objectType = source.objectType;
+  if (source.responses !== undefined) draft.responses = { ...source.responses };
+  if (source.physicalMaterialId !== undefined) draft.physicalMaterialId = source.physicalMaterialId;
+  if (source.generateOverlapEvents !== undefined) {
+    draft.generateOverlapEvents = source.generateOverlapEvents;
+  }
+  if (source.simulationGeneratesHitEvents !== undefined) {
+    draft.simulationGeneratesHitEvents = source.simulationGeneratesHitEvents;
+  }
+  return normalizeCollisionOverrides(draft);
+}
+
+function normalizeCollisionOverrides(
+  value: CollisionOverridePatch | CollisionOverrideSettings | undefined,
+): CollisionOverrideSettings | undefined {
+  if (!value) return undefined;
+  const next: CollisionOverrideSettings = {};
+  if (value.collisionEnabled !== undefined) next.collisionEnabled = value.collisionEnabled;
+  if (value.objectType !== undefined) next.objectType = value.objectType;
+  if (value.responses && Object.keys(value.responses).length > 0) {
+    next.responses = { ...value.responses };
+  }
+  if (value.physicalMaterialId !== undefined && value.physicalMaterialId.length > 0) {
+    next.physicalMaterialId = value.physicalMaterialId;
+  }
+  if (value.generateOverlapEvents !== undefined) {
+    next.generateOverlapEvents = value.generateOverlapEvents;
+  }
+  if (value.simulationGeneratesHitEvents !== undefined) {
+    next.simulationGeneratesHitEvents = value.simulationGeneratesHitEvents;
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function collisionOverridesEqual(
+  a: CollisionOverrideSettings | undefined,
+  b: CollisionOverrideSettings | undefined,
+): boolean {
+  const left = normalizeCollisionOverrides(a);
+  const right = normalizeCollisionOverrides(b);
+  return (
+    left?.collisionEnabled === right?.collisionEnabled &&
+    left?.objectType === right?.objectType &&
+    left?.physicalMaterialId === right?.physicalMaterialId &&
+    left?.generateOverlapEvents === right?.generateOverlapEvents &&
+    left?.simulationGeneratesHitEvents === right?.simulationGeneratesHitEvents &&
+    collisionResponseMapsEqual(left?.responses, right?.responses)
+  );
+}
+
+function collisionResponseMapsEqual(
+  a: CollisionResponseMap | undefined,
+  b: CollisionResponseMap | undefined,
+): boolean {
+  const aEntries = Object.entries(a ?? {}).sort(([left], [right]) => left.localeCompare(right));
+  const bEntries = Object.entries(b ?? {}).sort(([left], [right]) => left.localeCompare(right));
+  if (aEntries.length !== bEntries.length) return false;
+  return aEntries.every(([channel, response], index) => {
+    const other = bEntries[index];
+    return other?.[0] === channel && other[1] === response;
+  });
+}
+
+function writeCollisionOverrides(
+  target: LayoutPlacement | LayoutCharacter,
+  value: CollisionOverrideSettings | undefined,
+): void {
+  delete target.collisionEnabled;
+  delete target.objectType;
+  delete target.responses;
+  delete target.physicalMaterialId;
+  delete target.generateOverlapEvents;
+  delete target.simulationGeneratesHitEvents;
+  if (!value) return;
+  if (value.collisionEnabled !== undefined) target.collisionEnabled = value.collisionEnabled;
+  if (value.objectType !== undefined) target.objectType = value.objectType;
+  if (value.responses && Object.keys(value.responses).length > 0) {
+    target.responses = { ...value.responses };
+  }
+  if (value.physicalMaterialId !== undefined) target.physicalMaterialId = value.physicalMaterialId;
+  if (value.generateOverlapEvents !== undefined) {
+    target.generateOverlapEvents = value.generateOverlapEvents;
+  }
+  if (value.simulationGeneratesHitEvents !== undefined) {
+    target.simulationGeneratesHitEvents = value.simulationGeneratesHitEvents;
+  }
+}
 
 export interface EditorSceneControllerHost {
   applyCastShadow: (selection: Selection) => void;
@@ -748,8 +870,8 @@ export class EditorSceneController {
   /** Sets (or clears, when `undefined`) the per-placement collision preset override. */
   setSelectionCollisionPreset(value: CollisionPresetId | undefined): void {
     if (!this.selection || !this.host.hasSelection(this.selection)) return;
-    if (this.selection.kind === "light") return;
-    const entries = this.getSelectedSelectionsWithTargets((selection) => selection.kind !== "light")
+    if (!isPlacementCollisionSelection(this.selection)) return;
+    const entries = this.getSelectedSelectionsWithTargets(isPlacementCollisionSelection)
       .flatMap((selection) => {
         const target = this.host.getMutableTransform(selection);
         if (!target || target.collisionPreset === value) return [];
@@ -780,11 +902,62 @@ export class EditorSceneController {
     value: CollisionPresetId | undefined,
     options: { notify?: boolean } = {},
   ): void {
-    if (selection.kind === "light") return;
+    if (!isPlacementCollisionSelection(selection)) return;
     const target = this.host.getMutableTransform(selection);
     if (!target) return;
     if (value === undefined) delete target.collisionPreset;
     else target.collisionPreset = value;
+    if (options.notify !== false) this.host.emitSelectionChanged();
+  }
+
+  /** Sets or clears per-placement collision profile/material/event overrides. */
+  setSelectionCollisionOverrides(patch: CollisionOverridePatch): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    if (!isPlacementCollisionSelection(this.selection)) return;
+    const entries = this.getSelectedSelectionsWithTargets(isPlacementCollisionSelection)
+      .flatMap((selection) => {
+        const target = this.host.getMutableTransform(selection) as
+          | LayoutPlacement
+          | LayoutCharacter
+          | null;
+        if (!target) return [];
+        const previous = cloneCollisionOverrides(target);
+        const next = normalizeCollisionOverrides({ ...previous, ...patch });
+        if (collisionOverridesEqual(previous, next)) return [];
+        return [{ selection: cloneSelection(selection), previous, next }];
+      });
+    if (entries.length === 0) return;
+
+    const applyEntries = (mode: EditorCommandPhase): void => {
+      for (const entry of entries) {
+        this.applyCollisionOverrides(
+          entry.selection,
+          mode === "redo" ? entry.next : entry.previous,
+          { notify: false },
+        );
+      }
+      this.host.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: entries.length === 1 ? "Set collision overrides" : "Set selected collision overrides",
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
+    });
+  }
+
+  private applyCollisionOverrides(
+    selection: Selection,
+    value: CollisionOverrideSettings | undefined,
+    options: { notify?: boolean } = {},
+  ): void {
+    if (!isPlacementCollisionSelection(selection)) return;
+    const target = this.host.getMutableTransform(selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    writeCollisionOverrides(target, value);
     if (options.notify !== false) this.host.emitSelectionChanged();
   }
 

@@ -304,6 +304,17 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-22* - **Static Mesh Collision Editor - Faz 6 placement override'lari
+  (tamam).** Scene Details > Collision artik asset default'unu miras alan
+  placement-level override'lari tasir: Collision Enabled, Object Type, Phys
+  Material Override, Generate Overlap Events, Simulation Generates Hit Events ve
+  Custom response matrisi. Alanlar `LayoutPlacement` / `LayoutCharacter`,
+  `EditorSceneController` undo/redo, `EditorUi`, `tools/saveValidator.ts` ve
+  `legacyRoomLayoutAdapter` akisana baglandi; placement override asset sidecar
+  default'unun ustune yazilir. Gate: `npx tsc --noEmit` temiz, `npm run
+  test:engine` 278 check gecti. Kalan: SM Editor Show Simple/Complex toggle'i,
+  K-DOP/complex trimesh ve editor UI manuel akisi.
+
 - *2026-06-22* - **Player Controller Faz 9 - Sprint FOV + camera shake
   (tamam -> Faz 9 kapandi).** `PlayerCameraManager` artik view target'in ustune
   transient gameplay efektleri bindiriyor: `setGameplayEffects` hedef FOV offset,

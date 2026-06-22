@@ -12,11 +12,15 @@
 
 import {
   COLLISION_CHANNELS,
+  COLLISION_OBJECT_CHANNELS,
+  PHYSICAL_MATERIAL_IDS,
   isCollisionComplexity,
+  isCollisionEnabled,
   isCollisionPresetId,
   isCollisionPrimitiveShape,
   isCollisionResponse,
   type CollisionChannel,
+  type CollisionObjectChannel,
 } from "../engine/scene/collision";
 import {
   defaultPlacementForAsset,
@@ -303,6 +307,44 @@ export function applyTransformFields(
       throw new Error(`invalid ${label} collisionPreset`);
     }
     target.collisionPreset = entry.collisionPreset;
+  }
+  if (entry.collisionEnabled !== undefined) {
+    if (!isCollisionEnabled(entry.collisionEnabled)) {
+      throw new Error(`invalid ${label} collisionEnabled`);
+    }
+    target.collisionEnabled = entry.collisionEnabled;
+  }
+  if (entry.objectType !== undefined) {
+    if (
+      typeof entry.objectType !== "string" ||
+      !COLLISION_OBJECT_CHANNELS.includes(entry.objectType as CollisionObjectChannel)
+    ) {
+      throw new Error(`invalid ${label} objectType`);
+    }
+    target.objectType = entry.objectType;
+  }
+  const responses = validateCollisionResponses(entry.responses, `${label} responses`);
+  if (responses) target.responses = responses;
+  if (entry.physicalMaterialId !== undefined) {
+    if (
+      typeof entry.physicalMaterialId !== "string" ||
+      !PHYSICAL_MATERIAL_IDS.includes(entry.physicalMaterialId)
+    ) {
+      throw new Error(`invalid ${label} physicalMaterialId`);
+    }
+    target.physicalMaterialId = entry.physicalMaterialId;
+  }
+  if (entry.generateOverlapEvents !== undefined) {
+    if (typeof entry.generateOverlapEvents !== "boolean") {
+      throw new Error(`${label} generateOverlapEvents must be boolean`);
+    }
+    target.generateOverlapEvents = entry.generateOverlapEvents;
+  }
+  if (entry.simulationGeneratesHitEvents !== undefined) {
+    if (typeof entry.simulationGeneratesHitEvents !== "boolean") {
+      throw new Error(`${label} simulationGeneratesHitEvents must be boolean`);
+    }
+    target.simulationGeneratesHitEvents = entry.simulationGeneratesHitEvents;
   }
   if (entry.materialSlot !== undefined) {
     if (typeof entry.materialSlot !== "string" || entry.materialSlot.length === 0) {

@@ -233,7 +233,13 @@ import type {
   RoomLayout,
   Vec3,
 } from "@engine/scene/layout";
-import type { AssetCollisionDef, CollisionPresetId } from "@engine/scene/collision";
+import type {
+  AssetCollisionDef,
+  CollisionEnabled,
+  CollisionObjectChannel,
+  CollisionPresetId,
+  CollisionResponseMap,
+} from "@engine/scene/collision";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
 import {
   loadAssetMaterialSlots,
@@ -3641,6 +3647,18 @@ export class SceneApp {
   /** Details "Collision" section preset override (undefined inherits asset default). */
   setSelectionCollisionPreset(value: CollisionPresetId | undefined): void {
     this.editorSceneController.setSelectionCollisionPreset(value);
+  }
+
+  /** Details "Collision" section per-placement overrides (undefined fields inherit). */
+  setSelectionCollisionOverrides(patch: {
+    collisionEnabled?: CollisionEnabled | undefined;
+    objectType?: CollisionObjectChannel | undefined;
+    responses?: CollisionResponseMap | undefined;
+    physicalMaterialId?: string | undefined;
+    generateOverlapEvents?: boolean | undefined;
+    simulationGeneratesHitEvents?: boolean | undefined;
+  }): void {
+    this.editorSceneController.setSelectionCollisionOverrides(patch);
   }
 
   /** Details / Content Drawer material slot override for static mesh instances. */

@@ -9,7 +9,12 @@ import type {
   LayoutPostProcess,
   Vec3,
 } from "@engine/scene/layout";
-import type { CollisionPresetId } from "@engine/scene/collision";
+import type {
+  CollisionEnabled,
+  CollisionObjectChannel,
+  CollisionPresetId,
+  CollisionResponseMap,
+} from "@engine/scene/collision";
 import type { Selection } from "./selection";
 
 export interface EditableTransform {
@@ -169,6 +174,18 @@ export interface EditableSelection {
   collision: boolean;
   /** Per-placement collision preset override; absent means inherit asset default. */
   collisionPreset?: CollisionPresetId;
+  /** Per-placement collision enabled override; absent means inherit preset/asset default. */
+  collisionEnabled?: CollisionEnabled;
+  /** Per-placement object channel override; absent means inherit preset/asset default. */
+  objectType?: CollisionObjectChannel;
+  /** Per-placement custom response overrides. */
+  responses?: CollisionResponseMap;
+  /** Per-placement physical material override. */
+  physicalMaterialId?: string;
+  /** Per-placement overlap-event override. */
+  generateOverlapEvents?: boolean;
+  /** Per-placement hit-event override. */
+  simulationGeneratesHitEvents?: boolean;
   /** Per-placement material override. References a manifest material asset id. */
   materialSlot?: string;
   /** Dynamic rigid-body simulation in Play mode. */

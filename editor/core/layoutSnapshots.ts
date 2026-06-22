@@ -78,7 +78,19 @@ export function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
   if (placement.scaleLocked !== undefined) clone.scaleLocked = placement.scaleLocked;
   if (placement.castShadow !== undefined) clone.castShadow = placement.castShadow;
   if (placement.collision !== undefined) clone.collision = placement.collision;
+  if (placement.collisionPreset !== undefined) clone.collisionPreset = placement.collisionPreset;
+  if (placement.collisionEnabled !== undefined) clone.collisionEnabled = placement.collisionEnabled;
+  if (placement.objectType !== undefined) clone.objectType = placement.objectType;
+  if (placement.responses !== undefined) clone.responses = { ...placement.responses };
+  if (placement.physicalMaterialId !== undefined) clone.physicalMaterialId = placement.physicalMaterialId;
+  if (placement.generateOverlapEvents !== undefined) {
+    clone.generateOverlapEvents = placement.generateOverlapEvents;
+  }
+  if (placement.simulationGeneratesHitEvents !== undefined) {
+    clone.simulationGeneratesHitEvents = placement.simulationGeneratesHitEvents;
+  }
   if (placement.materialSlot !== undefined) clone.materialSlot = placement.materialSlot;
+  if (placement.sensor !== undefined) clone.sensor = placement.sensor;
   if (placement.simulatePhysics !== undefined) clone.simulatePhysics = placement.simulatePhysics;
   if (placement.physics !== undefined) {
     const physics = clonePhysics(placement.physics);
@@ -116,6 +128,18 @@ export function cloneCharacter(character: LayoutCharacter): LayoutCharacter {
   if (character.scaleLocked !== undefined) clone.scaleLocked = character.scaleLocked;
   if (character.castShadow !== undefined) clone.castShadow = character.castShadow;
   if (character.collision !== undefined) clone.collision = character.collision;
+  if (character.collisionPreset !== undefined) clone.collisionPreset = character.collisionPreset;
+  if (character.collisionEnabled !== undefined) clone.collisionEnabled = character.collisionEnabled;
+  if (character.objectType !== undefined) clone.objectType = character.objectType;
+  if (character.responses !== undefined) clone.responses = { ...character.responses };
+  if (character.physicalMaterialId !== undefined) clone.physicalMaterialId = character.physicalMaterialId;
+  if (character.generateOverlapEvents !== undefined) {
+    clone.generateOverlapEvents = character.generateOverlapEvents;
+  }
+  if (character.simulationGeneratesHitEvents !== undefined) {
+    clone.simulationGeneratesHitEvents = character.simulationGeneratesHitEvents;
+  }
+  if (character.sensor !== undefined) clone.sensor = character.sensor;
   if (character.simulatePhysics !== undefined) clone.simulatePhysics = character.simulatePhysics;
   if (character.physics !== undefined) {
     const physics = clonePhysics(character.physics);

@@ -49,8 +49,11 @@ import {
   resolveCollisionProfile,
   resolvePhysicalMaterial,
   type AssetCollisionDef,
+  type CollisionEnabled,
+  type CollisionObjectChannel,
   type CollisionPresetId,
   type CollisionPrimitive,
+  type CollisionResponseMap,
 } from "./collision";
 import { readRotation, readScale } from "./transform";
 import type { Entity, EntityComponentData, EntityComponentMap, SceneJsonValue } from "./entity";
@@ -377,11 +380,37 @@ function behaviorComponent(behavior: LayoutBehavior | undefined): BehaviorCompon
   return component;
 }
 
+function collisionProfileOverrides(value: {
+  collisionEnabled?: CollisionEnabled | undefined;
+  objectType?: CollisionObjectChannel | undefined;
+  responses?: CollisionResponseMap | undefined;
+}): {
+  collisionEnabled?: CollisionEnabled;
+  objectType?: CollisionObjectChannel;
+  responses?: CollisionResponseMap;
+} {
+  const overrides: {
+    collisionEnabled?: CollisionEnabled;
+    objectType?: CollisionObjectChannel;
+    responses?: CollisionResponseMap;
+  } = {};
+  if (value.collisionEnabled !== undefined) overrides.collisionEnabled = value.collisionEnabled;
+  if (value.objectType !== undefined) overrides.objectType = value.objectType;
+  if (value.responses !== undefined) overrides.responses = value.responses;
+  return overrides;
+}
+
 function colliderComponent(
   assetId: string,
   source: ColliderTransformSource & {
     collision?: boolean;
     collisionPreset?: CollisionPresetId;
+    collisionEnabled?: LayoutPlacement["collisionEnabled"];
+    objectType?: LayoutPlacement["objectType"];
+    responses?: LayoutPlacement["responses"];
+    physicalMaterialId?: string;
+    generateOverlapEvents?: boolean;
+    simulationGeneratesHitEvents?: boolean;
     sensor?: boolean;
     simulatePhysics?: boolean;
     physics?: LayoutPhysics;
@@ -397,15 +426,32 @@ function colliderComponent(
   // body), and a query-only preset becomes a non-blocking sensor. Physics
   // presets stay solid blockers.
   // Effective preset: a placement override wins over the asset default.
-  const effectivePreset = source.collisionPreset ?? collisionDef?.preset;
-  const profile = effectivePreset
+  const hasProfileOverride =
+    source.collisionEnabled !== undefined ||
+    source.objectType !== undefined ||
+    source.responses !== undefined;
+  const effectivePreset = source.collisionPreset ?? collisionDef?.preset ?? (hasProfileOverride ? "custom" : undefined);
+  const effectiveResponses = source.responses ?? collisionDef?.responses;
+  const baseProfile = effectivePreset
     ? resolveCollisionProfile(
         effectivePreset,
-        effectivePreset === "custom" && collisionDef?.responses
-          ? { responses: collisionDef.responses }
+        effectivePreset === "custom"
+          ? collisionProfileOverrides({
+              collisionEnabled: source.collisionEnabled,
+              objectType: source.objectType,
+              responses: effectiveResponses,
+            })
           : undefined,
       )
     : null;
+  const profile =
+    baseProfile && hasProfileOverride
+      ? {
+          collisionEnabled: source.collisionEnabled ?? baseProfile.collisionEnabled,
+          objectType: source.objectType ?? baseProfile.objectType,
+          responses: source.responses ? { ...baseProfile.responses, ...source.responses } : baseProfile.responses,
+        }
+      : baseProfile;
   if (profile?.collisionEnabled === "none" && !simulatePhysics) return null;
   const isSensor = source.sensor === true || profile?.collisionEnabled === "query";
   const isStaticFinal = isStatic && !simulatePhysics;
@@ -437,15 +483,20 @@ function colliderComponent(
     if (box && !isZeroVec3(box.center)) component.center = box.center;
   }
   if (simulatePhysics) component.simulatePhysics = true;
-  if (collisionDef?.physicalMaterialId) {
-    const material = resolvePhysicalMaterial(collisionDef.physicalMaterialId);
+  const physicalMaterialId = source.physicalMaterialId ?? collisionDef?.physicalMaterialId;
+  if (physicalMaterialId) {
+    const material = resolvePhysicalMaterial(physicalMaterialId);
     component.friction = material.friction;
     component.restitution = material.restitution;
   }
-  // Event flags default to on; only persist an explicit opt-out.
-  if (collisionDef?.generateOverlapEvents === false) component.generateOverlapEvents = false;
-  if (collisionDef?.simulationGeneratesHitEvents === false) {
-    component.simulationGeneratesHitEvents = false;
+  // Event flags default to on; placement overrides beat the asset sidecar.
+  const generateOverlapEvents =
+    source.generateOverlapEvents ?? collisionDef?.generateOverlapEvents;
+  if (generateOverlapEvents !== undefined) component.generateOverlapEvents = generateOverlapEvents;
+  const simulationGeneratesHitEvents =
+    source.simulationGeneratesHitEvents ?? collisionDef?.simulationGeneratesHitEvents;
+  if (simulationGeneratesHitEvents !== undefined) {
+    component.simulationGeneratesHitEvents = simulationGeneratesHitEvents;
   }
   // Channel filtering: establish membership/filter so an Ignore response drops
   // the pair. Objects without a preset stay unset (interact with everything).

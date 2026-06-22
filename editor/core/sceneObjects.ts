@@ -9,8 +9,10 @@ import { resolvePostProcess } from "@engine/scene/postProcess";
 import { readPivot, readRotation, readScale } from "@engine/scene/transform";
 import type {
   LayoutCloudLayer,
+  LayoutCharacter,
   LayoutHeightFog,
   LayoutLightActor,
+  LayoutPlacement,
   LayoutPostProcess,
   LayoutReflectionPlane,
   LayoutReflectiveSurface,
@@ -27,6 +29,33 @@ import { cloneBehavior, cloneMetadata, cloneParticle, clonePhysics } from "./lay
 import { selectionId, type Selection } from "./selection";
 
 const DEFAULT_LIGHT_COLOR = "#ffffff";
+
+function collisionOverrides(
+  source: LayoutPlacement | LayoutCharacter,
+): Pick<
+  EditableSelection,
+  | "collisionPreset"
+  | "collisionEnabled"
+  | "objectType"
+  | "responses"
+  | "physicalMaterialId"
+  | "generateOverlapEvents"
+  | "simulationGeneratesHitEvents"
+> {
+  return {
+    ...(source.collisionPreset ? { collisionPreset: source.collisionPreset } : {}),
+    ...(source.collisionEnabled ? { collisionEnabled: source.collisionEnabled } : {}),
+    ...(source.objectType ? { objectType: source.objectType } : {}),
+    ...(source.responses ? { responses: { ...source.responses } } : {}),
+    ...(source.physicalMaterialId ? { physicalMaterialId: source.physicalMaterialId } : {}),
+    ...(source.generateOverlapEvents !== undefined
+      ? { generateOverlapEvents: source.generateOverlapEvents }
+      : {}),
+    ...(source.simulationGeneratesHitEvents !== undefined
+      ? { simulationGeneratesHitEvents: source.simulationGeneratesHitEvents }
+      : {}),
+  };
+}
 
 /** Stable Outliner/Details asset id shown for the singleton Sky Atmosphere. */
 export const SKY_ATMOSPHERE_ASSET_ID = "sky-atmosphere";
@@ -288,7 +317,7 @@ export function buildSceneObjects(
         locked: placement.locked ?? false,
         castShadow: deps.staticObjectsCastShadow,
         collision: placement.collision ?? true,
-        ...(placement.collisionPreset ? { collisionPreset: placement.collisionPreset } : {}),
+        ...collisionOverrides(placement),
         ...(placement.materialSlot ? { materialSlot: placement.materialSlot } : {}),
         simulatePhysics: placement.simulatePhysics ?? false,
         physics: clonePhysics(placement.physics) ?? {},
@@ -318,7 +347,7 @@ export function buildSceneObjects(
       locked: character.locked ?? false,
       castShadow: character.castShadow ?? true,
       collision: character.collision ?? true,
-      ...(character.collisionPreset ? { collisionPreset: character.collisionPreset } : {}),
+      ...collisionOverrides(character),
       simulatePhysics: character.simulatePhysics ?? false,
       physics: clonePhysics(character.physics) ?? {},
       metadata: {},
@@ -504,7 +533,7 @@ export function buildEditableSelection(
       locked: placement.locked ?? false,
       castShadow: deps.staticObjectsCastShadow,
       collision: placement.collision ?? true,
-      ...(placement.collisionPreset ? { collisionPreset: placement.collisionPreset } : {}),
+      ...collisionOverrides(placement),
       ...(placement.materialSlot ? { materialSlot: placement.materialSlot } : {}),
       simulatePhysics: placement.simulatePhysics ?? false,
       physics: clonePhysics(placement.physics) ?? {},
@@ -621,7 +650,7 @@ export function buildEditableSelection(
     locked: character.locked ?? false,
     castShadow: character.castShadow ?? true,
     collision: character.collision ?? true,
-    ...(character.collisionPreset ? { collisionPreset: character.collisionPreset } : {}),
+    ...collisionOverrides(character),
     simulatePhysics: character.simulatePhysics ?? false,
     physics: clonePhysics(character.physics) ?? {},
     metadata: cloneMetadata(character.metadata),

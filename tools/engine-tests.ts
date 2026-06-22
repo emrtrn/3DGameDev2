@@ -3432,6 +3432,27 @@ check("EditorSceneController applies Details edits to the multi-selection", () =
   assert.equal(layout.instances[0]?.placements[0]?.collisionPreset, undefined);
   assert.equal(layout.characters[0]?.collisionPreset, undefined);
 
+  controller.setSelectionCollisionOverrides({
+    collisionEnabled: "query",
+    objectType: "trigger",
+    responses: { pawn: "overlap", visibility: "ignore" },
+    physicalMaterialId: "rubber",
+    generateOverlapEvents: false,
+    simulationGeneratesHitEvents: false,
+  });
+  assert.equal(layout.instances[0]?.placements[0]?.collisionEnabled, "query");
+  assert.equal(layout.characters[0]?.collisionEnabled, "query");
+  assert.equal(layout.instances[0]?.placements[0]?.objectType, "trigger");
+  assert.deepEqual(layout.characters[0]?.responses, { pawn: "overlap", visibility: "ignore" });
+  assert.equal(layout.instances[0]?.placements[0]?.physicalMaterialId, "rubber");
+  assert.equal(layout.characters[0]?.generateOverlapEvents, false);
+  assert.equal(layout.instances[0]?.placements[0]?.simulationGeneratesHitEvents, false);
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements[0]?.collisionEnabled, undefined);
+  assert.equal(layout.characters[0]?.collisionEnabled, undefined);
+  assert.equal(layout.instances[0]?.placements[0]?.responses, undefined);
+  assert.equal(layout.characters[0]?.physicalMaterialId, undefined);
+
   controller.setSelectionPhysics({ linearDamping: 0.5, enableGravity: false });
   assert.deepEqual(layout.instances[0]?.placements[0]?.physics, {
     linearDamping: 0.5,
@@ -4467,6 +4488,61 @@ check("physical material id sets collider friction/restitution", () => {
   const collider = entity ? readColliderComponent(entity) : undefined;
   assert.ok(Math.abs((collider?.friction ?? -1) - 0.9) < 1e-9, `friction=${collider?.friction}`);
   assert.ok(Math.abs((collider?.restitution ?? -1) - 0.7) < 1e-9, `restitution=${collider?.restitution}`);
+});
+
+check("placement collision overrides beat asset collision defaults at runtime", () => {
+  const overrideLayout: RoomLayout = {
+    schema: 1,
+    name: "collision-override-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "crate",
+        placements: [
+          {
+            position: [0, 0, 0],
+            collisionEnabled: "query",
+            objectType: "trigger",
+            responses: { pawn: "ignore" },
+            physicalMaterialId: "rubber",
+            generateOverlapEvents: true,
+            simulationGeneratesHitEvents: false,
+          },
+        ],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+  const defs = new Map<string, AssetCollisionDef>([
+    [
+      "crate",
+      {
+        primitives: [{ shape: "box", size: [1, 1, 1] }],
+        complexity: "projectDefault",
+        preset: "blockAll",
+        physicalMaterialId: "metal",
+        generateOverlapEvents: false,
+      },
+    ],
+  ]);
+  const doc = roomLayoutToSceneDocument(overrideLayout, { collisionDefs: defs });
+  const entity = doc.entities.find((e) => e.id === instanceEntityId("crate", 0));
+  const collider = entity ? readColliderComponent(entity) : undefined;
+  assert.equal(collider?.isSensor, true);
+  assert.equal(collider?.friction, 0.9);
+  assert.equal(collider?.restitution, 0.7);
+  assert.equal(collider?.generateOverlapEvents, true);
+  assert.equal(collider?.simulationGeneratesHitEvents, false);
+
+  const triggerGroups = collisionInteractionGroups(
+    resolveCollisionProfile("custom", {
+      collisionEnabled: "query",
+      objectType: "trigger",
+      responses: { pawn: "ignore" },
+    }),
+  );
+  assert.equal(collider?.collisionGroups, triggerGroups);
 });
 
 const UNIT_CUBE_CORNERS: [number, number, number][] = [
@@ -6102,11 +6178,28 @@ check("placement validator keeps a valid collisionPreset and rejects bad ones", 
   const placement = validatePlacement({
     position: [0, 0, 0],
     collisionPreset: "trigger",
+    collisionEnabled: "query",
+    objectType: "trigger",
+    responses: { pawn: "overlap", visibility: "ignore" },
+    physicalMaterialId: "rubber",
+    generateOverlapEvents: false,
+    simulationGeneratesHitEvents: true,
   });
   assert.equal(placement.collisionPreset, "trigger");
+  assert.equal(placement.collisionEnabled, "query");
+  assert.equal(placement.objectType, "trigger");
+  assert.deepEqual(placement.responses, { pawn: "overlap", visibility: "ignore" });
+  assert.equal(placement.physicalMaterialId, "rubber");
+  assert.equal(placement.generateOverlapEvents, false);
+  assert.equal(placement.simulationGeneratesHitEvents, true);
   assert.throws(() => validatePlacement({ position: [0, 0, 0], collisionPreset: "nope" }));
+  assert.throws(() => validatePlacement({ position: [0, 0, 0], collisionEnabled: "maybe" }));
+  assert.throws(() => validatePlacement({ position: [0, 0, 0], objectType: "camera" }));
+  assert.throws(() => validatePlacement({ position: [0, 0, 0], physicalMaterialId: "ice" }));
+  assert.throws(() => validatePlacement({ position: [0, 0, 0], responses: { pawn: "bounce" } }));
   // Absent override stays absent (inherits asset default).
   assert.equal(validatePlacement({ position: [0, 0, 0] }).collisionPreset, undefined);
+  assert.equal(validatePlacement({ position: [0, 0, 0] }).collisionEnabled, undefined);
 });
 check("placement validator allowlists particle + interaction and rejects bad ones", () => {
   const placement = validatePlacement({
