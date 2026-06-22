@@ -32,6 +32,11 @@ export interface ResolvedPostProcess {
     aperture: number;
     maxBlur: number;
   };
+  ao: {
+    enabled: boolean;
+    radius: number;
+    intensity: number;
+  };
   saturation: number;
   contrast: number;
   /** White-balance temperature; 0 is neutral, positive warms, negative cools. */
@@ -70,6 +75,11 @@ export const POST_PROCESS_DEFAULTS: ResolvedPostProcess = {
     aperture: 1,
     maxBlur: 1,
   },
+  ao: {
+    enabled: false,
+    radius: 1,
+    intensity: 1,
+  },
   saturation: 1,
   contrast: 1,
   temperature: 0,
@@ -106,6 +116,10 @@ export function resolvePostProcess(
     dof: {
       ...defaults.dof,
       ...actor.dof,
+    },
+    ao: {
+      ...defaults.ao,
+      ...actor.ao,
     },
     saturation: actor.saturation ?? defaults.saturation,
     contrast: actor.contrast ?? defaults.contrast,

@@ -399,6 +399,12 @@ export interface LayoutPostProcess {
     aperture?: number;
     maxBlur?: number;
   };
+  /** Ambient occlusion (GTAO) pass settings; radius is authored ~1-based. */
+  ao?: {
+    enabled?: boolean;
+    radius?: number;
+    intensity?: number;
+  };
   /** Global color saturation multiplier; 1 is neutral. */
   saturation?: number;
   /** Global contrast multiplier; 1 is neutral. */

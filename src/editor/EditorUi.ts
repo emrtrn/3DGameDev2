@@ -4040,6 +4040,23 @@ export class EditorUi {
         </label>
       </div>
       <div class="detail-section">
+        <div class="detail-section-title">Ambient Occlusion</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-post-ao-enabled ${post.ao.enabled ? "checked" : ""} />
+          <span>Enabled</span>
+        </label>
+        <label class="detail-row">
+          <span>Radius</span>
+          <input data-post-ao-number="radius" type="number" step="0.05" min="0" max="4"
+            value="${post.ao.radius}" />
+        </label>
+        <label class="detail-row">
+          <span>Intensity</span>
+          <input data-post-ao-number="intensity" type="number" step="0.05" min="0" max="2"
+            value="${post.ao.intensity}" />
+        </label>
+      </div>
+      <div class="detail-section">
         <div class="detail-section-title">Chromatic Aberration</div>
         <label class="detail-toggle">
           <input type="checkbox" data-post-ca-enabled ${post.chromaticAberration.enabled ? "checked" : ""} />
@@ -4180,6 +4197,28 @@ export class EditorUi {
         this.app.setPostProcess(
           { dof: { ...post.dof, [key]: value } },
           "Edit Post Process Depth of Field",
+        );
+      });
+    });
+
+    this.detailsBody.querySelector<HTMLInputElement>("[data-post-ao-enabled]")?.addEventListener(
+      "change",
+      (event) => {
+        this.app.setPostProcess(
+          { ao: { ...post.ao, enabled: (event.currentTarget as HTMLInputElement).checked } },
+          "Edit Post Process Ambient Occlusion",
+        );
+      },
+    );
+
+    this.detailsBody.querySelectorAll<HTMLInputElement>("[data-post-ao-number]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.postAoNumber as keyof LayoutPostProcess["ao"] | undefined;
+        const value = Number(input.value);
+        if (!key || !Number.isFinite(value)) return;
+        this.app.setPostProcess(
+          { ao: { ...post.ao, [key]: value } },
+          "Edit Post Process Ambient Occlusion",
         );
       });
     });

@@ -4,6 +4,7 @@ import {
   NoToneMapping,
   Vector2,
   type Camera,
+  type Object3D,
   type PerspectiveCamera,
   type Scene,
   type WebGLRenderer,
@@ -11,6 +12,7 @@ import {
 import { BokehPass } from "three/examples/jsm/postprocessing/BokehPass.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { FilmPass } from "three/examples/jsm/postprocessing/FilmPass.js";
+import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
@@ -111,6 +113,54 @@ const CHROMATIC_ABERRATION_AMOUNT_SCALE = 0.01;
 const DOF_APERTURE_SCALE = 0.0002;
 const DOF_MAXBLUR_SCALE = 0.01;
 
+/**
+ * GTAO `radius` is in world units. Although the far plane is 100u, actual content
+ * here is sub-unit (the demo character spawns at 0.3 scale, ~0.5u tall), so the
+ * AO sample radius must be small or it spans whole objects and self-occludes them
+ * to black. This factor maps the intuitive ~1-based slider to that small world
+ * radius (1 → 0.1u, contact-shadow scale). `intensity` passes straight through to
+ * `blendIntensity` (1 = full AO).
+ */
+const AO_RADIUS_SCALE = 0.1;
+
+/**
+ * GTAOPass computes AO from a normal+depth G-buffer it renders by overriding the
+ * whole scene's material. Its built-in visibility cull only skips Points / Lines,
+ * so editor billboard {@link Sprite} icons (camera-facing quads that punch a depth
+ * wall → black halos around actor icons) pollute that buffer. This subclass also
+ * hides sprites and anything flagged `userData.noAmbientOcclusion` during the AO
+ * pass so those 2D overlays never receive occlusion. Real geometry — including
+ * characters — stays in, so it gets proper AO (see {@link AO_RADIUS_SCALE} for the
+ * scale tuning that keeps small objects from self-occluding to black). Visibility
+ * is restored by the base pass within the same frame (after the beauty
+ * RenderPass), so nothing else is affected.
+ */
+class ForgeGtaoPass extends GTAOPass {
+  /** Overrides GTAOPass's internal (untyped) normal-pass visibility cull. */
+  _overrideVisibility(): void {
+    const cache = (this as unknown as { _visibilityCache: Object3D[] })._visibilityCache;
+    this.scene.traverse((object) => {
+      if (!object.visible) return;
+      const probe = object as Object3D & {
+        isPoints?: boolean;
+        isLine?: boolean;
+        isLine2?: boolean;
+        isSprite?: boolean;
+      };
+      if (
+        probe.isPoints ||
+        probe.isLine ||
+        probe.isLine2 ||
+        probe.isSprite ||
+        object.userData.noAmbientOcclusion === true
+      ) {
+        object.visible = false;
+        cache.push(object);
+      }
+    });
+  }
+}
+
 /** Returns true when the grading ShaderPass would change the image at all. */
 function hasColorGrading(resolved: ResolvedPostProcess): boolean {
   return (
@@ -128,8 +178,17 @@ export function createPostProcessEffectPasses(
   if (!resolved || resolved.hidden) return [];
   const { width, height } = context;
   const passes: Pass[] = [];
-  // Order (Section E): DoF near beauty → Bloom → grading → chromatic aberration →
-  // vignette → grain, with OutlinePass/OutputPass appended later by the pipeline.
+  // Order (Section E): AO right after beauty → DoF → Bloom → grading → chromatic
+  // aberration → vignette → grain, with OutlinePass/OutputPass appended later by
+  // the pipeline.
+  if (resolved.ao.enabled) {
+    const gtaoPass = new ForgeGtaoPass(context.scene, context.camera, width, height);
+    gtaoPass.updateGtaoMaterial({ radius: resolved.ao.radius * AO_RADIUS_SCALE });
+    gtaoPass.blendIntensity = resolved.ao.intensity;
+    // GTAOPass sizes its render targets + camera projection uniforms in setSize.
+    gtaoPass.setSize(width, height);
+    passes.push(gtaoPass);
+  }
   if (resolved.dof.enabled) {
     const bokehPass = new BokehPass(context.scene, context.camera, {
       focus: resolved.dof.focusDistance,
@@ -184,6 +243,7 @@ export function hasPostProcessEffectPasses(resolved: ResolvedPostProcess | null)
       (resolved.bloom.enabled ||
         resolved.vignette.enabled ||
         resolved.dof.enabled ||
+        resolved.ao.enabled ||
         resolved.chromaticAberration.enabled ||
         resolved.grain.enabled ||
         hasColorGrading(resolved)),

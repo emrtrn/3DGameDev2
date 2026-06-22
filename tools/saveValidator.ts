@@ -881,6 +881,8 @@ export function validatePostProcess(value: unknown): Record<string, unknown> | n
   if (grain) post.grain = grain;
   const dof = validatePostProcessDof(input.dof);
   if (dof) post.dof = dof;
+  const ao = validatePostProcessAo(input.ao);
+  if (ao) post.ao = ao;
   const saturation = validateOptionalNumber(input.saturation, "postProcess.saturation", 0, 2);
   if (saturation !== undefined) post.saturation = saturation;
   const contrast = validateOptionalNumber(input.contrast, "postProcess.contrast", 0, 2);
@@ -985,6 +987,24 @@ function validatePostProcessDof(value: unknown): Record<string, unknown> | undef
   const maxBlur = validateOptionalNumber(input.maxBlur, "postProcess.dof.maxBlur", 0, 2);
   if (maxBlur !== undefined) dof.maxBlur = maxBlur;
   return Object.keys(dof).length > 0 ? dof : undefined;
+}
+
+function validatePostProcessAo(value: unknown): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("postProcess.ao must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const ao: Record<string, unknown> = {};
+  if (input.enabled !== undefined) {
+    if (typeof input.enabled !== "boolean") throw new Error("postProcess.ao.enabled must be boolean");
+    if (input.enabled) ao.enabled = true;
+  }
+  const radius = validateOptionalNumber(input.radius, "postProcess.ao.radius", 0, 4);
+  if (radius !== undefined) ao.radius = radius;
+  const intensity = validateOptionalNumber(input.intensity, "postProcess.ao.intensity", 0, 2);
+  if (intensity !== undefined) ao.intensity = intensity;
+  return Object.keys(ao).length > 0 ? ao : undefined;
 }
 
 export function validateLayout(value: unknown): unknown {

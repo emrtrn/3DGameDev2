@@ -415,8 +415,11 @@ hissini tamamlayan düşük-maliyetli üçlü + en büyük eksik DoF (2026-06-20
 
 #### F2.4 — Kalan opsiyonel pass efektleri
 
-- [ ] **Ambient Occlusion** (`GTAOPass`): `ao{enabled,radius,intensity}` → GTAO
-      (SSAOPass/SAOPass yerine seçildi, 2026-06-22). **Mimari not:** AO pass'i
+- [~] **Ambient Occlusion** (`GTAOPass`): `ao{enabled,radius,intensity}` → GTAO
+      (SSAOPass/SAOPass yerine seçildi, 2026-06-22). **Durum:** boru hattı + UI +
+      validator + testler tamam ve ikon çerçevesi düzeldi, ancak **Play
+      karakterinin tamamen siyah görünmesi sorunu HÂLÂ ÇÖZÜLMEDİ** — bkz. aşağıdaki
+      "Açık sorun (2026-06-22)". Başka oturumda ele alınacak. **Mimari not:** AO pass'i
       `scene` + `camera` ister; F2.2'de DoF için fabrika imzası zaten
       `createPostProcessEffectPasses(resolved, {scene,camera,width,height})`
       olarak genişletildi — AO `context.scene`/`context.camera`'yı doğrudan
@@ -425,7 +428,60 @@ hissini tamamlayan düşük-maliyetli üçlü + en büyük eksik DoF (2026-06-20
       resize'da `gtaoPass.setSize`. Faz-1 pattern ikizi: model alanı → `resolve` →
       fabrika → Details → `saveValidator` allowlist → engine-tests. **Runtime'da
       kullanıcı tarafından kapatılabilir** (maliyet yüksekse); o ayar UI'si
-      **sonraki/ayrı iş** (ölçek dışı bırakıldı)
+      **sonraki/ayrı iş** (ölçek dışı bırakıldı).
+      **Yapıldı (2026-06-22):** `ao{enabled,radius,intensity}` modelden Details'a
+      tüm katmanlarda kuruldu. `radius` authored ~1-tabanlı (0..4) →
+      `AO_RADIUS_SCALE 0.5` ile dünya birimine (1 → 0.5u, GTAO'nun 0.25 default'unun
+      2 katı); `intensity` (0..2) doğrudan `blendIntensity`. GTAOPass'in `render()`'ı
+      projeksiyon matrislerini her kare kameradan kopyaladığı için FOV değişimi
+      (sprint) güvenli; `setSize` yalnız resolution/RT + ilk projeksiyon için
+      (kurulumda çağrılıyor). `tsc` temiz, 274 engine-test yeşil. Manuel tarayıcı
+      doğrulaması (autosave nedeniyle) kullanıcıya bırakıldı.
+      **Düzeltme (2026-06-22) — iki ayrı sorun:**
+      1. **Editör ikon siyah çerçevesi:** GTAOPass normal+derinlik G-buffer'ını
+         sahnenin tümünü materyal-override ile çizer; dahili görünürlük cull'ı
+         yalnız Points/Line atlar, böylece editör billboard **Sprite** ikonları
+         (light / Player Start "simge"leri) derinlik duvarı yaratıp siyah çerçeve
+         veriyordu. `ForgeGtaoPass` (GTAOPass alt sınıfı) `_overrideVisibility`'i
+         ezerek AO pass'inde Sprite + `userData.noAmbientOcclusion` nesnelerini de
+         gizler (görünürlük base pass tarafından aynı karede, beauty RenderPass'ten
+         sonra geri yüklenir). Gerçek geometri (karakter dahil) içeride kalır.
+      2. **Editör ikon çerçevesi düzeldi** (Sprite hariç tutma çalışıyor).
+
+      ### Açık sorun (2026-06-22) — Play karakteri AO ile tamamen siyah
+
+      **Belirti:** Post Process → Ambient Occlusion açıkken Play modunda karakter
+      (`character-a`, default pawn, `characterScale: 0.3`, ~0.5u boy) tamamen
+      **siyah** render oluyor; düz zemin ve gökyüzü normal. Editör ikon çerçevesi
+      düzeldikten sonra bu **ayrı sorun çözülmedi**.
+
+      **Denenenler (işe yaramadı):**
+      - `ForgeGtaoPass` ile Sprite + `userData.noAmbientOcclusion` hariç tutma →
+        ikonları düzeltti, karakteri **düzeltmedi**.
+      - İlk (yanlış) hipotez: SkinnedMesh G-buffer bozulması → blanket SkinnedMesh
+        hariç tutuldu; `character-a` skinned değil (blok `Mesh`), işe yaramadı,
+        kaldırıldı.
+      - `AO_RADIUS_SCALE` 0.5 → **0.1** (authored radius 1 → 0.1u). Ölçek
+        hipotezi (radius ≈ karakter boyu → tam self-occlusion) test edildi;
+        **karakter hâlâ siyah** (yani tek başına oversized-radius değil ya da
+        başka bir neden var).
+
+      **Bir sonraki oturum için araştırma yönleri:**
+      - GTAOPass `OUTPUT.AO` / `OUTPUT.Normal` / `OUTPUT.Depth` ile debug et:
+        karakterin normal/derinlik G-buffer'ı doğru mu çiziliyor? Normaller ters/
+        bozuk mu, derinlik yanlış mı?
+      - Karakter materyali/normalleri: `character-a` glTF'inde ters normaller,
+        `side`/winding, veya normal eksikliği olabilir mi (override
+        `MeshNormalMaterial` FrontSide çiziyor).
+      - Node-animasyonlu (skinned olmayan) parçaların override pass'inde dünya
+        matrisi/derinliği beauty ile uyuşuyor mu?
+      - Gerekirse: karakteri tümüyle AO'dan muaf tutmak için kök objesine
+        `userData.noAmbientOcclusion = true` ekle (build yolu:
+        `createCharacterSceneObject` / default-pawn spawn). `ForgeGtaoPass` bu
+        bayrağı zaten okuyor — tek eksik bayrağı set etmek. Bu, "karakterde AO
+        olmasın" kararı verilirse hızlı geçici/kalıcı çözüm.
+      - Alternatif: `screenSpaceRadius: true` (ölçek-bağımsız ekran-uzayı yarıçapı)
+        denenebilir.
 - [ ] **Anti-alias** toggle (`SMAAPass`): `antialias: "none" | "smaa"`
 - [ ] Bölgesel grading: shadows/midtones/highlights (lift/gamma/gain)
 

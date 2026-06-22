@@ -7994,6 +7994,7 @@ check("resolvePostProcess fills defaults and overrides per field", () => {
     chromaticAberration: { enabled: true, amount: 0.4 },
     grain: { enabled: true, intensity: 0.7 },
     dof: { enabled: true, focusDistance: 25, aperture: 1.5 },
+    ao: { enabled: true, radius: 1.5 },
     saturation: 1.25,
     contrast: 0.9,
     temperature: 0.3,
@@ -8012,6 +8013,9 @@ check("resolvePostProcess fills defaults and overrides per field", () => {
   assert.equal(effects.dof.focusDistance, 25);
   assert.equal(effects.dof.aperture, 1.5);
   assert.equal(effects.dof.maxBlur, POST_PROCESS_DEFAULTS.dof.maxBlur);
+  assert.equal(effects.ao.enabled, true);
+  assert.equal(effects.ao.radius, 1.5);
+  assert.equal(effects.ao.intensity, POST_PROCESS_DEFAULTS.ao.intensity);
   assert.equal(effects.saturation, 1.25);
   assert.equal(effects.contrast, 0.9);
   assert.equal(effects.temperature, 0.3);
@@ -8116,6 +8120,7 @@ check("hasPostProcessEffectPasses tracks enabled pass effects only", () => {
   assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ chromaticAberration: { enabled: true } })), true);
   assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ grain: { enabled: true } })), true);
   assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ dof: { enabled: true } })), true);
+  assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ ao: { enabled: true } })), true);
   assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ temperature: 0.5 })), true);
   assert.equal(hasPostProcessEffectPasses(resolvePostProcess({ tint: -0.5 })), true);
   // Disabled DoF/CA/grain plus neutral white balance leave the chain empty.
@@ -8139,6 +8144,7 @@ check("validatePostProcess allowlists fields and round-trips through validateLay
     chromaticAberration: { enabled: true, amount: 0.6 },
     grain: { enabled: true, intensity: 0.4 },
     dof: { enabled: true, focusDistance: 20, aperture: 1.2, maxBlur: 0.8 },
+    ao: { enabled: true, radius: 1.5, intensity: 0.75 },
     saturation: 1.2,
     contrast: 0.85,
     temperature: 0.25,
@@ -8155,6 +8161,7 @@ check("validatePostProcess allowlists fields and round-trips through validateLay
     chromaticAberration: { enabled: true, amount: 0.6 },
     grain: { enabled: true, intensity: 0.4 },
     dof: { enabled: true, focusDistance: 20, aperture: 1.2, maxBlur: 0.8 },
+    ao: { enabled: true, radius: 1.5, intensity: 0.75 },
     saturation: 1.2,
     contrast: 0.85,
     temperature: 0.25,
@@ -8168,6 +8175,8 @@ check("validatePostProcess allowlists fields and round-trips through validateLay
   assert.throws(() => validatePostProcess({ grain: { intensity: 99 } }));
   assert.throws(() => validatePostProcess({ dof: { focusDistance: 999 } }));
   assert.throws(() => validatePostProcess({ dof: { enabled: "yes" } }));
+  assert.throws(() => validatePostProcess({ ao: { radius: 99 } }));
+  assert.throws(() => validatePostProcess({ ao: { enabled: "yes" } }));
   assert.throws(() => validatePostProcess({ temperature: 5 }));
   assert.throws(() => validatePostProcess({ tint: -5 }));
 
@@ -8182,6 +8191,7 @@ check("validatePostProcess allowlists fields and round-trips through validateLay
       toneMapping: "none",
       bloom: { enabled: true, intensity: 0.6 },
       dof: { enabled: true, focusDistance: 15 },
+      ao: { enabled: true, radius: 2 },
       saturation: 1.1,
       temperature: 0.2,
     },
@@ -8191,6 +8201,7 @@ check("validatePostProcess allowlists fields and round-trips through validateLay
     toneMapping: "none",
     bloom: { enabled: true, intensity: 0.6 },
     dof: { enabled: true, focusDistance: 15 },
+    ao: { enabled: true, radius: 2 },
     saturation: 1.1,
     temperature: 0.2,
   });

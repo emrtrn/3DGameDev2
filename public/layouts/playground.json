@@ -220,6 +220,22 @@
       "intensity": 1,
       "offset": 1
     },
+    "chromaticAberration": {
+      "amount": 0.05
+    },
+    "grain": {
+      "intensity": 0.5
+    },
+    "dof": {
+      "focusDistance": 10,
+      "aperture": 1,
+      "maxBlur": 1
+    },
+    "ao": {
+      "enabled": true,
+      "radius": 1,
+      "intensity": 1
+    },
     "saturation": 1,
     "contrast": 1
   },

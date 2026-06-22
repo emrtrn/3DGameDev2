@@ -137,6 +137,11 @@ export interface EditablePostProcess {
     aperture: number;
     maxBlur: number;
   };
+  ao: {
+    enabled: boolean;
+    radius: number;
+    intensity: number;
+  };
   saturation: number;
   contrast: number;
   temperature: number;
