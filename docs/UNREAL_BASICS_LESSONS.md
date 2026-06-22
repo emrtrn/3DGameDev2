@@ -312,8 +312,10 @@ alınan karar (sonraki oturum yeniden tartışmasın).
   `EditorSceneController` undo/redo, `EditorUi`, `tools/saveValidator.ts` ve
   `legacyRoomLayoutAdapter` akisana baglandi; placement override asset sidecar
   default'unun ustune yazilir. Gate: `npx tsc --noEmit` temiz, `npm run
-  test:engine` 278 check gecti. Kalan: SM Editor Show Simple/Complex toggle'i,
-  K-DOP/complex trimesh ve editor UI manuel akisi.
+  test:engine` 278 check gecti. Devaminda SM Editor Show Simple/Complex
+  collision gorunurluk toggle'i ve K-DOP 10DOP-X/Y/Z, 18DOP, 26DOP uretimi
+  eklendi. Kalan: complex trimesh, V-HACD/Convert Boxes ve editor UI manuel
+  akisi.
 
 - *2026-06-22* - **Player Controller Faz 9 - Sprint FOV + camera shake
   (tamam -> Faz 9 kapandi).** `PlayerCameraManager` artik view target'in ustune

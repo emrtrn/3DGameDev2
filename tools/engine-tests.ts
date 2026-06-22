@@ -4660,6 +4660,40 @@ check("collisionWireboxes draws authored primitives over the auto bounding box",
   assert.deepEqual(authored[0]!.size, [0.5, 0.5, 0.5]);
 });
 
+check("collisionWireboxes draws convex primitive points instead of the AABB box", () => {
+  const wireLayout: RoomLayout = {
+    schema: 1,
+    name: "convex-wirebox-fixture",
+    loadGroups: [],
+    instances: [{ assetId: "rock", placements: [{ position: [1, 0, 0], scale: 2 }] }],
+    characters: [],
+    lights: [],
+  };
+  const bounds = new Map([["rock", new Box3(new Vector3(-1, -1, -1), new Vector3(1, 1, 1))]]);
+  const tetra: [number, number, number][] = [
+    [0, 0, 0],
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+  ];
+  const defs = new Map<string, AssetCollisionDef>([
+    [
+      "rock",
+      {
+        primitives: [{ shape: "convex", size: [1, 1, 1], points: tetra }],
+        complexity: "projectDefault",
+        preset: "blockAll",
+      },
+    ],
+  ]);
+  const authored = collisionWireboxes(wireLayout, bounds, defs);
+  assert.equal(authored.length, 1);
+  assert.equal(authored[0]!.segments.length, 12);
+  const box = authored[0]!.box;
+  assert.deepEqual(box.min.toArray(), [1, 0, 0]);
+  assert.deepEqual(box.max.toArray(), [3, 2, 2]);
+});
+
 check("save validator allowlist keeps a placement sensor flag", () => {
   const layout = validateLayout({
     schema: 1,

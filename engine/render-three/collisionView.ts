@@ -119,6 +119,23 @@ function authoredWirebox(
   sensor: boolean,
 ): CollisionWirebox {
   const place = composeTransformMatrix(source.position, readRotation(source), readScale(source));
+  if (primitive.shape === "convex" && primitive.points && primitive.points.length >= 4) {
+    const localSegments = convexHullWireSegments(primitive.points);
+    const segments = localSegments.map((point) => {
+      const world = new Vector3(point[0], point[1], point[2]).applyMatrix4(place);
+      return [world.x, world.y, world.z] as Vec3;
+    });
+    const worldPoints = primitive.points.map((point) => {
+      const world = new Vector3(point[0], point[1], point[2]).applyMatrix4(place);
+      return world;
+    });
+    return {
+      box: new Box3().setFromPoints(worldPoints),
+      segments,
+      size: [...primitive.size],
+      sensor,
+    };
+  }
   const local = composeTransformMatrix(
     primitive.center ?? [0, 0, 0],
     primitive.rotation ?? [0, 0, 0],
@@ -144,6 +161,45 @@ function unitSegmentsForShape(shape: CollisionPrimitive["shape"]): Vec3[] {
   if (shape === "cylinder") return cylinderSegments();
   if (shape === "cone") return coneSegments();
   return BOX_EDGES.flatMap(([a, b]) => [UNIT_CORNERS[a]!, UNIT_CORNERS[b]!]);
+}
+
+function convexHullWireSegments(points: readonly Vec3[]): Vec3[] {
+  const edges: Vec3[] = [];
+  for (let a = 0; a < points.length - 1; a += 1) {
+    for (let b = a + 1; b < points.length; b += 1) {
+      if (isConvexHullEdge(points, a, b)) {
+        edges.push(points[a]!, points[b]!);
+      }
+    }
+  }
+  return edges.length > 0 ? edges : BOX_EDGES.flatMap(([a, b]) => [UNIT_CORNERS[a]!, UNIT_CORNERS[b]!]);
+}
+
+function isConvexHullEdge(points: readonly Vec3[], a: number, b: number): boolean {
+  const pa = new Vector3(...points[a]!);
+  const pb = new Vector3(...points[b]!);
+  const edge = pb.clone().sub(pa);
+  const supportingPlanes = new Set<string>();
+  for (let c = 0; c < points.length; c += 1) {
+    if (c === a || c === b) continue;
+    const pc = new Vector3(...points[c]!);
+    const normal = edge.clone().cross(pc.sub(pa));
+    if (normal.lengthSq() < 1e-10) continue;
+    normal.normalize();
+    let positive = false;
+    let negative = false;
+    for (const point of points) {
+      const distance = normal.dot(new Vector3(point[0], point[1], point[2]).sub(pa));
+      if (distance > 1e-5) positive = true;
+      if (distance < -1e-5) negative = true;
+      if (positive && negative) break;
+    }
+    if (positive && negative) continue;
+    if (negative) normal.multiplyScalar(-1);
+    supportingPlanes.add(`${normal.x.toFixed(4)},${normal.y.toFixed(4)},${normal.z.toFixed(4)}`);
+    if (supportingPlanes.size >= 2) return true;
+  }
+  return false;
 }
 
 function sphereSegments(): Vec3[] {

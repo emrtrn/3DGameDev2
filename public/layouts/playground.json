@@ -30,7 +30,7 @@
           "position": [
             -0.77,
             0.25,
-            -2.52
+            1.89
           ],
           "name": "Player Start",
           "collision": false,
@@ -145,11 +145,12 @@
       "placements": [
         {
           "position": [
-            0,
-            1.5,
-            0
+            -0.38,
+            1.82,
+            0.81
           ],
           "materialSlot": "mirror-material",
+          "simulatePhysics": true,
           "rotationYDeg": 0,
           "scale": 0.29
         }
@@ -181,6 +182,24 @@
     {
       "assetId": "starter-sm-cone",
       "placements": []
+    },
+    {
+      "assetId": "coatrack",
+      "placements": []
+    },
+    {
+      "assetId": "bathroommirror",
+      "placements": [
+        {
+          "position": [
+            -1.38,
+            1.71,
+            0.58
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
     }
   ],
   "characters": [],

@@ -1439,6 +1439,28 @@ body.editor-mode #debug-stats {
   color: #d6ffec;
 }
 
+.sm-tool-visibility {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sm-tool-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  color: #c8d0d5;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.sm-tool-check input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
 /* ---------------------------------------------------------------------------
    Pick Parent Class modal (Content Browser → New → Script)
 --------------------------------------------------------------------------- */

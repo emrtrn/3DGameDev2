@@ -241,7 +241,7 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [x] Add **Sphere** / **Capsule** / **Box** Simplified Collision (model bounds'tan otomatik boyut)
 - [x] Seçili collision primitifi: **Delete / Duplicate** (Copy/Paste sonra)
 - [x] **Remove Collision** (hepsini temizle)
-- [ ] (3b, ertelenebilir) **K-DOP**: 10DOP-X/Y/Z, 18DOP, 26DOP convex hull üretimi (menüde grey placeholder var)
+- [x] (3b, ertelenebilir) **K-DOP**: 10DOP-X/Y/Z, 18DOP, 26DOP convex hull üretimi
 - [ ] (3b, ertelenebilir) **Convert Boxes to Convex**, **Auto Convex Collision** (V-HACD parametreleri)
 - [ ] (opsiyonel) **Copy Collision from Selected Static Mesh**
 
@@ -252,7 +252,7 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [x] **Move/Rotate/Scale** transform gizmo (three TransformControls), üst barda Select/Move/Rotate/Scale (Q/W/E/R)
 - [x] Birden fazla primitif ekleyip her birini ayrı düzenleme (gizmo seçili olana bağlanır)
 - [x] **Alt + Move sürükle = kopyala** (Unreal tarzı; orijinal yerinde kalır, kopya taşınır)
-- [ ] "Show Simple/Complex Collision" görünürlük toggle'ı
+- [x] "Show Simple/Complex Collision" görünürlük toggle'ı
 - [x] Sahne viewport'unda authored collision görselleştirme: "Show > Collision" overlay'i sidecar primitiflerini çizer (her primitif için yerleşim transform'u ile kompoze; varsa tek-kutu yerine geçer)
 
 ### Faz 5 — SM Editor Details Paneli (Collision başlığı)

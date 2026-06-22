@@ -115,11 +115,13 @@ const COMPLEXITY_LABELS: Record<CollisionComplexity, string> = {
 
 const WIRE_COLOR = 0x49e6a2;
 const WIRE_SELECTED_COLOR = 0xffb648;
+const COMPLEX_WIRE_COLOR = 0x7ac7ff;
 const UVW_WIRE_COLOR = 0x7fb8ff;
 const UVW_WIRE_SELECTED_COLOR = 0xffd166;
 
 type GizmoMode = "select" | "translate" | "rotate" | "scale";
 type ActiveTarget = "collision" | "uvw" | null;
+type KdopKind = "10DOP-X" | "10DOP-Y" | "10DOP-Z" | "18DOP" | "26DOP";
 
 const UVW_LABELS: Record<UvwMapType, string> = {
   planar: "Planar",
@@ -165,6 +167,7 @@ export class StaticMeshEditor {
   private readonly textureLoader = new TextureLoader();
   private readonly modelGroup = new Group();
   private readonly overlayGroup = new Group();
+  private readonly complexCollisionGroup = new Group();
   private readonly resizeObserver: ResizeObserver;
 
   private readonly target = new Vector3();
@@ -186,6 +189,15 @@ export class StaticMeshEditor {
   private activeTarget: ActiveTarget = null;
   private readonly overlays: PrimitiveOverlay[] = [];
   private uvwOverlay: PrimitiveOverlay | null = null;
+  private showSimpleCollision = true;
+  private showComplexCollision = false;
+  private readonly complexCollisionLines: LineSegments[] = [];
+  private readonly complexCollisionMaterial = new LineBasicMaterial({
+    color: COMPLEX_WIRE_COLOR,
+    transparent: true,
+    opacity: 0.72,
+    depthTest: false,
+  });
 
   private transformControls: TransformControls | null = null;
   private gizmoMode: GizmoMode = "translate";
@@ -273,6 +285,8 @@ export class StaticMeshEditor {
     this.scene.add(grid);
     this.scene.add(this.modelGroup);
     this.scene.add(this.overlayGroup);
+    this.scene.add(this.complexCollisionGroup);
+    this.complexCollisionGroup.visible = this.showComplexCollision;
 
     const controls = new TransformControls(this.camera, this.renderer.domElement);
     controls.setSize(0.85);
@@ -438,6 +452,7 @@ export class StaticMeshEditor {
           this.originalMeshMaterials.set(object, object.material);
         }
       });
+      this.rebuildComplexCollisionOverlay();
       this.modelBounds = new Box3().setFromObject(model);
       const center = this.modelBounds.getCenter(new Vector3());
       const size = this.modelBounds.getSize(new Vector3());
@@ -504,6 +519,17 @@ export class StaticMeshEditor {
         ${modeButton("rotate", "⟳", "Rotate (E)")}
         ${modeButton("scale", "⤢", "Scale (R)")}
       </div>
+      <div class="sm-tool-sep"></div>
+      <div class="sm-tool-group sm-tool-visibility" aria-label="Collision visibility">
+        <label class="sm-tool-check">
+          <input type="checkbox" data-sm-show-simple ${this.showSimpleCollision ? "checked" : ""} />
+          <span>Simple</span>
+        </label>
+        <label class="sm-tool-check">
+          <input type="checkbox" data-sm-show-complex ${this.showComplexCollision ? "checked" : ""} />
+          <span>Complex</span>
+        </label>
+      </div>
     `;
     this.toolbarHost.querySelectorAll<HTMLButtonElement>("[data-sm-menu]").forEach((button) => {
       button.addEventListener("click", (event) => {
@@ -514,6 +540,18 @@ export class StaticMeshEditor {
     this.toolbarHost.querySelectorAll<HTMLButtonElement>("[data-sm-mode]").forEach((item) => {
       item.addEventListener("click", () => this.setGizmoMode(item.dataset.smMode as GizmoMode));
     });
+    this.toolbarHost
+      .querySelector<HTMLInputElement>("[data-sm-show-simple]")
+      ?.addEventListener("change", (event) => {
+        this.showSimpleCollision = (event.target as HTMLInputElement).checked;
+        this.updateCollisionVisibility();
+      });
+    this.toolbarHost
+      .querySelector<HTMLInputElement>("[data-sm-show-complex]")
+      ?.addEventListener("change", (event) => {
+        this.showComplexCollision = (event.target as HTMLInputElement).checked;
+        this.updateCollisionVisibility();
+      });
     this.updateToolbarModes();
     document.addEventListener("pointerdown", this.onDocPointerDown);
   }
@@ -567,9 +605,11 @@ export class StaticMeshEditor {
       ${menuItem("add-sphere", "Add Sphere Simplified Collision")}
       ${menuItem("add-capsule", "Add Capsule Simplified Collision")}
       <div class="sm-menu-sep"></div>
-      ${menuItem("kdop10", "Add 10DOP-X Simplified Collision", true)}
-      ${menuItem("kdop18", "Add 18DOP Simplified Collision", true)}
-      ${menuItem("kdop26", "Add 26DOP Simplified Collision", true)}
+      ${menuItem("kdop10", "Add 10DOP-X Simplified Collision")}
+      ${menuItem("kdop10y", "Add 10DOP-Y Simplified Collision")}
+      ${menuItem("kdop10z", "Add 10DOP-Z Simplified Collision")}
+      ${menuItem("kdop18", "Add 18DOP Simplified Collision")}
+      ${menuItem("kdop26", "Add 26DOP Simplified Collision")}
       ${menuItem("convex", "Auto Convex Collision")}
       <div class="sm-menu-sep"></div>
       ${menuItem("delete", "Delete Selected Collision", !hasSelection)}
@@ -618,6 +658,21 @@ export class StaticMeshEditor {
       case "convex":
         this.addConvexCollision();
         break;
+      case "kdop10":
+        this.addKdopCollision("10DOP-X");
+        break;
+      case "kdop10y":
+        this.addKdopCollision("10DOP-Y");
+        break;
+      case "kdop10z":
+        this.addKdopCollision("10DOP-Z");
+        break;
+      case "kdop18":
+        this.addKdopCollision("18DOP");
+        break;
+      case "kdop26":
+        this.addKdopCollision("26DOP");
+        break;
       case "uvw-planar":
       case "uvw-box":
       case "uvw-sphere":
@@ -661,6 +716,20 @@ export class StaticMeshEditor {
       this.setStatus("Could not generate a convex hull for this model.", "warning");
       return;
     }
+    this.addConvexPrimitive(points, "convex collision");
+  }
+
+  /** Generates a K-DOP convex collision hull from directional model extents. */
+  private addKdopCollision(kind: KdopKind): void {
+    const points = computeKdopPoints(this.collectModelVertices(), kind);
+    if (!points) {
+      this.setStatus(`Could not generate ${kind} collision for this model.`, "warning");
+      return;
+    }
+    this.addConvexPrimitive(points, `${kind} collision`);
+  }
+
+  private addConvexPrimitive(points: Vec3[], label: string): void {
     const bounds = new Box3();
     for (const point of points) bounds.expandByPoint(new Vector3(point[0], point[1], point[2]));
     const size = bounds.getSize(new Vector3());
@@ -677,13 +746,13 @@ export class StaticMeshEditor {
     this.markDirty();
     this.renderDetails();
     this.rebuildOverlays();
-    this.setStatus(`Added convex collision (${points.length} hull points).`);
+    this.setStatus(`Added ${label} (${points.length} hull points).`);
   }
 
-  /** Collects model vertices and returns the deduped convex-hull points (model space). */
-  private computeConvexHullPoints(): Vec3[] | null {
+  /** Collects model vertices in model space, with large meshes sampled for editor responsiveness. */
+  private collectModelVertices(): Vector3[] {
     this.modelGroup.updateMatrixWorld(true);
-    const raw: Vector3[] = [];
+    const vertices: Vector3[] = [];
     const scratch = new Vector3();
     this.modelGroup.traverse((object) => {
       const geometry = (object as Mesh).geometry as BufferGeometry | undefined;
@@ -693,9 +762,15 @@ export class StaticMeshEditor {
       const step = Math.max(1, Math.floor(position.count / 4000));
       for (let i = 0; i < position.count; i += step) {
         scratch.fromBufferAttribute(position, i).applyMatrix4((object as Mesh).matrixWorld);
-        raw.push(scratch.clone());
+        vertices.push(scratch.clone());
       }
     });
+    return vertices;
+  }
+
+  /** Collects model vertices and returns the deduped convex-hull points (model space). */
+  private computeConvexHullPoints(): Vec3[] | null {
+    const raw = this.collectModelVertices();
     if (raw.length < 4) return null;
     let hull: BufferGeometry;
     try {
@@ -834,7 +909,12 @@ export class StaticMeshEditor {
     const primitive = this.collision.primitives[this.selectedPrimitive];
     // Convex hulls store absolute points, so the unit-transform gizmo doesn't
     // apply — they are generated/deleted, not transformed.
-    if (!overlay || this.gizmoMode === "select" || primitive?.shape === "convex") {
+    if (
+      !this.showSimpleCollision ||
+      !overlay ||
+      this.gizmoMode === "select" ||
+      primitive?.shape === "convex"
+    ) {
       controls.detach();
       return;
     }
@@ -934,6 +1014,10 @@ export class StaticMeshEditor {
         return;
       }
     }
+    if (!this.showSimpleCollision) {
+      if (this.selectedPrimitive !== -1) this.selectPrimitive(-1);
+      return;
+    }
     const hits = this.raycaster.intersectObjects(
       this.overlays.map((overlay) => overlay.pickMesh),
       false,
@@ -954,10 +1038,47 @@ export class StaticMeshEditor {
     this.collision.primitives.forEach((primitive, index) => {
       const overlay = buildPrimitiveOverlay(primitive, index === this.selectedPrimitive);
       overlay.pickMesh.userData.primitiveIndex = index;
+      overlay.root.visible = this.showSimpleCollision;
       this.overlays.push(overlay);
       this.overlayGroup.add(overlay.root);
     });
     this.attachGizmo();
+  }
+
+  private updateCollisionVisibility(): void {
+    for (const overlay of this.overlays) {
+      overlay.root.visible = this.showSimpleCollision;
+    }
+    this.complexCollisionGroup.visible = this.showComplexCollision;
+    if (!this.showSimpleCollision && this.activeTarget === "collision") {
+      this.activeTarget = null;
+    }
+    this.refreshOverlayColors();
+    this.attachGizmo();
+  }
+
+  private rebuildComplexCollisionOverlay(): void {
+    this.disposeComplexCollisionOverlay();
+    this.modelGroup.updateMatrixWorld(true);
+    this.modelGroup.traverse((object) => {
+      if (!(object instanceof Mesh) || !object.geometry) return;
+      const geometry = new EdgesGeometry(object.geometry);
+      const line = new LineSegments(geometry, this.complexCollisionMaterial);
+      line.matrixAutoUpdate = false;
+      line.matrix.copy(object.matrixWorld);
+      line.renderOrder = 4;
+      this.complexCollisionLines.push(line);
+      this.complexCollisionGroup.add(line);
+    });
+    this.complexCollisionGroup.visible = this.showComplexCollision;
+  }
+
+  private disposeComplexCollisionOverlay(): void {
+    for (const line of this.complexCollisionLines) {
+      this.complexCollisionGroup.remove(line);
+      line.geometry.dispose();
+    }
+    this.complexCollisionLines.length = 0;
   }
 
   private rebuildUvwOverlay(): void {
@@ -1313,6 +1434,8 @@ export class StaticMeshEditor {
     this.disposePreviewMaterial();
     for (const overlay of this.overlays) disposeOverlay(overlay);
     this.disposeUvwOverlay();
+    this.disposeComplexCollisionOverlay();
+    this.complexCollisionMaterial.dispose();
     this.renderer.dispose();
     this.overlay.remove();
     if (StaticMeshEditor.active === this) StaticMeshEditor.active = null;
@@ -1417,6 +1540,97 @@ function applyPrimitiveToRoot(root: Group, primitive: CollisionPrimitive): void 
   root.rotation.set(degToRad(rotation[0]), degToRad(rotation[1]), degToRad(rotation[2]));
   const [sx, sy, sz] = primitive.size;
   root.scale.set(Math.max(sx || 1, 0.001), Math.max(sy || 1, 0.001), Math.max(sz || 1, 0.001));
+}
+
+interface KdopPlane {
+  normal: Vector3;
+  distance: number;
+}
+
+function computeKdopPoints(vertices: readonly Vector3[], kind: KdopKind): Vec3[] | null {
+  if (vertices.length < 4) return null;
+  const directions = kdopDirections(kind);
+  const planes: KdopPlane[] = [];
+  for (const direction of directions) {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const vertex of vertices) {
+      const projection = direction.dot(vertex);
+      min = Math.min(min, projection);
+      max = Math.max(max, projection);
+    }
+    planes.push({ normal: direction.clone(), distance: max });
+    planes.push({ normal: direction.clone().multiplyScalar(-1), distance: -min });
+  }
+
+  const points: Vec3[] = [];
+  const seen = new Set<string>();
+  for (let a = 0; a < planes.length - 2; a += 1) {
+    for (let b = a + 1; b < planes.length - 1; b += 1) {
+      for (let c = b + 1; c < planes.length; c += 1) {
+        const point = intersectPlanes(planes[a]!, planes[b]!, planes[c]!);
+        if (!point || !insidePlanes(point, planes)) continue;
+        const key = `${point.x.toFixed(3)},${point.y.toFixed(3)},${point.z.toFixed(3)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        points.push([round(point.x), round(point.y), round(point.z)]);
+      }
+    }
+  }
+  return points.length >= 4 ? points : null;
+}
+
+function kdopDirections(kind: KdopKind): Vector3[] {
+  const axes = [
+    new Vector3(1, 0, 0),
+    new Vector3(0, 1, 0),
+    new Vector3(0, 0, 1),
+  ];
+  const edgeDiagonals = [
+    new Vector3(1, 1, 0),
+    new Vector3(1, -1, 0),
+    new Vector3(1, 0, 1),
+    new Vector3(1, 0, -1),
+    new Vector3(0, 1, 1),
+    new Vector3(0, 1, -1),
+  ];
+  const cornerDiagonals = [
+    new Vector3(1, 1, 1),
+    new Vector3(1, 1, -1),
+    new Vector3(1, -1, 1),
+    new Vector3(-1, 1, 1),
+  ];
+  if (kind === "10DOP-X") {
+    return normalizeDirections([...axes, new Vector3(0, 1, 1), new Vector3(0, 1, -1)]);
+  }
+  if (kind === "10DOP-Y") {
+    return normalizeDirections([...axes, new Vector3(1, 0, 1), new Vector3(1, 0, -1)]);
+  }
+  if (kind === "10DOP-Z") {
+    return normalizeDirections([...axes, new Vector3(1, 1, 0), new Vector3(1, -1, 0)]);
+  }
+  if (kind === "18DOP") return normalizeDirections([...axes, ...edgeDiagonals]);
+  return normalizeDirections([...axes, ...edgeDiagonals, ...cornerDiagonals]);
+}
+
+function normalizeDirections(directions: Vector3[]): Vector3[] {
+  return directions.map((direction) => direction.normalize());
+}
+
+function intersectPlanes(a: KdopPlane, b: KdopPlane, c: KdopPlane): Vector3 | null {
+  const n1 = a.normal;
+  const n2 = b.normal;
+  const n3 = c.normal;
+  const denominator = n1.dot(new Vector3().crossVectors(n2, n3));
+  if (Math.abs(denominator) < 1e-8) return null;
+  const term1 = new Vector3().crossVectors(n2, n3).multiplyScalar(a.distance);
+  const term2 = new Vector3().crossVectors(n3, n1).multiplyScalar(b.distance);
+  const term3 = new Vector3().crossVectors(n1, n2).multiplyScalar(c.distance);
+  return term1.add(term2).add(term3).multiplyScalar(1 / denominator);
+}
+
+function insidePlanes(point: Vector3, planes: readonly KdopPlane[]): boolean {
+  return planes.every((plane) => plane.normal.dot(point) <= plane.distance + 1e-4);
 }
 
 function disposeOverlay(overlay: PrimitiveOverlay): void {
