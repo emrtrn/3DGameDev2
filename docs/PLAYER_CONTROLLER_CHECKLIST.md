@@ -173,29 +173,31 @@ Durum: `[ ]` yapilmadi, `[~]` devam ediyor, `[x]` tamam.
 
 ### Faz 7 - Fare kontrollu spring arm kamera (oncelik)
 
-- [ ] `TpsCharacterSession`'a control rotation (`LookAngles`) state'i ekle;
+- [x] `TpsCharacterSession`'a control rotation (`LookAngles`) state'i ekle;
       her tick `consumeLookDelta()` + `applyMouseLook()` ile guncelle.
-- [ ] Saf `springArmCamera` helper: possessed pawn'in SpringArm + Camera
+- [x] Saf `springArmCamera` helper: possessed pawn'in SpringArm + Camera
       component'inden control yaw/pitch ile orbit pose ureten fonksiyon
       (headless test).
-- [ ] `readSpringArmComponent` / `readCameraComponent`'i TPS session'da oku;
+- [x] `readSpringArmComponent` / `readCameraComponent`'i TPS session'da oku;
       sabit `FOLLOW_CAMERA_CONFIG` yerine authored degerleri kullan.
-- [ ] `enableCameraLag` / `cameraLagSpeed` -> `smoothingFactor` smoothing'e bagla.
-- [ ] Camera component FOV/near/far -> live PerspectiveCamera projeksiyonu.
-- [ ] Hareketi kamera-relative yap: control yaw'i `CharacterMovementSubsystem`'e
+- [x] `enableCameraLag` / `cameraLagSpeed` -> `smoothingFactor` smoothing'e bagla.
+- [x] Camera component FOV/near/far -> live PerspectiveCamera projeksiyonu.
+- [x] Hareketi kamera-relative yap: control yaw'i `CharacterMovementSubsystem`'e
       gecir, planar input'u yaw kadar dondur (saf, test edilebilir).
-- [ ] Component yoksa eski sabit follow davranisina guvenli geri donus.
-- [ ] Engine tests: control rotation clamp, orbit pose, camera-relative input
+- [x] Component yoksa eski sabit follow davranisina guvenli geri donus.
+- [x] Engine tests: control rotation clamp, orbit pose, camera-relative input
       donusu, FOV mapping.
-- [ ] Runtime debug paneli: control yaw/pitch + aktif kamera kaynagi.
-- [ ] `npm run build:verify`.
+- [x] Runtime debug paneli: control yaw/pitch + aktif kamera kaynagi.
+- [x] `npm run build:verify`.
 
 ### Faz 8 - Yonelim ve girdi olgunlugu
 
 - [ ] `orientRotationToControl` (strafe/aim) yonelim modu; CharacterMovement
       prop + validator allowlist + Details form.
 - [ ] SpringArm `doCollisionTest`: bom bloklaninca kamerayi iceri cek.
-- [ ] Pointer lock + Input Mode (Game/UI), imleci gizle/goster.
+- [x] Pointer lock + Input Mode (Game/UI), imleci gizle/goster;
+      `Esc` sonrası UI moda gecip gameplay input'unu kes, canvas tiklayinca Game moda don.
+- [x] PlayerController look ayarlari: mouse sensitivity + invert Y runtime'a bagli.
 - [ ] ActionMap analog axis (gamepad/mouse axis) + deadzone/scale/invert
       modifier'lari.
 

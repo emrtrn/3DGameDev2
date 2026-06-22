@@ -4,7 +4,11 @@ import type { EngineUpdateContext, Subsystem } from "@engine/core/Subsystem";
 import type { Entity, EntityId } from "@engine/scene/entity";
 import type { ActionMap } from "@engine/input/actionMap";
 import type { PhysicsQuery, TransformSink } from "@engine/behavior/behaviorSubsystem";
-import { facingYawFromMove, planarMoveStep } from "./playerMovement";
+import {
+  facingYawFromMove,
+  planarMoveStep,
+  planarMoveStepRelativeToYaw,
+} from "./playerMovement";
 import { groundedAt, stepVerticalMotion, type VerticalMotionState } from "./verticalMotion";
 import { resolvePlanarMovement, type PlanarDelta } from "./collision";
 import type { LocomotionInput } from "./locomotionAnimation";
@@ -24,6 +28,7 @@ interface CharacterVertical {
 
 export interface CharacterMovementSubsystemOptions {
   getGravityY?: () => number;
+  getControlYaw?: (entityId: EntityId) => number | null | undefined;
   isPlayerControlled?: (entityId: EntityId) => boolean;
   reportLocomotion?: (entityId: EntityId, report: LocomotionInput) => void;
 }
@@ -35,6 +40,7 @@ export class CharacterMovementSubsystem implements Subsystem {
   private runtimes: CharacterMovementRuntime[] = [];
   private vertical = new Map<EntityId, CharacterVertical>();
   private readonly getGravityY: () => number;
+  private readonly getControlYaw: (entityId: EntityId) => number | null | undefined;
   private readonly isPlayerControlled: (entityId: EntityId) => boolean;
   private readonly reportLocomotion: ((entityId: EntityId, report: LocomotionInput) => void) | undefined;
 
@@ -45,6 +51,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     options: CharacterMovementSubsystemOptions = {},
   ) {
     this.getGravityY = options.getGravityY ?? (() => DEFAULT_GRAVITY_Y);
+    this.getControlYaw = options.getControlYaw ?? (() => null);
     this.isPlayerControlled = options.isPlayerControlled ?? (() => true);
     this.reportLocomotion = options.reportLocomotion;
   }
@@ -86,16 +93,17 @@ export class CharacterMovementSubsystem implements Subsystem {
     const speed = this.actions.held("sprint")
       ? movement.maxWalkSpeed * movement.sprintMultiplier
       : movement.maxWalkSpeed;
-    const planar = planarMoveStep(
-      {
-        forward: this.actions.held("move-forward"),
-        back: this.actions.held("move-back"),
-        left: this.actions.held("move-left"),
-        right: this.actions.held("move-right"),
-      },
-      speed,
-      engine.deltaSeconds,
-    );
+    const input = {
+      forward: this.actions.held("move-forward"),
+      back: this.actions.held("move-back"),
+      left: this.actions.held("move-left"),
+      right: this.actions.held("move-right"),
+    };
+    const controlYaw = this.getControlYaw(runtime.id);
+    const planar =
+      typeof controlYaw === "number" && Number.isFinite(controlYaw)
+        ? planarMoveStepRelativeToYaw(input, speed, engine.deltaSeconds, controlYaw)
+        : planarMoveStep(input, speed, engine.deltaSeconds);
     const { dx, dz } = this.resolvePlanarAgainstBlockers(runtime, planar);
     runtime.transform.position[0] += dx;
     runtime.transform.position[2] += dz;

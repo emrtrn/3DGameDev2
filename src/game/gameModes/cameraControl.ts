@@ -65,6 +65,11 @@ export interface LookAngles {
   readonly pitch: number;
 }
 
+export interface MouseLookSettings {
+  readonly sensitivity?: number | undefined;
+  readonly invertY?: boolean | undefined;
+}
+
 /** Default right-drag look sensitivity (radians per pixel of pointer travel). */
 export const DEFAULT_LOOK_SENSITIVITY = 0.003;
 /** Pitch clamp so the camera never flips past straight up/down. */
@@ -90,6 +95,23 @@ export function applyMouseLook(
     yaw: angles.yaw - dx * sensitivity,
     pitch: clampPitch(angles.pitch - dy * sensitivity, pitchLimit),
   };
+}
+
+/** Applies controller-configured sensitivity and vertical inversion to mouse look. */
+export function applyConfiguredMouseLook(
+  angles: LookAngles,
+  dx: number,
+  dy: number,
+  settings: MouseLookSettings = {},
+  pitchLimit: number = DEFAULT_PITCH_LIMIT,
+): LookAngles {
+  return applyMouseLook(
+    angles,
+    dx,
+    settings.invertY ? -dy : dy,
+    settings.sensitivity,
+    pitchLimit,
+  );
 }
 
 /** Derives look angles from a (not necessarily normalized) forward direction. */

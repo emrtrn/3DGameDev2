@@ -51,6 +51,9 @@ export function formatGameModeDebug(snapshot: GameModeDebugSnapshot): string[] {
     `possessed: ${snapshot.possessed ?? "none"}`,
     `movement: ${snapshot.movementMode ?? "—"}${stance}`,
     `vel y:${num(snapshot.velocityY)} planar:${num(snapshot.planarSpeed)}`,
+    `control yaw:${num(snapshot.controlYawDeg)} pitch:${num(snapshot.controlPitchDeg)}`,
+    `camera: ${snapshot.cameraSource ?? "â€”"}`,
+    `input: ${snapshot.inputMode}`,
   ];
 }
 

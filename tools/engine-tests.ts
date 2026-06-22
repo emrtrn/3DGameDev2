@@ -70,7 +70,11 @@ import { PhysicsSubsystem } from "../engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "../engine/audio/audioSubsystem";
 import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/audio";
 import { KeyboardInputSource } from "../src/input/keyboardInputSource";
-import { facingYawFromMove, planarMoveStep } from "../src/game/playerMovement";
+import {
+  facingYawFromMove,
+  planarMoveStep,
+  planarMoveStepRelativeToYaw,
+} from "../src/game/playerMovement";
 import { createBehaviorRegistry } from "../src/game/behaviors";
 import { CharacterMovementSubsystem } from "../src/game/characterMovementSystem";
 import type { TransformComponent } from "../engine/scene/components";
@@ -81,6 +85,10 @@ import {
   stepFollowCamera,
   type FollowCameraConfig,
 } from "../src/game/followCamera";
+import {
+  cameraProjectionFromComponent,
+  desiredSpringArmCameraPose,
+} from "../src/game/springArmCamera";
 import { groundedAt, stepVerticalMotion } from "../src/game/verticalMotion";
 import { resolvePlanarMovement, type Aabb3 } from "../src/game/collision";
 import {
@@ -105,6 +113,7 @@ import { resolveGameMode } from "../src/game/gameModes/registry";
 import { createProjectGameMode } from "../src/game/gameModes/projectGameMode";
 import { formatGameModeDebug } from "../src/scene/debugStats";
 import {
+  applyConfiguredMouseLook,
   applyMouseLook,
   cameraPlanarPan,
   forwardFromLookAngles,
@@ -120,6 +129,8 @@ import { defaultCameraGameMode } from "../src/game/gameModes/defaultCameraGameMo
 import { tpsCharacterGameMode } from "../src/game/gameModes/tpsCharacterGameMode";
 import type {
   GameModeContext,
+  InputMode,
+  PointerLookMode,
   RuntimeCharacterRef,
 } from "../src/game/gameModes/types";
 import type { Entity } from "../engine/scene/entity";
@@ -3747,6 +3758,26 @@ check("planarMoveStep: opposing keys cancel and idle/zero input yields no delta"
   );
 });
 
+check("planarMoveStepRelativeToYaw rotates WASD by controller yaw", () => {
+  const forward = planarMoveStepRelativeToYaw(
+    { forward: true, back: false, left: false, right: false },
+    4,
+    0.5,
+    Math.PI / 2,
+  );
+  assert.ok(forward.dx < 0);
+  assert.ok(Math.abs(forward.dz) < 1e-9);
+  assert.ok(Math.abs(Math.hypot(forward.dx, forward.dz) - 2) < 1e-9);
+
+  const diagonal = planarMoveStepRelativeToYaw(
+    { forward: true, back: false, left: false, right: true },
+    4,
+    0.5,
+    Math.PI / 2,
+  );
+  assert.ok(Math.abs(Math.hypot(diagonal.dx, diagonal.dz) - 2) < 1e-9);
+});
+
 check("facingYawFromMove: the character faces its cardinal movement direction", () => {
   // Mesh is +z-forward, so the yaw turns local +z to the movement direction.
   yawApproxEqual(facingYawFromMove(0, -1) ?? NaN, 180); // forward (-z)
@@ -3847,6 +3878,37 @@ check("stepFollowCamera: snaps on first frame, then eases and converges", () => 
   for (let i = 0; i < 200; i += 1) pose = stepFollowCamera(pose, [2, 0, 0], followConfig, 0.5);
   assert.ok(Math.abs(pose.position[0] - 2) <= 1e-9);
   assert.ok(Math.abs(pose.target[0] - 2) <= 1e-9);
+});
+
+check("desiredSpringArmCameraPose orbits around the authored target offset", () => {
+  const pose = desiredSpringArmCameraPose({
+    playerPosition: [2, 0, 4],
+    springArm: {
+      targetArmLength: 3,
+      targetOffset: [0, 1, 0],
+      socketOffset: [0.5, 0.25, 0],
+      enableCameraLag: false,
+      cameraLagSpeed: 10,
+      doCollisionTest: false,
+    },
+    controlRotation: { yaw: 0, pitch: 0 },
+  });
+  assert.deepEqual(pose.target, [2, 1, 4]);
+  assert.deepEqual(pose.position, [2.5, 1.25, 7]);
+});
+
+check("cameraProjectionFromComponent maps FOV and clip planes", () => {
+  assert.deepEqual(cameraProjectionFromComponent(undefined), { fov: 44, near: 0.1, far: 100 });
+  assert.deepEqual(
+    cameraProjectionFromComponent({
+      fieldOfView: 70,
+      nearClip: 0.2,
+      farClip: 250,
+      isOrthographic: false,
+      orthoWidth: 10,
+    }),
+    { fov: 70, near: 0.2, far: 250 },
+  );
 });
 
 // G2 vertical motion (src/game/verticalMotion.ts): gravity pulls the player
@@ -4871,6 +4933,7 @@ function makeCharacterRef(
     player?: boolean;
     actorMovement?: boolean;
     animations?: AnimationClip[];
+    entity?: Entity;
   } = {},
 ): RuntimeCharacterRef {
   const placement: LayoutCharacter = {
@@ -4892,6 +4955,7 @@ function makeCharacterRef(
           hasCharacterMovement: true,
         }
       : {}),
+    ...(opts.entity ? { entity: opts.entity } : {}),
   };
 }
 
@@ -4902,9 +4966,20 @@ function makeGameModeContext(options: {
   locomotion?: Map<string, LocomotionInput>;
   /** Look deltas to hand out one-per-call (e.g. simulate right-drag turns). */
   lookDeltas?: { dx: number; dy: number }[];
-}): { context: GameModeContext; mixers: AnimationMixer[]; cameraControlled: () => boolean } {
+}): {
+  context: GameModeContext;
+  mixers: AnimationMixer[];
+  cameraControlled: () => boolean;
+  inputModes: InputMode[];
+  pointerLookModes: PointerLookMode[];
+  mouseCursorVisible: boolean[];
+} {
   let controlled = false;
+  let inputMode: InputMode = "game";
   const mixers: AnimationMixer[] = [];
+  const inputModes: InputMode[] = [];
+  const pointerLookModes: PointerLookMode[] = [];
+  const mouseCursorVisible: boolean[] = [];
   const locomotion = options.locomotion ?? new Map<string, LocomotionInput>();
   const lookDeltas = options.lookDeltas ? [...options.lookDeltas] : [];
   const context: GameModeContext = {
@@ -4917,8 +4992,26 @@ function makeGameModeContext(options: {
       controlled = true;
     },
     consumeLookDelta: () => lookDeltas.shift() ?? { dx: 0, dy: 0 },
+    getInputMode: () => inputMode,
+    setInputMode: (mode) => {
+      inputMode = mode;
+      inputModes.push(mode);
+    },
+    setMouseCursorVisible: (visible) => {
+      mouseCursorVisible.push(visible);
+    },
+    setPointerLookMode: (mode) => {
+      pointerLookModes.push(mode);
+    },
   };
-  return { context, mixers, cameraControlled: () => controlled };
+  return {
+    context,
+    mixers,
+    cameraControlled: () => controlled,
+    inputModes,
+    pointerLookModes,
+    mouseCursorVisible,
+  };
 }
 
 check("game mode catalog default is the first option", () => {
@@ -5019,30 +5112,58 @@ check("default camera mode never possesses an input-move character", () => {
   actions.handleDown("KeyW");
   actions.advance();
   const characters = [makeCharacterRef(0, { input: true })];
-  const { context, cameraControlled } = makeGameModeContext({ camera, actions, characters });
+  const { context, cameraControlled, inputModes, pointerLookModes, mouseCursorVisible } = makeGameModeContext({
+    camera,
+    actions,
+    characters,
+  });
   const session = defaultCameraGameMode.createSession(context);
   session.spawnDefaultPawn();
   session.possess();
   assert.equal(session.playerState.pawnEntityId, null);
   assert.ok(session.playerState.possessed);
   assert.ok(cameraControlled());
+  assert.deepEqual(inputModes, ["game"]);
+  assert.deepEqual(mouseCursorVisible, [true]);
+  assert.deepEqual(pointerLookModes, ["right-drag"]);
   const z0 = camera.position.z;
   session.update(0.5);
   assert.ok(camera.position.z < z0); // WASD moved the camera...
   assert.deepEqual(characters[0].object.position.toArray(), [0, 0, 0]); // ...not the character.
 });
 
+check("default camera mode ignores movement while input mode is UI", () => {
+  const camera = new PerspectiveCamera();
+  const actions = new ActionMap(MOVE_BINDINGS);
+  actions.handleDown("KeyW");
+  actions.advance();
+  const { context } = makeGameModeContext({ camera, actions });
+  const session = defaultCameraGameMode.createSession(context);
+  session.spawnDefaultPawn();
+  session.possess();
+  context.setInputMode("ui");
+  const z0 = camera.position.z;
+  session.update(0.5);
+  assert.equal(camera.position.z, z0);
+});
+
 check("tps mode possesses the input-move character and follows it", () => {
   const camera = new PerspectiveCamera();
   const characters = [makeCharacterRef(0, { input: true })];
   characters[0].object.position.set(2, 0, 3);
-  const { context, mixers } = makeGameModeContext({ camera, characters });
+  const { context, mixers, inputModes, pointerLookModes, mouseCursorVisible } = makeGameModeContext({
+    camera,
+    characters,
+  });
   const session = tpsCharacterGameMode.createSession(context);
   session.spawnDefaultPawn();
   assert.equal(session.playerState.pawnEntityId, characterEntityId(0));
   session.possess();
   assert.ok(session.playerState.possessed);
   assert.equal(mixers.length, 1);
+  assert.deepEqual(inputModes, ["game"]);
+  assert.deepEqual(mouseCursorVisible, [false]);
+  assert.deepEqual(pointerLookModes, ["pointer-lock"]);
   session.update(0.1);
   // First frame snaps the follow camera to behind+above: player + [0, 1.2, 2.6].
   assert.ok(Math.abs(camera.position.x - 2) < 1e-6);
@@ -5092,6 +5213,57 @@ check("tps mode animates + follows a possessed Actor Script character", () => {
   assert.ok(Math.abs(camera.position.x - 1) < 1e-6);
   assert.ok(Math.abs(camera.position.y - 1.2) < 1e-6);
   assert.ok(Math.abs(camera.position.z - (-4 + 2.6)) < 1e-6);
+});
+
+check("tps mode maps authored SpringArm and Camera components to runtime camera", () => {
+  const camera = new PerspectiveCamera();
+  const entity: Entity = {
+    id: actorInstanceEntityId(0),
+    components: {
+      SpringArm: {
+        targetArmLength: 4,
+        targetOffset: [0, 1, 0],
+        socketOffset: [0, 0, 0],
+        enableCameraLag: false,
+        cameraLagSpeed: 10,
+        doCollisionTest: false,
+      },
+      Camera: {
+        fieldOfView: 70,
+        nearClip: 0.2,
+        farClip: 250,
+        isOrthographic: false,
+        orthoWidth: 10,
+      },
+    },
+  };
+  const characters = [makeCharacterRef(0, { actorMovement: true, entity })];
+  characters[0].object.position.set(2, 0, -1);
+  const { context } = makeGameModeContext({
+    camera,
+    characters,
+    lookDeltas: [{ dx: 100, dy: 0 }],
+  });
+  const session = tpsCharacterGameMode.createSession(context);
+  session.spawnDefaultPawn();
+  session.possess();
+  session.beforeEngineUpdate?.(0.016);
+  session.update(0.1);
+
+  const pivot = [2, 1, -1] as const;
+  const distance = Math.hypot(
+    camera.position.x - pivot[0],
+    camera.position.y - pivot[1],
+    camera.position.z - pivot[2],
+  );
+  assert.ok(Math.abs(distance - 4) < 1e-6);
+  assert.equal(camera.fov, 70);
+  assert.equal(camera.near, 0.2);
+  assert.equal(camera.far, 250);
+
+  const debug = session.getCameraDebug?.();
+  assert.equal(debug?.cameraSource, "spring arm component");
+  assert.ok(Math.abs((debug?.controlYawDeg ?? 0) - (-0.3 * 180 / Math.PI)) < 1e-6);
 });
 
 check("locomotion bridge selects an Actor Script character's run clip from its movement state", () => {
@@ -5145,6 +5317,10 @@ check("formatGameModeDebug renders a possessed pawn's mode + movement state", ()
     grounded: false,
     velocityY: 3.5,
     planarSpeed: 2,
+    controlYawDeg: -17.2,
+    controlPitchDeg: -15,
+    cameraSource: "spring arm component",
+    inputMode: "game",
   });
   assert.deepEqual(lines, [
     "game mode",
@@ -5152,6 +5328,9 @@ check("formatGameModeDebug renders a possessed pawn's mode + movement state", ()
     "possessed: actor:0",
     "movement: walking (airborne)",
     "vel y:3.50 planar:2.00",
+    "control yaw:-17.20 pitch:-15.00",
+    "camera: spring arm component",
+    "input: game",
   ]);
 });
 
@@ -5163,6 +5342,10 @@ check("formatGameModeDebug shows placeholders when nothing is possessed", () => 
     grounded: null,
     velocityY: null,
     planarSpeed: null,
+    controlYawDeg: null,
+    controlPitchDeg: null,
+    cameraSource: null,
+    inputMode: "ui",
   });
   assert.deepEqual(lines, [
     "game mode",
@@ -5170,6 +5353,9 @@ check("formatGameModeDebug shows placeholders when nothing is possessed", () => 
     "possessed: none",
     "movement: —",
     "vel y:— planar:—",
+    "control yaw:— pitch:—",
+    "camera: â€”",
+    "input: ui",
   ]);
 });
 
@@ -5309,6 +5495,20 @@ check("applyMouseLook turns with the pointer delta and clamps pitch", () => {
   assert.ok(Math.abs(turned.yaw - -1) < 1e-9);
   assert.equal(applyMouseLook({ yaw: 0, pitch: 0 }, 0, -1000, 0.01, 1).pitch, 1);
   assert.equal(applyMouseLook({ yaw: 0, pitch: 0 }, 0, 1000, 0.01, 1).pitch, -1);
+});
+
+check("applyConfiguredMouseLook honors sensitivity and invert Y", () => {
+  const normal = applyConfiguredMouseLook({ yaw: 0, pitch: 0 }, 10, 10, {
+    sensitivity: 0.01,
+  });
+  assert.ok(Math.abs(normal.yaw - -0.1) < 1e-9);
+  assert.ok(Math.abs(normal.pitch - -0.1) < 1e-9);
+  const inverted = applyConfiguredMouseLook({ yaw: 0, pitch: 0 }, 10, 10, {
+    sensitivity: 0.01,
+    invertY: true,
+  });
+  assert.ok(Math.abs(inverted.yaw - -0.1) < 1e-9);
+  assert.ok(Math.abs(inverted.pitch - 0.1) < 1e-9);
 });
 
 check("look angles round-trip through a forward direction", () => {

@@ -15,7 +15,7 @@
 import { Vector3 } from "three";
 import { DEFAULT_GAME_MODE_ID } from "./catalog";
 import {
-  applyMouseLook,
+  applyConfiguredMouseLook,
   cameraPlanarPan,
   forwardFromLookAngles,
   lookAnglesFromForward,
@@ -54,6 +54,10 @@ class CameraPawnSession implements GameModeSession {
 
   possess(): void {
     this.playerState.possessed = true;
+    const controller = defaultCameraGameMode.playerController;
+    this.context.setInputMode(controller.inputMode ?? "game");
+    this.context.setMouseCursorVisible(controller.mouseCursor !== "hide");
+    this.context.setPointerLookMode(controller.pointerLookMode ?? "right-drag");
     // Own the camera so window resizes stop re-framing it from under the player.
     this.context.markCameraControlled();
     // Seed look angles from whatever pose the camera booted with so the first
@@ -64,13 +68,22 @@ class CameraPawnSession implements GameModeSession {
 
   update(deltaSeconds: number): void {
     this.gameState.elapsedSeconds += deltaSeconds;
+    if (this.context.getInputMode() === "ui") return;
     const { camera, actions } = this.context;
 
     // Right-drag look: turn the accumulated pointer delta into yaw/pitch and aim
     // the camera before moving, so WASD follows the new facing.
     const { dx: lookDx, dy: lookDy } = this.context.consumeLookDelta();
     if (lookDx !== 0 || lookDy !== 0) {
-      this.look = applyMouseLook(this.look, lookDx, lookDy);
+      this.look = applyConfiguredMouseLook(
+        this.look,
+        lookDx,
+        lookDy,
+        {
+          sensitivity: defaultCameraGameMode.playerController.lookSensitivity,
+          invertY: defaultCameraGameMode.playerController.invertLookY,
+        },
+      );
       const dir = forwardFromLookAngles(this.look);
       camera.up.set(0, 1, 0);
       camera.lookAt(camera.position.x + dir.x, camera.position.y + dir.y, camera.position.z + dir.z);
@@ -110,6 +123,11 @@ export const defaultCameraGameMode: GameModeDefinition = {
   playerController: {
     id: "forge.cameraController",
     inputActions: ["move-forward", "move-back", "move-left", "move-right"],
+    inputMode: "game",
+    pointerLookMode: "right-drag",
+    mouseCursor: "show",
+    lookSensitivity: 0.003,
+    invertLookY: false,
     possess: "camera-pawn",
   },
   createSession: (context) => new CameraPawnSession(context, defaultCameraGameMode.defaultPawn),

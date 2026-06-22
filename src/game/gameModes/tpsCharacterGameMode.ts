@@ -11,6 +11,12 @@
  */
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
 import {
+  readCameraComponent,
+  readSpringArmComponent,
+  type CameraComponent,
+  type SpringArmComponent,
+} from "@engine/scene/components";
+import {
   smoothingFactor,
   stepFollowCamera,
   type FollowCameraConfig,
@@ -21,6 +27,12 @@ import {
   selectLocomotionClip,
   DEFAULT_LOCOMOTION_THRESHOLDS,
 } from "@/game/locomotionAnimation";
+import {
+  cameraProjectionFromComponent,
+  desiredSpringArmCameraPose,
+  stepSpringArmCameraPose,
+} from "@/game/springArmCamera";
+import { applyConfiguredMouseLook, lookAnglesFromForward, type LookAngles } from "./cameraControl";
 import type {
   GameModeContext,
   GameModeDefinition,
@@ -40,6 +52,12 @@ const FOLLOW_CAMERA_CONFIG: FollowCameraConfig = {
   lookHeight: 0.5,
 };
 const FOLLOW_CAMERA_RATE = 8;
+const INITIAL_CONTROL_ROTATION = lookAnglesFromForward(
+  -FOLLOW_CAMERA_CONFIG.offset[0],
+  FOLLOW_CAMERA_CONFIG.lookHeight - FOLLOW_CAMERA_CONFIG.offset[1],
+  -FOLLOW_CAMERA_CONFIG.offset[2],
+);
+const RAD_TO_DEG = 180 / Math.PI;
 
 /** Crossfade duration (seconds) between locomotion clips. */
 const ANIMATION_CROSSFADE_SECONDS = 0.18;
@@ -67,6 +85,8 @@ export class TpsCharacterSession implements GameModeSession {
   private player: RuntimeCharacterRef | null = null;
   private animator: CrossfadeAnimator | null = null;
   private followPose: FollowCameraPose | null = null;
+  private controlRotation: LookAngles = INITIAL_CONTROL_ROTATION;
+  private activeCameraSource: "follow config" | "spring arm component" = "follow config";
 
   constructor(private readonly context: GameModeContext) {}
 
@@ -79,6 +99,10 @@ export class TpsCharacterSession implements GameModeSession {
     const player = this.player;
     if (!player) return;
     this.playerState.possessed = true;
+    const controller = tpsCharacterGameMode.playerController;
+    this.context.setInputMode(controller.inputMode ?? "game");
+    this.context.setMouseCursorVisible(controller.mouseCursor !== "hide");
+    this.context.setPointerLookMode(controller.pointerLookMode ?? "pointer-lock");
     // The player gets the full clip set, crossfaded by movement state; snap to
     // the authored idle clip so it never flashes a bind pose.
     const animator = new CrossfadeAnimator(player.object, player.gltf.animations);
@@ -97,15 +121,65 @@ export class TpsCharacterSession implements GameModeSession {
     this.updateAnimation(player);
   }
 
+  beforeEngineUpdate(): void {
+    if (this.context.getInputMode() === "ui") return;
+    const delta = this.context.consumeLookDelta();
+    if (delta.dx === 0 && delta.dy === 0) return;
+    this.controlRotation = applyConfiguredMouseLook(
+      this.controlRotation,
+      delta.dx,
+      delta.dy,
+      {
+        sensitivity: tpsCharacterGameMode.playerController.lookSensitivity,
+        invertY: tpsCharacterGameMode.playerController.invertLookY,
+      },
+    );
+  }
+
+  controlYawForEntity(entityId: string): number | null {
+    return this.player?.entityId === entityId ? this.controlRotation.yaw : null;
+  }
+
+  getCameraDebug(): {
+    readonly controlYawDeg: number | null;
+    readonly controlPitchDeg: number | null;
+    readonly cameraSource: string | null;
+  } {
+    return {
+      controlYawDeg: this.controlRotation.yaw * RAD_TO_DEG,
+      controlPitchDeg: this.controlRotation.pitch * RAD_TO_DEG,
+      cameraSource: this.activeCameraSource,
+    };
+  }
+
   dispose(): void {
+    this.context.setInputMode("ui");
+    this.context.setMouseCursorVisible(true);
+    this.context.setPointerLookMode("right-drag");
     // The animator's mixer is owned by the AnimationSubsystem (disposed by the
     // EngineApp); nothing extra to release here.
   }
 
   private updateFollowCamera(player: RuntimeCharacterRef, deltaSeconds: number): void {
     const pos: Vec3 = [player.object.position.x, player.object.position.y, player.object.position.z];
-    const t = smoothingFactor(FOLLOW_CAMERA_RATE, deltaSeconds);
-    this.followPose = stepFollowCamera(this.followPose, pos, FOLLOW_CAMERA_CONFIG, t);
+    const authored = this.authoredCamera(player);
+    if (authored.springArm) {
+      this.activeCameraSource = "spring arm component";
+      this.syncProjection(authored.camera);
+      const desired = desiredSpringArmCameraPose({
+        playerPosition: pos,
+        springArm: authored.springArm,
+        controlRotation: this.controlRotation,
+      });
+      const t = authored.springArm.enableCameraLag
+        ? smoothingFactor(authored.springArm.cameraLagSpeed, deltaSeconds)
+        : 1;
+      this.followPose = stepSpringArmCameraPose(this.followPose, desired, t);
+    } else {
+      this.activeCameraSource = "follow config";
+      const t = smoothingFactor(FOLLOW_CAMERA_RATE, deltaSeconds);
+      this.followPose = stepFollowCamera(this.followPose, pos, FOLLOW_CAMERA_CONFIG, t);
+    }
     const { position, target } = this.followPose;
     this.context.camera.position.set(position[0], position[1], position[2]);
     this.context.camera.lookAt(target[0], target[1], target[2]);
@@ -118,6 +192,35 @@ export class TpsCharacterSession implements GameModeSession {
     if (!report) return;
     const clip = selectLocomotionClip(report, animator.clips, DEFAULT_LOCOMOTION_THRESHOLDS);
     if (clip) animator.play(clip, ANIMATION_CROSSFADE_SECONDS);
+  }
+
+  private authoredCamera(player: RuntimeCharacterRef): {
+    readonly springArm: SpringArmComponent | undefined;
+    readonly camera: CameraComponent | undefined;
+  } {
+    const entity = player.entity;
+    if (!entity) return { springArm: undefined, camera: undefined };
+    return {
+      springArm: readSpringArmComponent(entity),
+      camera: readCameraComponent(entity),
+    };
+  }
+
+  private syncProjection(camera: CameraComponent | undefined): void {
+    if (!camera) return;
+    const projection = cameraProjectionFromComponent(camera);
+    const live = this.context.camera;
+    if (
+      live.fov === projection.fov &&
+      live.near === projection.near &&
+      live.far === projection.far
+    ) {
+      return;
+    }
+    live.fov = projection.fov;
+    live.near = projection.near;
+    live.far = projection.far;
+    live.updateProjectionMatrix();
   }
 }
 
@@ -138,6 +241,11 @@ export const tpsCharacterGameMode: GameModeDefinition = {
   playerController: {
     id: "forge.tpsController",
     inputActions: ["move-forward", "move-back", "move-left", "move-right", "jump", "sprint"],
+    inputMode: "game",
+    pointerLookMode: "pointer-lock",
+    mouseCursor: "hide",
+    lookSensitivity: 0.003,
+    invertLookY: false,
     possess: "first-input-move-character",
   },
   createSession: (context) => new TpsCharacterSession(context),

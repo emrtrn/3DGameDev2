@@ -48,6 +48,34 @@ export function planarMoveStep(
 }
 
 /**
+ * Resolves planar movement relative to a controller/camera yaw in radians. Yaw
+ * convention matches LookAngles: 0 faces world -z; positive yaw turns toward -x.
+ */
+export function planarMoveStepRelativeToYaw(
+  input: PlanarMoveInput,
+  speed: number,
+  dt: number,
+  yaw: number,
+): PlanarMoveStep {
+  const forwardAmount = (input.forward ? 1 : 0) - (input.back ? 1 : 0);
+  const rightAmount = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  const magnitude = Math.hypot(forwardAmount, rightAmount);
+  if (magnitude === 0) return { dx: 0, dz: 0 };
+  const distance = speed * dt;
+  if (!(distance > 0)) return { dx: 0, dz: 0 };
+
+  const fx = -Math.sin(yaw);
+  const fz = -Math.cos(yaw);
+  const rx = -fz;
+  const rz = fx;
+  const scale = distance / magnitude;
+  return {
+    dx: (fx * forwardAmount + rx * rightAmount) * scale,
+    dz: (fz * forwardAmount + rz * rightAmount) * scale,
+  };
+}
+
+/**
  * Yaw (in degrees) that faces the movement direction `(dx, dz)`, or `null` when
  * there is no movement so the caller holds the current facing.
  *

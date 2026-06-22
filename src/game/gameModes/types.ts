@@ -12,9 +12,13 @@ import type { AnimationMixer, Object3D, PerspectiveCamera } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { ActionMap } from "@engine/input/actionMap";
 import type { LayoutCharacter } from "@engine/scene/layout";
+import type { Entity } from "@engine/scene/entity";
 import type { LocomotionInput } from "@/game/locomotionAnimation";
 
 export type Vec3 = [number, number, number];
+export type InputMode = "game" | "ui" | "game-and-ui";
+export type PointerLookMode = "right-drag" | "pointer-lock";
+export type MouseCursorMode = "show" | "hide";
 
 /**
  * The pawn a Game Mode spawns/possesses. `camera` is a runtime-only flythrough
@@ -51,6 +55,16 @@ export interface PlayerControllerDefinition {
   readonly id: string;
   /** Named input actions this controller reads (informational contract). */
   readonly inputActions: readonly string[];
+  /** Runtime mouse-look capture policy, Unreal-style input mode surface. */
+  readonly pointerLookMode?: PointerLookMode;
+  /** Whether the controller wants the runtime mouse cursor shown or hidden. */
+  readonly mouseCursor?: MouseCursorMode;
+  /** Game/UI input routing requested by the controller at possession time. */
+  readonly inputMode?: InputMode;
+  /** Mouse look sensitivity in radians per pixel. */
+  readonly lookSensitivity?: number;
+  /** Inverts vertical mouse look when true. */
+  readonly invertLookY?: boolean;
   /**
    * Possess target contract:
    * - `camera-pawn`: take over the runtime camera (no character possession).
@@ -100,6 +114,7 @@ export interface RuntimeCharacterRef {
   readonly classRef?: string;
   readonly parentClass?: "character";
   readonly hasCharacterMovement?: boolean;
+  readonly entity?: Entity;
 }
 
 /**
@@ -126,6 +141,14 @@ export interface GameModeContext {
    * this into yaw/pitch; modes that ignore it (TPS) simply never call it.
    */
   consumeLookDelta(): { dx: number; dy: number };
+  /** Current runtime input mode. UI mode suppresses gameplay movement/look. */
+  getInputMode(): InputMode;
+  /** Applies Game/UI input routing for the active PlayerController. */
+  setInputMode(mode: InputMode): void;
+  /** Unreal-style cursor visibility toggle for the active PlayerController. */
+  setMouseCursorVisible(visible: boolean): void;
+  /** Applies the controller's runtime mouse capture/cursor policy. */
+  setPointerLookMode(mode: PointerLookMode): void;
 }
 
 /**
@@ -142,6 +165,16 @@ export interface GameModeSession {
   possess(): void;
   /** Advance the session one tick (after the engine has updated). */
   update(deltaSeconds: number): void;
+  /** Optional input/control pass before engine subsystems consume movement. */
+  beforeEngineUpdate?(deltaSeconds: number): void;
+  /** Optional control yaw for camera-relative pawn movement. */
+  controlYawForEntity?(entityId: string): number | null;
+  /** Optional runtime camera/control state for debug overlays. */
+  getCameraDebug?(): {
+    readonly controlYawDeg: number | null;
+    readonly controlPitchDeg: number | null;
+    readonly cameraSource: string | null;
+  };
   /** Release any session-owned resources. */
   dispose(): void;
 }

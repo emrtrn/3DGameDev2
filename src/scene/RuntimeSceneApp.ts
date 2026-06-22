@@ -40,6 +40,7 @@ import type {
   GameModeContext,
   GameModeDefinition,
   GameModeSession,
+  InputMode,
   PawnDefinition,
   RuntimeCharacterRef,
 } from "@/game/gameModes/types";
@@ -233,6 +234,14 @@ export interface GameModeDebugSnapshot {
   velocityY: number | null;
   /** Possessed pawn's planar speed this tick (units/s), or null. */
   planarSpeed: number | null;
+  /** Controller yaw in degrees, when the active mode owns control rotation. */
+  controlYawDeg: number | null;
+  /** Controller pitch in degrees, when the active mode owns control rotation. */
+  controlPitchDeg: number | null;
+  /** Current camera source, e.g. an authored SpringArm or fallback follow config. */
+  cameraSource: string | null;
+  /** Current runtime input mode. */
+  inputMode: InputMode;
 }
 
 export interface RuntimeStatsApp {
@@ -338,6 +347,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private activeGameMode: GameModeDefinition | null = null;
   private gravityY = DEFAULT_SCENE_GRAVITY[1];
+  private inputMode: InputMode = "ui";
 
   onFrame: ((deltaMs: number) => void) | null = null;
 
@@ -391,7 +401,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     applyEditorMatchedPlayLook(this.renderer);
     this.scene = runtimeCore.scene;
     this.camera = runtimeCore.camera;
-    this.pointerLook = new PointerLookSource(canvas);
+    this.pointerLook = new PointerLookSource(canvas, {
+      onInputModeChange: (mode) => {
+        this.inputMode = mode;
+      },
+    });
     this.interactionPromptElement = this.createInteractionPromptElement();
     this.characterMovementSubsystem = new CharacterMovementSubsystem(
       this.inputActions,
@@ -399,11 +413,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.physicsSubsystem,
       {
         getGravityY: () => this.gravityY,
+        getControlYaw: (entityId) => this.gameModeSession?.controlYawForEntity?.(entityId),
         reportLocomotion: (entityId, report) => {
           this.locomotionReports.set(entityId, report);
         },
         isPlayerControlled: (entityId) =>
-          this.gameModeSession?.playerState.pawnEntityId === entityId,
+          this.inputMode !== "ui" && this.gameModeSession?.playerState.pawnEntityId === entityId,
       },
     );
 
@@ -436,7 +451,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         // The active Game Mode owns possession: only the pawn it possessed
         // (none, under the default camera mode) is driven by player input.
         isPlayerControlled: (entityId) =>
-          this.gameModeSession?.playerState.pawnEntityId === entityId,
+          this.inputMode !== "ui" && this.gameModeSession?.playerState.pawnEntityId === entityId,
       }),
       this.inputActions,
       this.syncEntityTransform,
@@ -468,6 +483,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.frameHandle = requestAnimationFrame(loop);
       const deltaMs = Math.min(now - this.lastTime, 100);
       this.lastTime = now;
+      this.gameModeSession?.beforeEngineUpdate?.(deltaMs / 1000);
       this.engineApp.update(deltaMs / 1000);
       this.gameModeSession?.update(deltaMs / 1000);
       this.updateParticleEffects(deltaMs / 1000);
@@ -548,6 +564,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   getGameModeDebugSnapshot(): GameModeDebugSnapshot {
     const possessed = this.gameModeSession?.playerState.pawnEntityId ?? null;
     const report = possessed ? this.locomotionReports.get(possessed) : undefined;
+    const cameraDebug = this.gameModeSession?.getCameraDebug?.();
     return {
       gameMode: this.activeGameMode?.displayName ?? "—",
       possessed,
@@ -555,6 +572,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       grounded: report ? report.grounded : null,
       velocityY: report ? report.velocityY : null,
       planarSpeed: report ? report.planarSpeed : null,
+      controlYawDeg: cameraDebug?.controlYawDeg ?? null,
+      controlPitchDeg: cameraDebug?.controlPitchDeg ?? null,
+      cameraSource: cameraDebug?.cameraSource ?? null,
+      inputMode: this.inputMode,
     };
   }
 
@@ -939,7 +960,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       markCameraControlled: () => {
         this.cameraViewTouched = true;
       },
-      consumeLookDelta: () => this.pointerLook.consume(),
+      consumeLookDelta: () =>
+        this.inputMode === "ui" ? { dx: 0, dy: 0 } : this.pointerLook.consume(),
+      getInputMode: () => this.inputMode,
+      setInputMode: (mode) => {
+        this.inputMode = mode;
+      },
+      setMouseCursorVisible: (visible) => this.pointerLook.setMouseCursorVisible(visible),
+      setPointerLookMode: (mode) => this.pointerLook.setMode(mode),
     };
   }
 
@@ -1095,6 +1123,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       classRef: actor.classRef,
       parentClass: "character",
       hasCharacterMovement: readCharacterMovementComponent(entity) !== undefined,
+      entity,
     });
   }
 
