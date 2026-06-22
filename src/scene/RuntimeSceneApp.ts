@@ -956,6 +956,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       actions: this.inputActions,
       characters: this.characterRefs,
       getLocomotion: (entityId) => this.locomotionReports.get(entityId),
+      staticBlockerAabbs: () => this.physicsSubsystem.staticBlockerAabbs(),
       addMixer: (mixer) => this.animationSubsystem.add(mixer),
       markCameraControlled: () => {
         this.cameraViewTouched = true;

@@ -32,7 +32,12 @@ import {
   desiredSpringArmCameraPose,
   stepSpringArmCameraPose,
 } from "@/game/springArmCamera";
-import { applyConfiguredMouseLook, lookAnglesFromForward, type LookAngles } from "./cameraControl";
+import {
+  applyConfiguredMouseLook,
+  DEFAULT_LOOK_AXIS_RATE,
+  lookAnglesFromForward,
+  type LookAngles,
+} from "./cameraControl";
 import type {
   GameModeContext,
   GameModeDefinition,
@@ -121,14 +126,21 @@ export class TpsCharacterSession implements GameModeSession {
     this.updateAnimation(player);
   }
 
-  beforeEngineUpdate(): void {
+  beforeEngineUpdate(deltaSeconds: number): void {
     if (this.context.getInputMode() === "ui") return;
     const delta = this.context.consumeLookDelta();
-    if (delta.dx === 0 && delta.dy === 0) return;
+    const axisRate =
+      tpsCharacterGameMode.playerController.lookAxisRate ?? DEFAULT_LOOK_AXIS_RATE;
+    const axisDt = Number.isFinite(deltaSeconds) && deltaSeconds > 0 ? deltaSeconds : 0;
+    const axisDx = this.context.actions.axis("look-x") * axisRate * axisDt;
+    const axisDy = this.context.actions.axis("look-y") * axisRate * axisDt;
+    const dx = delta.dx + axisDx;
+    const dy = delta.dy + axisDy;
+    if (dx === 0 && dy === 0) return;
     this.controlRotation = applyConfiguredMouseLook(
       this.controlRotation,
-      delta.dx,
-      delta.dy,
+      dx,
+      dy,
       {
         sensitivity: tpsCharacterGameMode.playerController.lookSensitivity,
         invertY: tpsCharacterGameMode.playerController.invertLookY,
@@ -170,6 +182,7 @@ export class TpsCharacterSession implements GameModeSession {
         playerPosition: pos,
         springArm: authored.springArm,
         controlRotation: this.controlRotation,
+        blockers: this.context.staticBlockerAabbs(),
       });
       const t = authored.springArm.enableCameraLag
         ? smoothingFactor(authored.springArm.cameraLagSpeed, deltaSeconds)
@@ -240,11 +253,21 @@ export const tpsCharacterGameMode: GameModeDefinition = {
   },
   playerController: {
     id: "forge.tpsController",
-    inputActions: ["move-forward", "move-back", "move-left", "move-right", "jump", "sprint"],
+    inputActions: [
+      "move-forward",
+      "move-back",
+      "move-left",
+      "move-right",
+      "jump",
+      "sprint",
+      "look-x",
+      "look-y",
+    ],
     inputMode: "game",
     pointerLookMode: "pointer-lock",
     mouseCursor: "hide",
     lookSensitivity: 0.003,
+    lookAxisRate: DEFAULT_LOOK_AXIS_RATE,
     invertLookY: false,
     possess: "first-input-move-character",
   },

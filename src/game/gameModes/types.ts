@@ -13,6 +13,7 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { ActionMap } from "@engine/input/actionMap";
 import type { LayoutCharacter } from "@engine/scene/layout";
 import type { Entity } from "@engine/scene/entity";
+import type { Aabb3 } from "@/game/collision";
 import type { LocomotionInput } from "@/game/locomotionAnimation";
 
 export type Vec3 = [number, number, number];
@@ -65,6 +66,8 @@ export interface PlayerControllerDefinition {
   readonly lookSensitivity?: number;
   /** Inverts vertical mouse look when true. */
   readonly invertLookY?: boolean;
+  /** Analog look-axis rate, in pointer-pixel-equivalent units per second. */
+  readonly lookAxisRate?: number;
   /**
    * Possess target contract:
    * - `camera-pawn`: take over the runtime camera (no character possession).
@@ -128,6 +131,8 @@ export interface GameModeContext {
   readonly characters: readonly RuntimeCharacterRef[];
   /** Latest locomotion snapshot a behavior reported for `entityId` this tick. */
   getLocomotion(entityId: string): LocomotionInput | undefined;
+  /** Static blocker AABBs derived by the physics subsystem for camera probes. */
+  staticBlockerAabbs(): readonly Aabb3[];
   /** Registers a crossfade animator's mixer with the animation subsystem. */
   addMixer(mixer: AnimationMixer): void;
   /**

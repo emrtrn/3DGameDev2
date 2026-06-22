@@ -17,6 +17,7 @@ import { DEFAULT_GAME_MODE_ID } from "./catalog";
 import {
   applyConfiguredMouseLook,
   cameraPlanarPan,
+  DEFAULT_LOOK_AXIS_RATE,
   forwardFromLookAngles,
   lookAnglesFromForward,
   type LookAngles,
@@ -74,14 +75,18 @@ class CameraPawnSession implements GameModeSession {
     // Right-drag look: turn the accumulated pointer delta into yaw/pitch and aim
     // the camera before moving, so WASD follows the new facing.
     const { dx: lookDx, dy: lookDy } = this.context.consumeLookDelta();
-    if (lookDx !== 0 || lookDy !== 0) {
+    const controller = defaultCameraGameMode.playerController;
+    const axisRate = controller.lookAxisRate ?? DEFAULT_LOOK_AXIS_RATE;
+    const totalLookDx = lookDx + actions.axis("look-x") * axisRate * deltaSeconds;
+    const totalLookDy = lookDy + actions.axis("look-y") * axisRate * deltaSeconds;
+    if (totalLookDx !== 0 || totalLookDy !== 0) {
       this.look = applyConfiguredMouseLook(
         this.look,
-        lookDx,
-        lookDy,
+        totalLookDx,
+        totalLookDy,
         {
-          sensitivity: defaultCameraGameMode.playerController.lookSensitivity,
-          invertY: defaultCameraGameMode.playerController.invertLookY,
+          sensitivity: controller.lookSensitivity,
+          invertY: controller.invertLookY,
         },
       );
       const dir = forwardFromLookAngles(this.look);
@@ -122,11 +127,12 @@ export const defaultCameraGameMode: GameModeDefinition = {
   },
   playerController: {
     id: "forge.cameraController",
-    inputActions: ["move-forward", "move-back", "move-left", "move-right"],
+    inputActions: ["move-forward", "move-back", "move-left", "move-right", "look-x", "look-y"],
     inputMode: "game",
     pointerLookMode: "right-drag",
     mouseCursor: "show",
     lookSensitivity: 0.003,
+    lookAxisRate: DEFAULT_LOOK_AXIS_RATE,
     invertLookY: false,
     possess: "camera-pawn",
   },

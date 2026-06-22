@@ -194,11 +194,11 @@ Durum: `[ ]` yapilmadi, `[~]` devam ediyor, `[x]` tamam.
 
 - [x] `orientRotationToControl` (strafe/aim) yonelim modu; CharacterMovement
       prop + validator allowlist + Details form.
-- [ ] SpringArm `doCollisionTest`: bom bloklaninca kamerayi iceri cek.
+- [x] SpringArm `doCollisionTest`: bom bloklaninca kamerayi iceri cek.
 - [x] Pointer lock + Input Mode (Game/UI), imleci gizle/goster;
       `Esc` sonrası UI moda gecip gameplay input'unu kes, canvas tiklayinca Game moda don.
 - [x] PlayerController look ayarlari: mouse sensitivity + invert Y runtime'a bagli.
-- [ ] ActionMap analog axis (gamepad/mouse axis) + deadzone/scale/invert
+- [x] ActionMap analog axis (gamepad/mouse axis) + deadzone/scale/invert
       modifier'lari.
 
 ### Faz 9 - PlayerController terfisi ve kamera yonetimi

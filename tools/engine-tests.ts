@@ -88,6 +88,7 @@ import {
 import {
   cameraProjectionFromComponent,
   desiredSpringArmCameraPose,
+  resolveSpringArmCollision,
 } from "../src/game/springArmCamera";
 import { groundedAt, stepVerticalMotion } from "../src/game/verticalMotion";
 import { resolvePlanarMovement, type Aabb3 } from "../src/game/collision";
@@ -1171,6 +1172,30 @@ check("input subsystem maps raw codes to named action edges per tick", () => {
   actions.handleDown("KeyX");
   app.update(0.016);
   assert.equal(actions.get("move-forward").held, false);
+});
+
+check("action map resolves analog axes with deadzone scale invert and delta input", () => {
+  const actions = new ActionMap(
+    {},
+    {
+      GamepadRightX: { axis: "look-x", deadzone: 0.2, scale: 2 },
+      GamepadRightY: { axis: "look-y", invert: true },
+      MouseX: { axis: "look-x", scale: 0.01 },
+    },
+  );
+  actions.handleAxis("GamepadRightX", 0.1);
+  actions.handleAxis("GamepadRightY", 0.5);
+  actions.addAxisDelta("MouseX", 10);
+  actions.advance();
+
+  // GamepadRightX is inside deadzone; MouseX delta contributes 0.1 after scale.
+  assert.equal(actions.axis("look-x"), 0.1);
+  assert.equal(actions.axis("look-y"), -0.5);
+
+  // Relative mouse deltas are one-tick values; absolute gamepad axes persist.
+  actions.advance();
+  assert.equal(actions.axis("look-x"), 0);
+  assert.equal(actions.axis("look-y"), -0.5);
 });
 
 // 6.1.3 A layout placement/character carrying a behavior derives a readable
@@ -3897,6 +3922,43 @@ check("desiredSpringArmCameraPose orbits around the authored target offset", () 
   assert.deepEqual(pose.position, [2.5, 1.25, 7]);
 });
 
+check("SpringArm doCollisionTest pulls the camera in front of static blockers", () => {
+  const blocker: Aabb3 = { min: [-1, -1, 1.2], max: [1, 1, 1.8] };
+  const unclamped = desiredSpringArmCameraPose({
+    playerPosition: [0, 0, 0],
+    springArm: {
+      targetArmLength: 3,
+      targetOffset: [0, 0, 0],
+      socketOffset: [0, 0, 0],
+      enableCameraLag: false,
+      cameraLagSpeed: 10,
+      doCollisionTest: false,
+    },
+    controlRotation: { yaw: 0, pitch: 0 },
+    blockers: [blocker],
+  });
+  assert.deepEqual(unclamped.position, [0, 0, 3]);
+
+  const clamped = desiredSpringArmCameraPose({
+    playerPosition: [0, 0, 0],
+    springArm: {
+      targetArmLength: 3,
+      targetOffset: [0, 0, 0],
+      socketOffset: [0, 0, 0],
+      enableCameraLag: false,
+      cameraLagSpeed: 10,
+      doCollisionTest: true,
+    },
+    controlRotation: { yaw: 0, pitch: 0 },
+    blockers: [blocker],
+  });
+  assert.equal(clamped.target[2], 0);
+  assert.ok(clamped.position[2] < blocker.min[2]);
+  assert.ok(clamped.position[2] > 0);
+
+  assert.deepEqual(resolveSpringArmCollision([0, 0, 0], [0, 0, 3], []), [0, 0, 3]);
+});
+
 check("cameraProjectionFromComponent maps FOV and clip planes", () => {
   assert.deepEqual(cameraProjectionFromComponent(undefined), { fov: 44, near: 0.1, far: 100 });
   assert.deepEqual(
@@ -4966,6 +5028,7 @@ function makeGameModeContext(options: {
   locomotion?: Map<string, LocomotionInput>;
   /** Look deltas to hand out one-per-call (e.g. simulate right-drag turns). */
   lookDeltas?: { dx: number; dy: number }[];
+  blockers?: Aabb3[];
 }): {
   context: GameModeContext;
   mixers: AnimationMixer[];
@@ -4982,11 +5045,13 @@ function makeGameModeContext(options: {
   const mouseCursorVisible: boolean[] = [];
   const locomotion = options.locomotion ?? new Map<string, LocomotionInput>();
   const lookDeltas = options.lookDeltas ? [...options.lookDeltas] : [];
+  const blockers = options.blockers ?? [];
   const context: GameModeContext = {
     camera: options.camera ?? new PerspectiveCamera(),
     actions: options.actions ?? new ActionMap(),
     characters: options.characters ?? [],
     getLocomotion: (id) => locomotion.get(id),
+    staticBlockerAabbs: () => blockers,
     addMixer: (mixer) => mixers.push(mixer),
     markCameraControlled: () => {
       controlled = true;
@@ -5264,6 +5329,53 @@ check("tps mode maps authored SpringArm and Camera components to runtime camera"
   const debug = session.getCameraDebug?.();
   assert.equal(debug?.cameraSource, "spring arm component");
   assert.ok(Math.abs((debug?.controlYawDeg ?? 0) - (-0.3 * 180 / Math.PI)) < 1e-6);
+});
+
+check("tps mode applies analog look axes to control rotation", () => {
+  const actions = new ActionMap({}, { GamepadRightX: "look-x", GamepadRightY: "look-y" });
+  actions.handleAxis("GamepadRightX", 1);
+  actions.handleAxis("GamepadRightY", -1);
+  actions.advance();
+  const characters = [makeCharacterRef(0, { actorMovement: true })];
+  const { context } = makeGameModeContext({ actions, characters });
+  const session = tpsCharacterGameMode.createSession(context);
+  session.spawnDefaultPawn();
+  session.possess();
+  session.beforeEngineUpdate?.(1);
+
+  const debug = session.getCameraDebug?.();
+  assert.ok(Math.abs((debug?.controlYawDeg ?? 0) - (-0.72 * 180 / Math.PI)) < 1e-6);
+  assert.ok((debug?.controlPitchDeg ?? 0) > 0);
+});
+
+check("tps mode uses SpringArm doCollisionTest against runtime blockers", () => {
+  const camera = new PerspectiveCamera();
+  const entity: Entity = {
+    id: actorInstanceEntityId(0),
+    components: {
+      SpringArm: {
+        targetArmLength: 4,
+        targetOffset: [0, 0, 0],
+        socketOffset: [0, 0, 0],
+        enableCameraLag: false,
+        cameraLagSpeed: 10,
+        doCollisionTest: true,
+      },
+    },
+  };
+  const characters = [makeCharacterRef(0, { actorMovement: true, entity })];
+  const { context } = makeGameModeContext({
+    camera,
+    characters,
+    blockers: [{ min: [-1, 0, 1], max: [1, 2, 2] }],
+  });
+  const session = tpsCharacterGameMode.createSession(context);
+  session.spawnDefaultPawn();
+  session.possess();
+  session.update(0.1);
+
+  assert.ok(camera.position.z < 1);
+  assert.ok(Math.hypot(camera.position.x, camera.position.y, camera.position.z) < 4);
 });
 
 check("locomotion bridge selects an Actor Script character's run clip from its movement state", () => {

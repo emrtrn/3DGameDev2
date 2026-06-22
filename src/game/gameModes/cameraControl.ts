@@ -72,6 +72,8 @@ export interface MouseLookSettings {
 
 /** Default right-drag look sensitivity (radians per pixel of pointer travel). */
 export const DEFAULT_LOOK_SENSITIVITY = 0.003;
+/** Default analog look rate, in pointer-pixel-equivalent units per second. */
+export const DEFAULT_LOOK_AXIS_RATE = 240;
 /** Pitch clamp so the camera never flips past straight up/down. */
 export const DEFAULT_PITCH_LIMIT = Math.PI * 0.47;
 

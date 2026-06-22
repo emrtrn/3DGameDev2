@@ -15,6 +15,8 @@ export type RawInputCode = string;
 
 /** A named, game-meaningful action (e.g. "move-forward", "jump"). */
 export type ActionName = string;
+/** A named analog axis (e.g. "look-x", "move-x"). */
+export type AxisName = string;
 
 /** Per-tick state for one action. */
 export interface ActionState {
@@ -29,21 +31,50 @@ export interface ActionState {
 /** Raw-code -> action-name bindings. Many codes may map to one action. */
 export type ActionBindings = Readonly<Record<RawInputCode, ActionName>>;
 
+export interface AxisModifiers {
+  /** Values with an absolute magnitude at or below this threshold become zero. */
+  readonly deadzone?: number;
+  /** Multiplies the post-deadzone value. */
+  readonly scale?: number;
+  /** Flips the post-scale value. */
+  readonly invert?: boolean;
+}
+
+export interface AxisBinding extends AxisModifiers {
+  readonly axis: AxisName;
+}
+
+/** Raw analog code -> axis binding. Many codes may contribute to one axis. */
+export type AxisBindings = Readonly<Record<RawInputCode, AxisName | AxisBinding>>;
+
 const IDLE: ActionState = { pressed: false, held: false, released: false };
 
 export class ActionMap {
   private readonly bindings: Map<RawInputCode, ActionName>;
+  private readonly axisBindings = new Map<RawInputCode, AxisBinding>();
   private readonly downCodes = new Set<RawInputCode>();
+  private readonly rawAxes = new Map<RawInputCode, number>();
+  private readonly rawAxisDeltas = new Map<RawInputCode, number>();
   private heldActions = new Set<ActionName>();
   private states = new Map<ActionName, ActionState>();
+  private axes = new Map<AxisName, number>();
 
-  constructor(bindings: ActionBindings = {}) {
+  constructor(bindings: ActionBindings = {}, axisBindings: AxisBindings = {}) {
     this.bindings = new Map(Object.entries(bindings));
+    for (const [code, binding] of Object.entries(axisBindings)) {
+      if (typeof binding === "string") this.bindAxis(code, binding);
+      else this.bindAxis(code, binding.axis, binding);
+    }
   }
 
   /** Binds a raw code to a named action, replacing any existing binding. */
   bind(code: RawInputCode, action: ActionName): void {
     this.bindings.set(code, action);
+  }
+
+  /** Binds a raw analog code to a named axis, replacing any existing binding. */
+  bindAxis(code: RawInputCode, axis: AxisName, modifiers: AxisModifiers = {}): void {
+    this.axisBindings.set(code, { axis, ...modifiers });
   }
 
   /** Records a raw code as physically down. Safe to call repeatedly. */
@@ -56,9 +87,23 @@ export class ActionMap {
     this.downCodes.delete(code);
   }
 
+  /** Records an absolute analog value, such as a gamepad stick axis in [-1, 1]. */
+  handleAxis(code: RawInputCode, value: number): void {
+    this.rawAxes.set(code, Number.isFinite(value) ? value : 0);
+  }
+
+  /** Accumulates a relative analog delta, such as mouse movement this frame. */
+  addAxisDelta(code: RawInputCode, delta: number): void {
+    if (!Number.isFinite(delta) || delta === 0) return;
+    this.rawAxisDeltas.set(code, (this.rawAxisDeltas.get(code) ?? 0) + delta);
+  }
+
   /** Clears all physical key state (e.g. on window blur / focus loss). */
   reset(): void {
     this.downCodes.clear();
+    this.rawAxes.clear();
+    this.rawAxisDeltas.clear();
+    this.axes.clear();
   }
 
   /**
@@ -86,6 +131,8 @@ export class ActionMap {
 
     this.states = states;
     this.heldActions = currentHeld;
+    this.axes = this.computeAxes();
+    this.rawAxisDeltas.clear();
   }
 
   /** Returns the current-tick state for an action (idle if untouched). */
@@ -104,4 +151,34 @@ export class ActionMap {
   released(action: ActionName): boolean {
     return this.get(action).released;
   }
+
+  /** Returns the current-tick analog value for an axis, or 0 when idle. */
+  axis(axis: AxisName): number {
+    return this.axes.get(axis) ?? 0;
+  }
+
+  private computeAxes(): Map<AxisName, number> {
+    const axes = new Map<AxisName, number>();
+    for (const [code, binding] of this.axisBindings) {
+      const raw = (this.rawAxes.get(code) ?? 0) + (this.rawAxisDeltas.get(code) ?? 0);
+      const value = applyAxisModifiers(raw, binding);
+      if (value === 0) continue;
+      axes.set(binding.axis, clampAxis((axes.get(binding.axis) ?? 0) + value));
+    }
+    return axes;
+  }
+}
+
+function applyAxisModifiers(value: number, modifiers: AxisModifiers): number {
+  if (!Number.isFinite(value)) return 0;
+  const deadzone = Math.max(0, modifiers.deadzone ?? 0);
+  if (Math.abs(value) <= deadzone) return 0;
+  const scaled = value * (modifiers.scale ?? 1);
+  return modifiers.invert ? -scaled : scaled;
+}
+
+function clampAxis(value: number): number {
+  if (value < -1) return -1;
+  if (value > 1) return 1;
+  return value;
 }
