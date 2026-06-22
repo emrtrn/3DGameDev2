@@ -104,7 +104,7 @@ tutkalı shell'lerde ince kalır.
   ayrimini alacak: possess edilebilen Pawn + skeletal mesh + capsule collider +
   birinci sinif `CharacterMovement` component'i + GameMode/PlayerController
   possession akisi. Takip dokumani:
-  `docs/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md`.
+  `docs/completed/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md`.
 
 - *2026-06-21* — **CharacterMovement dikey kesiti.** Actor Script schema'sina
   `CharacterMovement` component'i eklendi; `parentClass:"character"` yeni
@@ -305,7 +305,7 @@ Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede dur
 alınan karar (sonraki oturum yeniden tartışmasın).
 
 - *2026-06-22* — **Player Character Faz 6 — Runtime debug paneli (tamam → tüm
-  checklist kapandı).** `docs/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md`'in son
+  checklist kapandı).** `docs/completed/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md`'in son
   açık maddesi kapandı; Faz 0–6 hepsi `[x]`. `?debug` overlay'ine "game mode"
   bloğu eklendi: active GameMode, possessed pawn, movement mode, grounded,
   velocity (y + planar). **Veri:** yeni `RuntimeSceneApp.getGameModeDebugSnapshot`
@@ -324,7 +324,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
   etmiyor; grounded zaten walking/airborne ayrımını veriyor).
 
 - *2026-06-22* — **Player Character Faz 5 — Camera & animation (tamam).**
-  `docs/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md` Faz 5'in 4 maddesi kapandı.
+  `docs/completed/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md` Faz 5'in 4 maddesi kapandı.
   **Bulgu:** locomotion animation bridge + TPS takip kamerası zaten generic
   `RuntimeCharacterRef` üzerinden çalışıyordu; `addActorCharacterRef` Actor Script
   character instance'larını (`actor:<i>`) bu ref akışına kendi gltf'i + object'i +
@@ -352,7 +352,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
   movement mode, grounded, velocity) — Faz 5/6'daki tek açık madde.
 
 - *2026-06-22* — **Player Character Faz 4 — Project GameMode asset entegrasyonu (tamam).**
-  `docs/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md` Faz 4'ün 4 maddesi kapandı.
+  `docs/completed/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md` Faz 4'ün 4 maddesi kapandı.
   Artık `worldSettings.gameMode` built-in id (`forge.*`) **veya** bir
   `parentClass: "gameMode"` Actor Script'in classRef'i (`*.actor.json`) olabilir.
   **Catalog:** `isGameModeClassRef` + `normalizeGameModeId` classRef'i geçirir
@@ -2192,7 +2192,7 @@ docs/
   LAUNCH_WORKFLOW.md
   UNREAL_BASICS_LESSONS.md
   completed/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md
-  PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md
+  completed/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md
   GAMEPLAY_FRAMEWORK_CHECKLIST.md
   ACTORS_COMPONENTS_CHECKLIST.md
   PACKAGING_CHECKLIST.md

@@ -27,12 +27,7 @@
         ],
         "isStatic": false,
         "isSensor": false,
-        "simulatePhysics": false,
-        "scale": [
-          0.5,
-          0.5,
-          0.5
-        ]
+        "simulatePhysics": false
       },
       "parent": "root"
     },
@@ -47,13 +42,13 @@
           0.3
         ]
       },
-      "parent": "root"
+      "parent": "capsule"
     },
     {
       "id": "characterMovement",
       "component": "CharacterMovement",
       "props": {
-        "maxWalkSpeed": 3,
+        "maxWalkSpeed": 1,
         "sprintMultiplier": 2,
         "jumpSpeed": 4,
         "gravityScale": 1,
@@ -67,6 +62,26 @@
         "capsuleHalfHeight": 0.9
       },
       "parent": "root"
+    },
+    {
+      "id": "springArm",
+      "component": "SpringArm",
+      "props": {
+        "targetArmLength": 3,
+        "enableCameraLag": true,
+        "cameraLagSpeed": 10
+      },
+      "parent": "capsule"
+    },
+    {
+      "id": "camera",
+      "component": "Camera",
+      "props": {
+        "fieldOfView": 44,
+        "nearClip": 0.1,
+        "farClip": 100
+      },
+      "parent": "springArm"
     }
   ],
   "interfaces": [],
