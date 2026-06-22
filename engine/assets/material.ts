@@ -17,9 +17,37 @@ export const FORGE_MATERIAL_PRESETS = [
 ] as const;
 export type ForgeMaterialPreset = (typeof FORGE_MATERIAL_PRESETS)[number];
 
+export const FORGE_MATERIAL_LAYER_BLEND_DRIVERS = [
+  "constant",
+  "slope",
+  "worldHeight",
+] as const;
+export type ForgeMaterialLayerBlendDriver =
+  (typeof FORGE_MATERIAL_LAYER_BLEND_DRIVERS)[number];
+
 export interface ForgeMaterialUvTiling {
   x: number;
   y: number;
+}
+
+export interface ForgeMaterialLayer {
+  baseColor: string;
+  baseColorTexture: string | null;
+  normalTexture: string | null;
+  roughnessTexture: string | null;
+  metalnessTexture: string | null;
+  roughness: number;
+  metalness: number;
+  uvTiling: ForgeMaterialUvTiling;
+}
+
+export interface ForgeMaterialLayerBlend {
+  layer1: ForgeMaterialLayer;
+  driver: ForgeMaterialLayerBlendDriver;
+  amount: number;
+  min: number;
+  max: number;
+  contrast: number;
 }
 
 export interface ForgeMaterialDef {
@@ -31,15 +59,21 @@ export interface ForgeMaterialDef {
   baseColorTexture: string | null;
   normalTexture: string | null;
   maskTexture: string | null;
+  roughnessTexture: string | null;
+  metalnessTexture: string | null;
+  aoTexture: string | null;
+  ormTexture: string | null;
   uvTiling: ForgeMaterialUvTiling;
   roughness: number;
   metalness: number;
+  aoIntensity: number;
   opacity: number;
   alphaMode: ForgeMaterialAlphaMode;
   alphaTest: number;
   side: ForgeMaterialSide;
   emissive: string;
   emissiveIntensity: number;
+  layerBlend: ForgeMaterialLayerBlend | null;
 }
 
 export function isForgeMaterialPreset(value: unknown): value is ForgeMaterialPreset {
@@ -74,15 +108,21 @@ export function defaultForgeMaterialDef(
     baseColorTexture: null,
     normalTexture: null,
     maskTexture: null,
+    roughnessTexture: null,
+    metalnessTexture: null,
+    aoTexture: null,
+    ormTexture: null,
     uvTiling: { x: 1, y: 1 },
     roughness: 0.8,
     metalness: 0,
+    aoIntensity: 1,
     opacity: 1,
     alphaMode: "opaque",
     alphaTest: 0.5,
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    layerBlend: null,
   };
 
   if (preset === "textured") {
@@ -135,16 +175,31 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
     baseColorTexture: textureRefOrNull(input.baseColorTexture),
     normalTexture: textureRefOrNull(input.normalTexture),
     maskTexture: textureRefOrNull(input.maskTexture),
+    roughnessTexture: textureRefOrNull(input.roughnessTexture),
+    metalnessTexture: textureRefOrNull(input.metalnessTexture),
+    aoTexture: textureRefOrNull(input.aoTexture),
+    ormTexture: textureRefOrNull(input.ormTexture) ?? textureRefOrNull(input.maskTexture),
     uvTiling: uvTilingOr(input.uvTiling, { x: 1, y: 1 }),
     roughness: clamp01(numberOr(input.roughness, 0.8)),
     metalness: clamp01(numberOr(input.metalness, 0)),
+    aoIntensity: clamp01(numberOr(input.aoIntensity, 1)),
     opacity,
     alphaMode,
     alphaTest: clamp01(numberOr(input.alphaTest, 0.5)),
     side: isForgeMaterialSide(input.side) ? input.side : "front",
     emissive: colorOr(input.emissive, "#000000"),
     emissiveIntensity: Math.max(0, numberOr(input.emissiveIntensity, 0)),
+    layerBlend: layerBlendOrNull(input.layerBlend),
   };
+}
+
+export function isForgeMaterialLayerBlendDriver(
+  value: unknown,
+): value is ForgeMaterialLayerBlendDriver {
+  return (
+    typeof value === "string" &&
+    FORGE_MATERIAL_LAYER_BLEND_DRIVERS.includes(value as ForgeMaterialLayerBlendDriver)
+  );
 }
 
 function numberOr(value: unknown, fallback: number): number {
@@ -175,4 +230,36 @@ function uvTilingOr(value: unknown, fallback: ForgeMaterialUvTiling): ForgeMater
 
 function clampUvTiling(value: number): number {
   return Math.min(Math.max(value, 0.001), 100);
+}
+
+function layerBlendOrNull(value: unknown): ForgeMaterialLayerBlend | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const layer1 = layerOr(input.layer1);
+  if (!layer1) return null;
+  const min = numberOr(input.min, 0);
+  const max = numberOr(input.max, 1);
+  return {
+    layer1,
+    driver: isForgeMaterialLayerBlendDriver(input.driver) ? input.driver : "constant",
+    amount: clamp01(numberOr(input.amount, 0.5)),
+    min: Math.min(min, max),
+    max: Math.max(min, max),
+    contrast: Math.min(Math.max(numberOr(input.contrast, 1), 0.01), 8),
+  };
+}
+
+function layerOr(value: unknown): ForgeMaterialLayer | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  return {
+    baseColor: colorOr(input.baseColor, "#ffffff"),
+    baseColorTexture: textureRefOrNull(input.baseColorTexture),
+    normalTexture: textureRefOrNull(input.normalTexture),
+    roughnessTexture: textureRefOrNull(input.roughnessTexture),
+    metalnessTexture: textureRefOrNull(input.metalnessTexture),
+    roughness: clamp01(numberOr(input.roughness, 0.8)),
+    metalness: clamp01(numberOr(input.metalness, 0)),
+    uvTiling: uvTilingOr(input.uvTiling, { x: 1, y: 1 }),
+  };
 }

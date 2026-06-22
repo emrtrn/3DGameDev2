@@ -32,6 +32,30 @@ export async function loadForgeMaterial(
       normalTexture: def.normalTexture
         ? await loadTextureByAssetId(manifest, def.normalTexture, textureLoader)
         : null,
+      roughnessTexture: def.roughnessTexture
+        ? await loadTextureByAssetId(manifest, def.roughnessTexture, textureLoader)
+        : null,
+      metalnessTexture: def.metalnessTexture
+        ? await loadTextureByAssetId(manifest, def.metalnessTexture, textureLoader)
+        : null,
+      aoTexture: def.aoTexture
+        ? await loadTextureByAssetId(manifest, def.aoTexture, textureLoader)
+        : null,
+      ormTexture: def.ormTexture
+        ? await loadTextureByAssetId(manifest, def.ormTexture, textureLoader)
+        : null,
+      layer1BaseColorTexture: def.layerBlend?.layer1.baseColorTexture
+        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.baseColorTexture, textureLoader)
+        : null,
+      layer1NormalTexture: def.layerBlend?.layer1.normalTexture
+        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.normalTexture, textureLoader)
+        : null,
+      layer1RoughnessTexture: def.layerBlend?.layer1.roughnessTexture
+        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.roughnessTexture, textureLoader)
+        : null,
+      layer1MetalnessTexture: def.layerBlend?.layer1.metalnessTexture
+        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.metalnessTexture, textureLoader)
+        : null,
     },
     options,
   );

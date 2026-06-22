@@ -96,8 +96,11 @@ tutkalı shell'lerde ince kalır.
   tabanli kalir; ayri Unreal tarzı Texture Asset Editor kurulmaz. Texture kalite
   ve UV kontrolu canonical `.material.json` ustunden ilerler: `uvTiling` alanı,
   ortak `configureForgeTexture()` helper'i, renderer limitine gore clamp'lenen
-  anisotropy, runtime/editor preview/thumbnail icin ayni texture ayari. Takip
-  dokumani: `docs/ongoing/MATERIAL_EDITOR_ENHANCEMENTS_CHECKLIST.md`.
+  anisotropy, roughness/metalness/AO icin ayri gri haritalar veya paketli ORM
+  texture, runtime/editor preview/thumbnail icin ayni texture ayari. Iki katmanli
+  Material Layer Blend ise node graph degil; sinirli bir `MeshStandardMaterial`
+  `onBeforeCompile` istisnasi olarak `constant`, `slope`, `worldHeight` driver'lariyla
+  uygulanir. Takip dokumani: `docs/ongoing/MATERIAL_EDITOR_ENHANCEMENTS_CHECKLIST.md`.
 
 - *2026-06-20* — **Script Communication System kararı.** Forge, Unreal Blueprint
   Communication modelini görsel node VM olarak kopyalamayacak. Actor Script verisi

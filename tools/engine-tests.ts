@@ -6509,15 +6509,37 @@ check("material save payload requires a material path and canonical fields", () 
       baseColorTexture: "tex-stone-d",
       normalTexture: null,
       maskTexture: "tex-stone-m",
+      roughnessTexture: "tex-stone-r",
+      metalnessTexture: "tex-stone-metal",
+      aoTexture: "tex-stone-ao",
+      ormTexture: null,
       uvTiling: { x: 2, y: 3 },
       roughness: 0.72,
       metalness: 0,
+      aoIntensity: 0.6,
       opacity: 1,
       alphaMode: "opaque",
       alphaTest: 0.5,
       side: "front",
       emissive: "#000000",
       emissiveIntensity: 0,
+      layerBlend: {
+        layer1: {
+          baseColor: "#f0f8ff",
+          baseColorTexture: "tex-snow-d",
+          normalTexture: "tex-snow-n",
+          roughnessTexture: "tex-snow-r",
+          metalnessTexture: null,
+          roughness: 0.9,
+          metalness: 0,
+          uvTiling: { x: 4, y: 4 },
+        },
+        driver: "slope",
+        amount: 0.5,
+        min: 0.35,
+        max: 0.85,
+        contrast: 1.5,
+      },
     },
   });
   assert.equal(payload.path, "assets/materials/Stone.material.json");
@@ -6530,15 +6552,37 @@ check("material save payload requires a material path and canonical fields", () 
     baseColorTexture: "tex-stone-d",
     normalTexture: null,
     maskTexture: "tex-stone-m",
+    roughnessTexture: "tex-stone-r",
+    metalnessTexture: "tex-stone-metal",
+    aoTexture: "tex-stone-ao",
+    ormTexture: "tex-stone-m",
     uvTiling: { x: 2, y: 3 },
     roughness: 0.72,
     metalness: 0,
+    aoIntensity: 0.6,
     opacity: 1,
     alphaMode: "opaque",
     alphaTest: 0.5,
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    layerBlend: {
+      layer1: {
+        baseColor: "#f0f8ff",
+        baseColorTexture: "tex-snow-d",
+        normalTexture: "tex-snow-n",
+        roughnessTexture: "tex-snow-r",
+        metalnessTexture: null,
+        roughness: 0.9,
+        metalness: 0,
+        uvTiling: { x: 4, y: 4 },
+      },
+      driver: "slope",
+      amount: 0.5,
+      min: 0.35,
+      max: 0.85,
+      contrast: 1.5,
+    },
   });
   assert.throws(() =>
     validateSaveMaterialPayload({ path: "assets/materials/Stone.json", material: {} }),
@@ -6573,6 +6617,24 @@ check("material save payload requires a material path and canonical fields", () 
       uvTiling: { x: 0, y: 1 },
     }),
   );
+  assert.throws(() =>
+    validateForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Bad",
+      aoIntensity: 2,
+    }),
+  );
+  assert.throws(() =>
+    validateForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Bad",
+      layerBlend: { driver: "vertexColor", layer1: {} },
+    }),
+  );
 });
 
 check("starter material assets normalize to the canonical material shape", () => {
@@ -6586,8 +6648,10 @@ check("starter material assets normalize to the canonical material shape", () =>
     assert.ok(material.name.length > 0);
     assert.ok(material.roughness >= 0 && material.roughness <= 1);
     assert.ok(material.metalness >= 0 && material.metalness <= 1);
+    assert.ok(material.aoIntensity >= 0 && material.aoIntensity <= 1);
     assert.ok(material.opacity >= 0 && material.opacity <= 1);
     assert.ok(material.uvTiling.x > 0 && material.uvTiling.y > 0);
+    assert.ok(material.layerBlend === null || material.layerBlend.layer1.baseColor.length === 7);
   }
 });
 
@@ -6654,6 +6718,119 @@ check("forge material mapping creates matching Three material types and fields",
   assert.equal(normalTexture.repeat.y, 4);
   assert.equal(normalTexture.anisotropy, 8);
   textured.dispose();
+
+  const roughnessTexture = new Texture();
+  const metalnessTexture = new Texture();
+  const aoTexture = new Texture();
+  const mapped = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Surface Maps",
+      roughnessTexture: "rough",
+      metalnessTexture: "metal",
+      aoTexture: "ao",
+      aoIntensity: 0.4,
+    }),
+    { roughnessTexture, metalnessTexture, aoTexture },
+    { maxAnisotropy: 4 },
+  );
+  assert.ok(mapped instanceof MeshStandardMaterial);
+  assert.equal(mapped.roughnessMap, roughnessTexture);
+  assert.equal(mapped.metalnessMap, metalnessTexture);
+  assert.equal(mapped.aoMap, aoTexture);
+  assert.equal(mapped.aoMapIntensity, 0.4);
+  assert.equal(roughnessTexture.colorSpace, NoColorSpace);
+  assert.equal(metalnessTexture.colorSpace, NoColorSpace);
+  assert.equal(aoTexture.colorSpace, NoColorSpace);
+  assert.equal(roughnessTexture.anisotropy, 4);
+  mapped.dispose();
+
+  const ormTexture = new Texture();
+  const orm = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Packed ORM",
+      maskTexture: "legacy-orm",
+      aoIntensity: 0.75,
+    }),
+    { ormTexture },
+  );
+  assert.ok(orm instanceof MeshStandardMaterial);
+  assert.equal(orm.roughnessMap, ormTexture);
+  assert.equal(orm.metalnessMap, ormTexture);
+  assert.equal(orm.aoMap, ormTexture);
+  assert.equal(orm.aoMapIntensity, 0.75);
+  assert.equal(ormTexture.colorSpace, NoColorSpace);
+  orm.dispose();
+
+  const layer1BaseColorTexture = new Texture();
+  const layer1NormalTexture = new Texture();
+  const layer1RoughnessTexture = new Texture();
+  const layer1MetalnessTexture = new Texture();
+  const layerBlend = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Layer Blend",
+      baseColorTexture: "rock-d",
+      normalTexture: "rock-n",
+      layerBlend: {
+        layer1: {
+          baseColor: "#ffffff",
+          baseColorTexture: "snow-d",
+          normalTexture: "snow-n",
+          roughnessTexture: "snow-r",
+          metalnessTexture: "snow-m",
+          roughness: 0.9,
+          metalness: 0.1,
+          uvTiling: { x: 5, y: 6 },
+        },
+        driver: "worldHeight",
+        amount: 0.25,
+        min: 2,
+        max: 8,
+        contrast: 1.2,
+      },
+    }),
+    {
+      baseColorTexture: new Texture(),
+      normalTexture: new Texture(),
+      layer1BaseColorTexture,
+      layer1NormalTexture,
+      layer1RoughnessTexture,
+      layer1MetalnessTexture,
+    },
+    { maxAnisotropy: 16 },
+  );
+  assert.ok(layerBlend instanceof MeshStandardMaterial);
+  assert.equal(layerBlend.defines?.FORGE_LAYER_BLEND, "");
+  assert.equal(layerBlend.defines?.USE_FORGE_LAYER_MAP, "");
+  assert.equal(layerBlend.defines?.USE_FORGE_LAYER_NORMALMAP, "");
+  assert.match(layerBlend.customProgramCacheKey(), /forge-layer-blend-v1:worldHeight:bc:n:r:m/);
+  assert.equal(layer1BaseColorTexture.repeat.x, 5);
+  assert.equal(layer1BaseColorTexture.repeat.y, 6);
+  assert.equal(layer1BaseColorTexture.anisotropy, 8);
+  const shader = {
+    uniforms: {},
+    vertexShader: "#include <common>\nvoid main(){\n#include <worldpos_vertex>\n}",
+    fragmentShader:
+      "#include <common>\nvoid main(){\n#include <map_fragment>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>\n#include <normal_fragment_maps>\n}",
+  } as Parameters<MeshStandardMaterial["onBeforeCompile"]>[0];
+  layerBlend.onBeforeCompile(shader, null!);
+  assert.ok("forgeLayerMap" in shader.uniforms);
+  assert.ok("forgeLayerNormalMap" in shader.uniforms);
+  assert.match(shader.vertexShader, /vForgeLayerWorldPosition/);
+  assert.match(shader.fragmentShader, /forgeLayerBlendFactor/);
+  assert.match(shader.fragmentShader, /diffuseColor\.rgb = mix/);
+  assert.match(shader.fragmentShader, /roughnessFactor = mix/);
+  assert.match(shader.fragmentShader, /metalnessFactor = mix/);
+  assert.match(shader.fragmentShader, /normalize\( mix\( normal/);
+  layerBlend.dispose();
 
   const basic = createThreeMaterialFromForgeDef(
     normalizeForgeMaterialDef({
@@ -6756,15 +6933,21 @@ check("content-new resolves to typed stub files and folders", () => {
     baseColorTexture: null,
     normalTexture: null,
     maskTexture: null,
+    roughnessTexture: null,
+    metalnessTexture: null,
+    aoTexture: null,
+    ormTexture: null,
     uvTiling: { x: 1, y: 1 },
     roughness: 0.8,
     metalness: 0,
+    aoIntensity: 1,
     opacity: 1,
     alphaMode: "opaque",
     alphaTest: 0.5,
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    layerBlend: null,
   });
   const metal = resolveContentNewFile({
     kind: "material",
@@ -6782,15 +6965,21 @@ check("content-new resolves to typed stub files and folders", () => {
     baseColorTexture: null,
     normalTexture: null,
     maskTexture: null,
+    roughnessTexture: null,
+    metalnessTexture: null,
+    aoTexture: null,
+    ormTexture: null,
     uvTiling: { x: 1, y: 1 },
     roughness: 0.3,
     metalness: 1,
+    aoIntensity: 1,
     opacity: 1,
     alphaMode: "opaque",
     alphaTest: 0.5,
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    layerBlend: null,
   });
 
   const level = resolveContentNewFile({ kind: "level", dir: "", name: "Main" });

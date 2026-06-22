@@ -7,12 +7,19 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
+  Vector2,
   type Material,
   type Texture,
 } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
-import type { ForgeMaterialDef, ForgeMaterialSide } from "../assets/material";
+import type {
+  ForgeMaterialDef,
+  ForgeMaterialLayerBlend,
+  ForgeMaterialSide,
+} from "../assets/material";
 import { configureForgeTexture } from "./textureConfig";
+
+type ShaderPatch = Parameters<MeshStandardMaterial["onBeforeCompile"]>[0];
 
 export interface MaterialStats {
   basic: number;
@@ -23,6 +30,14 @@ export interface MaterialStats {
 export interface ForgeMaterialTextureMaps {
   baseColorTexture?: Texture | null;
   normalTexture?: Texture | null;
+  roughnessTexture?: Texture | null;
+  metalnessTexture?: Texture | null;
+  aoTexture?: Texture | null;
+  ormTexture?: Texture | null;
+  layer1BaseColorTexture?: Texture | null;
+  layer1NormalTexture?: Texture | null;
+  layer1RoughnessTexture?: Texture | null;
+  layer1MetalnessTexture?: Texture | null;
 }
 
 export interface ForgeMaterialOptions {
@@ -85,9 +100,252 @@ export function createThreeMaterialFromForgeDef(
       maxAnisotropy: options.maxAnisotropy,
     });
   }
+  if (material instanceof MeshStandardMaterial) {
+    const ormMap = textures.ormTexture
+      ? configureForgeTexture(textures.ormTexture, {
+          srgb: false,
+          repeat: def.uvTiling,
+          maxAnisotropy: options.maxAnisotropy,
+        })
+      : null;
+    if (ormMap) {
+      material.roughnessMap = ormMap;
+      material.metalnessMap = ormMap;
+      material.aoMap = ormMap;
+      material.aoMapIntensity = def.aoIntensity;
+    } else {
+      if (textures.roughnessTexture) {
+        material.roughnessMap = configureForgeTexture(textures.roughnessTexture, {
+          srgb: false,
+          repeat: def.uvTiling,
+          maxAnisotropy: options.maxAnisotropy,
+        });
+      }
+      if (textures.metalnessTexture) {
+        material.metalnessMap = configureForgeTexture(textures.metalnessTexture, {
+          srgb: false,
+          repeat: def.uvTiling,
+          maxAnisotropy: options.maxAnisotropy,
+        });
+      }
+      if (textures.aoTexture) {
+        material.aoMap = configureForgeTexture(textures.aoTexture, {
+          srgb: false,
+          repeat: def.uvTiling,
+          maxAnisotropy: options.maxAnisotropy,
+        });
+        material.aoMapIntensity = def.aoIntensity;
+      }
+    }
+    if (def.layerBlend) {
+      applyLayerBlendMaterial(material, def.layerBlend, textures, options);
+    }
+  }
 
   material.needsUpdate = true;
   return material;
+}
+
+function applyLayerBlendMaterial(
+  material: MeshStandardMaterial,
+  blend: ForgeMaterialLayerBlend,
+  textures: ForgeMaterialTextureMaps,
+  options: ForgeMaterialOptions,
+): void {
+  const layer1 = blend.layer1;
+  const layer1Map = textures.layer1BaseColorTexture
+    ? configureForgeTexture(textures.layer1BaseColorTexture, {
+        srgb: true,
+        repeat: layer1.uvTiling,
+        maxAnisotropy: options.maxAnisotropy,
+      })
+    : null;
+  const layer1NormalMap = textures.normalTexture && textures.layer1NormalTexture
+    ? configureForgeTexture(textures.layer1NormalTexture, {
+        srgb: false,
+        repeat: layer1.uvTiling,
+        maxAnisotropy: options.maxAnisotropy,
+      })
+    : null;
+  const layer1RoughnessMap = textures.layer1RoughnessTexture
+    ? configureForgeTexture(textures.layer1RoughnessTexture, {
+        srgb: false,
+        repeat: layer1.uvTiling,
+        maxAnisotropy: options.maxAnisotropy,
+      })
+    : null;
+  const layer1MetalnessMap = textures.layer1MetalnessTexture
+    ? configureForgeTexture(textures.layer1MetalnessTexture, {
+        srgb: false,
+        repeat: layer1.uvTiling,
+        maxAnisotropy: options.maxAnisotropy,
+      })
+    : null;
+
+  material.defines = {
+    ...(material.defines ?? {}),
+    USE_UV: "",
+    FORGE_LAYER_BLEND: "",
+    ...(layer1Map ? { USE_FORGE_LAYER_MAP: "" } : {}),
+    ...(layer1NormalMap ? { USE_FORGE_LAYER_NORMALMAP: "" } : {}),
+    ...(layer1RoughnessMap ? { USE_FORGE_LAYER_ROUGHNESSMAP: "" } : {}),
+    ...(layer1MetalnessMap ? { USE_FORGE_LAYER_METALNESSMAP: "" } : {}),
+  };
+  material.onBeforeCompile = (shader) => {
+    patchLayerBlendShader(shader, blend, {
+      layer1Map,
+      layer1NormalMap,
+      layer1RoughnessMap,
+      layer1MetalnessMap,
+    });
+  };
+  material.customProgramCacheKey = () =>
+    [
+      "forge-layer-blend-v1",
+      blend.driver,
+      layer1Map ? "bc" : "color",
+      layer1NormalMap ? "n" : "no-n",
+      layer1RoughnessMap ? "r" : "rough",
+      layer1MetalnessMap ? "m" : "metal",
+    ].join(":");
+}
+
+function patchLayerBlendShader(
+  shader: ShaderPatch,
+  blend: ForgeMaterialLayerBlend,
+  maps: {
+    layer1Map: Texture | null;
+    layer1NormalMap: Texture | null;
+    layer1RoughnessMap: Texture | null;
+    layer1MetalnessMap: Texture | null;
+  },
+): void {
+  shader.uniforms.forgeLayerColor = { value: new Color(blend.layer1.baseColor) };
+  shader.uniforms.forgeLayerRoughness = { value: blend.layer1.roughness };
+  shader.uniforms.forgeLayerMetalness = { value: blend.layer1.metalness };
+  shader.uniforms.forgeLayerTiling = {
+    value: new Vector2(blend.layer1.uvTiling.x, blend.layer1.uvTiling.y),
+  };
+  shader.uniforms.forgeLayerAmount = { value: blend.amount };
+  shader.uniforms.forgeLayerMin = { value: blend.min };
+  shader.uniforms.forgeLayerMax = { value: blend.max };
+  shader.uniforms.forgeLayerContrast = { value: blend.contrast };
+  shader.uniforms.forgeLayerDriver = { value: layerBlendDriverIndex(blend.driver) };
+  if (maps.layer1Map) shader.uniforms.forgeLayerMap = { value: maps.layer1Map };
+  if (maps.layer1NormalMap) {
+    shader.uniforms.forgeLayerNormalMap = { value: maps.layer1NormalMap };
+  }
+  if (maps.layer1RoughnessMap) {
+    shader.uniforms.forgeLayerRoughnessMap = { value: maps.layer1RoughnessMap };
+  }
+  if (maps.layer1MetalnessMap) {
+    shader.uniforms.forgeLayerMetalnessMap = { value: maps.layer1MetalnessMap };
+  }
+
+  shader.vertexShader = shader.vertexShader
+    .replace(
+      "#include <common>",
+      `#include <common>
+varying vec3 vForgeLayerWorldPosition;
+varying vec3 vForgeLayerWorldNormal;`,
+    )
+    .replace(
+      "#include <worldpos_vertex>",
+      `#include <worldpos_vertex>
+vec4 forgeLayerWorldPosition = vec4( transformed, 1.0 );
+#ifdef USE_INSTANCING
+  forgeLayerWorldPosition = instanceMatrix * forgeLayerWorldPosition;
+#endif
+forgeLayerWorldPosition = modelMatrix * forgeLayerWorldPosition;
+vForgeLayerWorldPosition = forgeLayerWorldPosition.xyz;
+vec3 forgeLayerWorldNormal = objectNormal;
+#ifdef USE_INSTANCING
+  forgeLayerWorldNormal = mat3( instanceMatrix ) * forgeLayerWorldNormal;
+#endif
+vForgeLayerWorldNormal = normalize( mat3( modelMatrix ) * forgeLayerWorldNormal );`,
+    );
+
+  shader.fragmentShader = shader.fragmentShader
+    .replace(
+      "#include <common>",
+      `#include <common>
+uniform vec3 forgeLayerColor;
+uniform float forgeLayerRoughness;
+uniform float forgeLayerMetalness;
+uniform vec2 forgeLayerTiling;
+uniform float forgeLayerAmount;
+uniform float forgeLayerMin;
+uniform float forgeLayerMax;
+uniform float forgeLayerContrast;
+uniform int forgeLayerDriver;
+varying vec3 vForgeLayerWorldPosition;
+varying vec3 vForgeLayerWorldNormal;
+#ifdef USE_FORGE_LAYER_MAP
+  uniform sampler2D forgeLayerMap;
+#endif
+#ifdef USE_FORGE_LAYER_NORMALMAP
+  uniform sampler2D forgeLayerNormalMap;
+#endif
+#ifdef USE_FORGE_LAYER_ROUGHNESSMAP
+  uniform sampler2D forgeLayerRoughnessMap;
+#endif
+#ifdef USE_FORGE_LAYER_METALNESSMAP
+  uniform sampler2D forgeLayerMetalnessMap;
+#endif
+float forgeLayerBlendFactor() {
+  float value = forgeLayerAmount;
+  if (forgeLayerDriver == 1) {
+    value = smoothstep(forgeLayerMin, forgeLayerMax, clamp(dot(normalize(vForgeLayerWorldNormal), vec3(0.0, 1.0, 0.0)), 0.0, 1.0));
+  } else if (forgeLayerDriver == 2) {
+    value = smoothstep(forgeLayerMin, forgeLayerMax, vForgeLayerWorldPosition.y);
+  }
+  return clamp(pow(clamp(value, 0.0, 1.0), forgeLayerContrast), 0.0, 1.0);
+}`,
+    )
+    .replace(
+      "#include <map_fragment>",
+      `#include <map_fragment>
+float forgeLayerBlend = forgeLayerBlendFactor();
+vec3 forgeLayerDiffuse = forgeLayerColor;
+#ifdef USE_FORGE_LAYER_MAP
+  vec4 forgeLayerSample = texture2D( forgeLayerMap, vUv * forgeLayerTiling );
+  forgeLayerDiffuse *= forgeLayerSample.rgb;
+#endif
+diffuseColor.rgb = mix( diffuseColor.rgb, forgeLayerDiffuse, forgeLayerBlend );`,
+    )
+    .replace(
+      "#include <roughnessmap_fragment>",
+      `#include <roughnessmap_fragment>
+float forgeLayerRoughnessFactor = forgeLayerRoughness;
+#ifdef USE_FORGE_LAYER_ROUGHNESSMAP
+  forgeLayerRoughnessFactor *= texture2D( forgeLayerRoughnessMap, vUv * forgeLayerTiling ).g;
+#endif
+roughnessFactor = mix( roughnessFactor, forgeLayerRoughnessFactor, forgeLayerBlend );`,
+    )
+    .replace(
+      "#include <metalnessmap_fragment>",
+      `#include <metalnessmap_fragment>
+float forgeLayerMetalnessFactor = forgeLayerMetalness;
+#ifdef USE_FORGE_LAYER_METALNESSMAP
+  forgeLayerMetalnessFactor *= texture2D( forgeLayerMetalnessMap, vUv * forgeLayerTiling ).b;
+#endif
+metalnessFactor = mix( metalnessFactor, forgeLayerMetalnessFactor, forgeLayerBlend );`,
+    )
+    .replace(
+      "#include <normal_fragment_maps>",
+      `#include <normal_fragment_maps>
+#if defined( USE_NORMALMAP_TANGENTSPACE ) && defined( USE_FORGE_LAYER_NORMALMAP )
+  vec3 forgeLayerN = texture2D( forgeLayerNormalMap, vUv * forgeLayerTiling ).xyz * 2.0 - 1.0;
+  forgeLayerN.xy *= normalScale;
+  normal = normalize( mix( normal, normalize( tbn * forgeLayerN ), forgeLayerBlend ) );
+#endif`,
+    );
+}
+
+function layerBlendDriverIndex(driver: ForgeMaterialLayerBlend["driver"]): number {
+  if (driver === "slope") return 1;
+  if (driver === "worldHeight") return 2;
+  return 0;
 }
 
 export function collectMaterialStats(models: Map<string, GLTF>): MaterialStats {

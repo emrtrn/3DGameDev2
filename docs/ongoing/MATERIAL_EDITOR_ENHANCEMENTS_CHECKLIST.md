@@ -146,17 +146,17 @@ da kabul edip ORM gibi davransın, yeni kayıt `ormTexture` yazsın).
 
 ### B.4 Checklist
 
-- [ ] Schema: `roughnessTexture` / `metalnessTexture` / `aoTexture` / `ormTexture`
+- [x] Schema: `roughnessTexture` / `metalnessTexture` / `aoTexture` / `ormTexture`
       / `aoIntensity` (+ `defaultForgeMaterialDef`, `normalizeForgeMaterialDef`)
-- [ ] `validateForgeMaterialDef`'e yeni texture ref + `aoIntensity` ekle
+- [x] `validateForgeMaterialDef`'e yeni texture ref + `aoIntensity` ekle
       **(CLAUDE.md save-validator allowlist gotcha — eklenmezse kayıtta düşer)**
-- [ ] `ForgeMaterialTextureMaps`'i genişlet; loader yeni id'leri yükler
-- [ ] `createThreeMaterialFromForgeDef`: `roughnessMap`/`metalnessMap`/`aoMap`
+- [x] `ForgeMaterialTextureMaps`'i genişlet; loader yeni id'leri yükler
+- [x] `createThreeMaterialFromForgeDef`: `roughnessMap`/`metalnessMap`/`aoMap`
       bağla; ORM yolunda aynı texture'ı üç slota ata; linear colorSpace
-- [ ] Material Editor: **Ayrı / Paketli (ORM)** mod seçici + picker'lar +
+- [x] Material Editor: **Ayrı / Paketli (ORM)** mod seçici + picker'lar +
       `aoIntensity`; harita atanınca skaler=1 ipucu
-- [ ] Preview + Thumbnail yeni map'leri gösterir
-- [ ] `engine-tests.ts`: ORM kanal eşleme + ayrı-harita yolu + validator round-trip
+- [x] Preview + Thumbnail yeni map'leri gösterir
+- [x] `engine-tests.ts`: ORM kanal eşleme + ayrı-harita yolu + validator round-trip
 
 **Kabul:** Gri roughness haritası atanan yüzeyde yer yer mat/parlak geçişler
 görünür; ORM dokusu tek atamayla rough+metal+AO'yu sürer.
@@ -261,18 +261,18 @@ onBeforeCompile yolunu seçer.
 
 ### C.7 Checklist
 
-- [ ] Schema: `ForgeMaterialLayer` + `ForgeMaterialLayerBlend` + `def.layerBlend`
+- [x] Schema: `ForgeMaterialLayer` + `ForgeMaterialLayerBlend` + `def.layerBlend`
       (default'lar + normalize)
-- [ ] `validateForgeMaterialDef`: `layerBlend` derin doğrulama (driver enum, texture
+- [x] `validateForgeMaterialDef`: `layerBlend` derin doğrulama (driver enum, texture
       ref'ler, sayı aralıkları) **(allowlist gotcha)**
-- [ ] Runtime: `layerBlend` varsa `onBeforeCompile` + `customProgramCacheKey` ile
+- [x] Runtime: `layerBlend` varsa `onBeforeCompile` + `customProgramCacheKey` ile
       iki-katman harman shader'ı (`constant` + `slope` + `worldHeight` v1)
-- [ ] map/roughness/metalness blend; normal blend (tangent varsa)
-- [ ] Loader: layer1 dokularını yükler; her iki katmana tiling/anisotropy uygular
-- [ ] Material Editor: Layer Blend toggle + Layer 1 slotları + driver paneli + preview
+- [x] map/roughness/metalness blend; normal blend (tangent varsa)
+- [x] Loader: layer1 dokularını yükler; her iki katmana tiling/anisotropy uygular
+- [x] Material Editor: Layer Blend toggle + Layer 1 slotları + driver paneli + preview
 - [ ] `vertexColor` ve `maskTexture` sürücüleri (sonraki kademe)
-- [ ] Thumbnail blend'i temsil eder (constant=0.5 veya sürücü default)
-- [ ] `engine-tests.ts`: layerBlend normalize/validate round-trip; shader cache key
+- [x] Thumbnail blend'i temsil eder (constant=0.5 veya sürücü default)
+- [x] `engine-tests.ts`: layerBlend normalize/validate round-trip; shader cache key
       ayrışması (blend var/yok ayrı program)
 
 **Kabul:** Taş ve kar dokuları tek materyalde; eğim/yükseklik sürücüsüyle dik

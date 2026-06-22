@@ -1,11 +1,8 @@
 import {
   AmbientLight,
-  BackSide,
   Box3,
   Color,
   DirectionalLight,
-  DoubleSide,
-  FrontSide,
   GridHelper,
   Group,
   PerspectiveCamera,
@@ -24,20 +21,32 @@ import { MeshoptDecoder } from "meshoptimizer";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type {
   ForgeMaterialAlphaMode,
+  ForgeMaterialDef,
+  ForgeMaterialLayerBlend,
   ForgeMaterialSide,
   ForgeMaterialType,
   ForgeMaterialUvTiling,
 } from "@engine/assets/material";
-import { configureForgeTexture } from "@engine/render-three/textureConfig";
+import { createThreeMaterialFromForgeDef } from "@engine/render-three/materials";
 
 export interface ThumbnailMaterialPreview {
   materialType: ForgeMaterialType;
   baseColor: string;
   baseColorTextureUrl?: string;
   normalTextureUrl?: string;
+  roughnessTextureUrl?: string;
+  metalnessTextureUrl?: string;
+  aoTextureUrl?: string;
+  ormTextureUrl?: string;
+  layerBlend?: ForgeMaterialLayerBlend | null;
+  layer1BaseColorTextureUrl?: string;
+  layer1NormalTextureUrl?: string;
+  layer1RoughnessTextureUrl?: string;
+  layer1MetalnessTextureUrl?: string;
   uvTiling: ForgeMaterialUvTiling;
   roughness: number;
   metalness: number;
+  aoIntensity: number;
   opacity: number;
   alphaMode: ForgeMaterialAlphaMode;
   alphaTest: number;
@@ -183,52 +192,44 @@ export class ThumbnailRenderer {
   private async createMaterialFromPreview(
     preview: ThumbnailMaterialPreview,
   ): Promise<MeshStandardMaterial | MeshBasicMaterial> {
-    const shared = {
-      color: new Color(preview.baseColor),
-      transparent: preview.alphaMode === "blend" || preview.opacity < 1,
-      opacity: preview.opacity,
-      alphaTest: preview.alphaMode === "mask" ? preview.alphaTest : 0,
-      side: materialSide(preview.side),
-    };
     const material =
-      preview.materialType === "basic"
-        ? new MeshBasicMaterial(shared)
-        : new MeshStandardMaterial({
-            ...shared,
-            roughness: preview.roughness,
-            metalness: preview.metalness,
-            emissive: new Color(preview.emissive),
-            emissiveIntensity: preview.emissiveIntensity,
-          });
-    if (preview.baseColorTextureUrl) {
-      const texture = await this.textureLoader.loadAsync(preview.baseColorTextureUrl);
-      material.map = configureForgeTexture(texture, {
-        srgb: true,
-        repeat: preview.uvTiling,
-        maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(),
-      });
-    }
-    if (preview.normalTextureUrl && material instanceof MeshStandardMaterial) {
-      const texture = await this.textureLoader.loadAsync(preview.normalTextureUrl);
-      material.normalMap = configureForgeTexture(texture, {
-        srgb: false,
-        repeat: preview.uvTiling,
-        maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(),
-      });
-    }
-    material.needsUpdate = true;
+      createThreeMaterialFromForgeDef(
+        thumbnailPreviewToMaterialDef(preview),
+        {
+          baseColorTexture: await this.loadPreviewTexture(preview.baseColorTextureUrl),
+          normalTexture: await this.loadPreviewTexture(preview.normalTextureUrl),
+          roughnessTexture: await this.loadPreviewTexture(preview.roughnessTextureUrl),
+          metalnessTexture: await this.loadPreviewTexture(preview.metalnessTextureUrl),
+          aoTexture: await this.loadPreviewTexture(preview.aoTextureUrl),
+          ormTexture: await this.loadPreviewTexture(preview.ormTextureUrl),
+          layer1BaseColorTexture: await this.loadPreviewTexture(preview.layer1BaseColorTextureUrl),
+          layer1NormalTexture: await this.loadPreviewTexture(preview.layer1NormalTextureUrl),
+          layer1RoughnessTexture: await this.loadPreviewTexture(preview.layer1RoughnessTextureUrl),
+          layer1MetalnessTexture: await this.loadPreviewTexture(preview.layer1MetalnessTextureUrl),
+        },
+        { maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy() },
+      );
     return material;
+  }
+
+  private async loadPreviewTexture(url: string | undefined): Promise<import("three").Texture | null> {
+    return url ? this.textureLoader.loadAsync(url) : null;
   }
 }
 
 function disposeMaterial(material: Material | null): void {
   if (!material) return;
+  const textures = new Set<import("three").Texture>();
   if (material instanceof MeshBasicMaterial || material instanceof MeshStandardMaterial) {
-    material.map?.dispose();
+    if (material.map) textures.add(material.map);
   }
   if (material instanceof MeshStandardMaterial) {
-    material.normalMap?.dispose();
+    if (material.normalMap) textures.add(material.normalMap);
+    if (material.roughnessMap) textures.add(material.roughnessMap);
+    if (material.metalnessMap) textures.add(material.metalnessMap);
+    if (material.aoMap) textures.add(material.aoMap);
   }
+  textures.forEach((texture) => texture.dispose());
   material.dispose();
 }
 
@@ -236,8 +237,30 @@ function materialCacheKey(material: ThumbnailMaterialPreview): string {
   return JSON.stringify(material);
 }
 
-function materialSide(side: ForgeMaterialSide): typeof FrontSide | typeof BackSide | typeof DoubleSide {
-  if (side === "back") return BackSide;
-  if (side === "double") return DoubleSide;
-  return FrontSide;
+function thumbnailPreviewToMaterialDef(preview: ThumbnailMaterialPreview): ForgeMaterialDef {
+  return {
+    schema: 1,
+    type: "material",
+    materialType: preview.materialType,
+    name: "Thumbnail",
+    baseColor: preview.baseColor,
+    baseColorTexture: preview.baseColorTextureUrl ? "__thumbnail-base-color" : null,
+    normalTexture: preview.normalTextureUrl ? "__thumbnail-normal" : null,
+    maskTexture: null,
+    roughnessTexture: preview.roughnessTextureUrl ? "__thumbnail-roughness" : null,
+    metalnessTexture: preview.metalnessTextureUrl ? "__thumbnail-metalness" : null,
+    aoTexture: preview.aoTextureUrl ? "__thumbnail-ao" : null,
+    ormTexture: preview.ormTextureUrl ? "__thumbnail-orm" : null,
+    uvTiling: preview.uvTiling,
+    roughness: preview.roughness,
+    metalness: preview.metalness,
+    aoIntensity: preview.aoIntensity,
+    opacity: preview.opacity,
+    alphaMode: preview.alphaMode,
+    alphaTest: preview.alphaTest,
+    side: preview.side,
+    emissive: preview.emissive,
+    emissiveIntensity: preview.emissiveIntensity,
+    layerBlend: preview.layerBlend ?? null,
+  };
 }

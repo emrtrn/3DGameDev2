@@ -1530,14 +1530,32 @@ export class EditorUi {
     const def = normalizeForgeMaterialDef(await response.json(), materialRecord?.name ?? "Material");
     const baseColorTexturePath = this.texturePathById(def.baseColorTexture);
     const normalTexturePath = this.texturePathById(def.normalTexture);
+    const roughnessTexturePath = this.texturePathById(def.roughnessTexture);
+    const metalnessTexturePath = this.texturePathById(def.metalnessTexture);
+    const aoTexturePath = this.texturePathById(def.aoTexture);
+    const ormTexturePath = this.texturePathById(def.ormTexture);
+    const layer1BaseColorTexturePath = this.texturePathById(def.layerBlend?.layer1.baseColorTexture ?? null);
+    const layer1NormalTexturePath = this.texturePathById(def.layerBlend?.layer1.normalTexture ?? null);
+    const layer1RoughnessTexturePath = this.texturePathById(def.layerBlend?.layer1.roughnessTexture ?? null);
+    const layer1MetalnessTexturePath = this.texturePathById(def.layerBlend?.layer1.metalnessTexture ?? null);
     return {
       materialType: def.materialType,
       baseColor: def.baseColor,
       ...(baseColorTexturePath ? { baseColorTextureUrl: projectFileUrl(baseColorTexturePath) } : {}),
       ...(normalTexturePath ? { normalTextureUrl: projectFileUrl(normalTexturePath) } : {}),
+      ...(roughnessTexturePath ? { roughnessTextureUrl: projectFileUrl(roughnessTexturePath) } : {}),
+      ...(metalnessTexturePath ? { metalnessTextureUrl: projectFileUrl(metalnessTexturePath) } : {}),
+      ...(aoTexturePath ? { aoTextureUrl: projectFileUrl(aoTexturePath) } : {}),
+      ...(ormTexturePath ? { ormTextureUrl: projectFileUrl(ormTexturePath) } : {}),
+      ...(def.layerBlend ? { layerBlend: def.layerBlend } : {}),
+      ...(layer1BaseColorTexturePath ? { layer1BaseColorTextureUrl: projectFileUrl(layer1BaseColorTexturePath) } : {}),
+      ...(layer1NormalTexturePath ? { layer1NormalTextureUrl: projectFileUrl(layer1NormalTexturePath) } : {}),
+      ...(layer1RoughnessTexturePath ? { layer1RoughnessTextureUrl: projectFileUrl(layer1RoughnessTexturePath) } : {}),
+      ...(layer1MetalnessTexturePath ? { layer1MetalnessTextureUrl: projectFileUrl(layer1MetalnessTexturePath) } : {}),
       uvTiling: def.uvTiling,
       roughness: def.roughness,
       metalness: def.metalness,
+      aoIntensity: def.aoIntensity,
       opacity: def.opacity,
       alphaMode: def.alphaMode,
       alphaTest: def.alphaTest,

@@ -33,6 +33,7 @@ import {
   defaultForgeMaterialDef,
   isForgeMaterialPreset,
   isForgeMaterialAlphaMode,
+  isForgeMaterialLayerBlendDriver,
   isForgeMaterialSide,
   isForgeMaterialType,
   type ForgeMaterialPreset,
@@ -1511,6 +1512,45 @@ function validateUvTiling(value: unknown, label: string): Record<string, number>
   };
 }
 
+function validateForgeMaterialLayer(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  return {
+    baseColor: validateColorHex(input.baseColor ?? "#ffffff", `${label}.baseColor`),
+    baseColorTexture: validateTextureRef(input.baseColorTexture, `${label}.baseColorTexture`),
+    normalTexture: validateTextureRef(input.normalTexture, `${label}.normalTexture`),
+    roughnessTexture: validateTextureRef(input.roughnessTexture, `${label}.roughnessTexture`),
+    metalnessTexture: validateTextureRef(input.metalnessTexture, `${label}.metalnessTexture`),
+    roughness: validateOptionalNumber(input.roughness, `${label}.roughness`, 0, 1) ?? 0.8,
+    metalness: validateOptionalNumber(input.metalness, `${label}.metalness`, 0, 1) ?? 0,
+    uvTiling: validateUvTiling(input.uvTiling, `${label}.uvTiling`),
+  };
+}
+
+function validateForgeMaterialLayerBlend(value: unknown): Record<string, unknown> | null {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("material.layerBlend must be an object or null");
+  }
+  const input = value as Record<string, unknown>;
+  if (!isForgeMaterialLayerBlendDriver(input.driver)) {
+    throw new Error("material.layerBlend.driver must be constant, slope, or worldHeight");
+  }
+  const min = validateOptionalNumber(input.min, "material.layerBlend.min", -100000, 100000) ?? 0;
+  const max = validateOptionalNumber(input.max, "material.layerBlend.max", -100000, 100000) ?? 1;
+  if (min > max) throw new Error("material.layerBlend.min must be <= max");
+  return {
+    layer1: validateForgeMaterialLayer(input.layer1, "material.layerBlend.layer1"),
+    driver: input.driver,
+    amount: validateOptionalNumber(input.amount, "material.layerBlend.amount", 0, 1) ?? 0.5,
+    min,
+    max,
+    contrast: validateOptionalNumber(input.contrast, "material.layerBlend.contrast", 0.01, 8) ?? 1,
+  };
+}
+
 export function validateForgeMaterialDef(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("material def must be an object");
@@ -1541,6 +1581,8 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
   if (!isForgeMaterialSide(side)) {
     throw new Error("material.side must be front, back, or double");
   }
+  const maskTexture = validateTextureRef(input.maskTexture, "material.maskTexture");
+  const ormTexture = validateTextureRef(input.ormTexture, "material.ormTexture") ?? maskTexture;
 
   return {
     schema: 1,
@@ -1550,10 +1592,15 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     baseColor: validateColorHex(input.baseColor ?? "#ffffff", "material.baseColor"),
     baseColorTexture: validateTextureRef(input.baseColorTexture, "material.baseColorTexture"),
     normalTexture: validateTextureRef(input.normalTexture, "material.normalTexture"),
-    maskTexture: validateTextureRef(input.maskTexture, "material.maskTexture"),
+    maskTexture,
+    roughnessTexture: validateTextureRef(input.roughnessTexture, "material.roughnessTexture"),
+    metalnessTexture: validateTextureRef(input.metalnessTexture, "material.metalnessTexture"),
+    aoTexture: validateTextureRef(input.aoTexture, "material.aoTexture"),
+    ormTexture,
     uvTiling: validateUvTiling(input.uvTiling, "material.uvTiling"),
     roughness: validateOptionalNumber(input.roughness, "material.roughness", 0, 1) ?? 0.8,
     metalness: validateOptionalNumber(input.metalness, "material.metalness", 0, 1) ?? 0,
+    aoIntensity: validateOptionalNumber(input.aoIntensity, "material.aoIntensity", 0, 1) ?? 1,
     opacity: opacity ?? 1,
     alphaMode,
     alphaTest: validateOptionalNumber(input.alphaTest, "material.alphaTest", 0, 1) ?? 0.5,
@@ -1561,6 +1608,7 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     emissive: validateColorHex(input.emissive ?? "#000000", "material.emissive"),
     emissiveIntensity:
       validateOptionalNumber(input.emissiveIntensity, "material.emissiveIntensity", 0, 20) ?? 0,
+    layerBlend: validateForgeMaterialLayerBlend(input.layerBlend),
   };
 }
 
