@@ -11,8 +11,8 @@
  * mode's {@link PawnDefinition.pawnClassRef} Actor Script at the Player Start (see
  * `RuntimeSceneApp.applyPlayerStartSpawn`). Built-in modes are unaffected.
  */
-import { TpsCharacterSession } from "./tpsCharacterGameMode";
-import type { GameModeDefinition } from "./types";
+import { TpsCharacterSession, TPS_PLAYER_CONTROLLER } from "./tpsCharacterGameMode";
+import type { GameModeDefinition, PlayerControllerDefinition } from "./types";
 
 /** Resolved config for a project Game Mode, sourced from its Actor Script class. */
 export interface ProjectGameModeConfig {
@@ -31,6 +31,10 @@ export interface ProjectGameModeConfig {
  * `defaultPawnClassRef` (absent means the mode only possesses an authored player).
  */
 export function createProjectGameMode(config: ProjectGameModeConfig): GameModeDefinition {
+  const playerController: PlayerControllerDefinition = {
+    ...TPS_PLAYER_CONTROLLER,
+    id: `${config.classRef}#controller`,
+  };
   return {
     id: config.classRef,
     displayName: config.displayName,
@@ -40,11 +44,7 @@ export function createProjectGameMode(config: ProjectGameModeConfig): GameModeDe
       kind: "character",
       ...(config.defaultPawnClassRef ? { pawnClassRef: config.defaultPawnClassRef } : {}),
     },
-    playerController: {
-      id: `${config.classRef}#controller`,
-      inputActions: ["move-forward", "move-back", "move-left", "move-right", "jump", "sprint"],
-      possess: "first-input-move-character",
-    },
-    createSession: (context) => new TpsCharacterSession(context),
+    playerController,
+    createSession: (context) => new TpsCharacterSession(context, playerController),
   };
 }

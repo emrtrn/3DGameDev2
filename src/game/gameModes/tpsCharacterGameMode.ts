@@ -32,17 +32,14 @@ import {
   desiredSpringArmCameraPose,
   stepSpringArmCameraPose,
 } from "@/game/springArmCamera";
-import {
-  applyConfiguredMouseLook,
-  DEFAULT_LOOK_AXIS_RATE,
-  lookAnglesFromForward,
-  type LookAngles,
-} from "./cameraControl";
+import { RuntimePlayerController } from "@/game/playerController";
+import { DEFAULT_LOOK_AXIS_RATE, lookAnglesFromForward } from "./cameraControl";
 import type {
   GameModeContext,
   GameModeDefinition,
   GameModeSession,
   GameState,
+  PlayerControllerDefinition,
   PlayerState,
   RuntimeCharacterRef,
 } from "./types";
@@ -85,29 +82,33 @@ export function resolvePlayerCharacter(
  * only in which default pawn the runtime spawns.
  */
 export class TpsCharacterSession implements GameModeSession {
-  readonly playerState: PlayerState = { pawnEntityId: null, possessed: false };
+  readonly playerState: PlayerState;
   readonly gameState: GameState = { elapsedSeconds: 0 };
+  private readonly controller: RuntimePlayerController;
   private player: RuntimeCharacterRef | null = null;
   private animator: CrossfadeAnimator | null = null;
   private followPose: FollowCameraPose | null = null;
-  private controlRotation: LookAngles = INITIAL_CONTROL_ROTATION;
   private activeCameraSource: "follow config" | "spring arm component" = "follow config";
 
-  constructor(private readonly context: GameModeContext) {}
+  constructor(
+    private readonly context: GameModeContext,
+    controllerDefinition: PlayerControllerDefinition = TPS_PLAYER_CONTROLLER,
+  ) {
+    this.controller = new RuntimePlayerController(controllerDefinition, context, {
+      initialControlRotation: INITIAL_CONTROL_ROTATION,
+    });
+    this.playerState = this.controller.playerState;
+  }
 
   spawnDefaultPawn(): void {
     this.player = resolvePlayerCharacter(this.context.characters) ?? null;
-    this.playerState.pawnEntityId = this.player?.entityId ?? null;
+    this.controller.setPawn(this.player?.entityId ?? null);
   }
 
   possess(): void {
     const player = this.player;
     if (!player) return;
-    this.playerState.possessed = true;
-    const controller = tpsCharacterGameMode.playerController;
-    this.context.setInputMode(controller.inputMode ?? "game");
-    this.context.setMouseCursorVisible(controller.mouseCursor !== "hide");
-    this.context.setPointerLookMode(controller.pointerLookMode ?? "pointer-lock");
+    this.controller.possess(player.entityId);
     // The player gets the full clip set, crossfaded by movement state; snap to
     // the authored idle clip so it never flashes a bind pose.
     const animator = new CrossfadeAnimator(player.object, player.gltf.animations);
@@ -127,29 +128,11 @@ export class TpsCharacterSession implements GameModeSession {
   }
 
   beforeEngineUpdate(deltaSeconds: number): void {
-    if (this.context.getInputMode() === "ui") return;
-    const delta = this.context.consumeLookDelta();
-    const axisRate =
-      tpsCharacterGameMode.playerController.lookAxisRate ?? DEFAULT_LOOK_AXIS_RATE;
-    const axisDt = Number.isFinite(deltaSeconds) && deltaSeconds > 0 ? deltaSeconds : 0;
-    const axisDx = this.context.actions.axis("look-x") * axisRate * axisDt;
-    const axisDy = this.context.actions.axis("look-y") * axisRate * axisDt;
-    const dx = delta.dx + axisDx;
-    const dy = delta.dy + axisDy;
-    if (dx === 0 && dy === 0) return;
-    this.controlRotation = applyConfiguredMouseLook(
-      this.controlRotation,
-      dx,
-      dy,
-      {
-        sensitivity: tpsCharacterGameMode.playerController.lookSensitivity,
-        invertY: tpsCharacterGameMode.playerController.invertLookY,
-      },
-    );
+    this.controller.updateControlRotation(deltaSeconds);
   }
 
   controlYawForEntity(entityId: string): number | null {
-    return this.player?.entityId === entityId ? this.controlRotation.yaw : null;
+    return this.controller.controlYawForEntity(entityId);
   }
 
   getCameraDebug(): {
@@ -157,17 +140,16 @@ export class TpsCharacterSession implements GameModeSession {
     readonly controlPitchDeg: number | null;
     readonly cameraSource: string | null;
   } {
+    const controlRotation = this.controller.getControlRotation();
     return {
-      controlYawDeg: this.controlRotation.yaw * RAD_TO_DEG,
-      controlPitchDeg: this.controlRotation.pitch * RAD_TO_DEG,
+      controlYawDeg: controlRotation.yaw * RAD_TO_DEG,
+      controlPitchDeg: controlRotation.pitch * RAD_TO_DEG,
       cameraSource: this.activeCameraSource,
     };
   }
 
   dispose(): void {
-    this.context.setInputMode("ui");
-    this.context.setMouseCursorVisible(true);
-    this.context.setPointerLookMode("right-drag");
+    this.controller.unpossess();
     // The animator's mixer is owned by the AnimationSubsystem (disposed by the
     // EngineApp); nothing extra to release here.
   }
@@ -181,7 +163,7 @@ export class TpsCharacterSession implements GameModeSession {
       const desired = desiredSpringArmCameraPose({
         playerPosition: pos,
         springArm: authored.springArm,
-        controlRotation: this.controlRotation,
+        controlRotation: this.controller.getControlRotation(),
         blockers: this.context.staticBlockerAabbs(),
       });
       const t = authored.springArm.enableCameraLag
@@ -237,6 +219,27 @@ export class TpsCharacterSession implements GameModeSession {
   }
 }
 
+export const TPS_PLAYER_CONTROLLER: PlayerControllerDefinition = {
+  id: "forge.tpsController",
+  inputActions: [
+    "move-forward",
+    "move-back",
+    "move-left",
+    "move-right",
+    "jump",
+    "sprint",
+    "look-x",
+    "look-y",
+  ],
+  inputMode: "game",
+  pointerLookMode: "pointer-lock",
+  mouseCursor: "hide",
+  lookSensitivity: 0.003,
+  lookAxisRate: DEFAULT_LOOK_AXIS_RATE,
+  invertLookY: false,
+  possess: "first-input-move-character",
+};
+
 export const tpsCharacterGameMode: GameModeDefinition = {
   id: "forge.tpsCharacter",
   displayName: "TPS Character",
@@ -251,25 +254,6 @@ export const tpsCharacterGameMode: GameModeDefinition = {
     characterScale: 0.3,
     movement: { speed: 3, sprintMultiplier: 2 },
   },
-  playerController: {
-    id: "forge.tpsController",
-    inputActions: [
-      "move-forward",
-      "move-back",
-      "move-left",
-      "move-right",
-      "jump",
-      "sprint",
-      "look-x",
-      "look-y",
-    ],
-    inputMode: "game",
-    pointerLookMode: "pointer-lock",
-    mouseCursor: "hide",
-    lookSensitivity: 0.003,
-    lookAxisRate: DEFAULT_LOOK_AXIS_RATE,
-    invertLookY: false,
-    possess: "first-input-move-character",
-  },
-  createSession: (context) => new TpsCharacterSession(context),
+  playerController: TPS_PLAYER_CONTROLLER,
+  createSession: (context) => new TpsCharacterSession(context, TPS_PLAYER_CONTROLLER),
 };

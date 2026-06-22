@@ -203,11 +203,11 @@ Durum: `[ ]` yapilmadi, `[~]` devam ediyor, `[x]` tamam.
 
 ### Faz 9 - PlayerController terfisi ve kamera yonetimi
 
-- [ ] Stateful runtime `PlayerController`: control rotation + mapping context +
+- [x] Stateful runtime `PlayerController`: control rotation + mapping context +
       input mode + possess/unpossess sahibi.
 - [ ] PlayerCameraManager benzeri view target + kameralar arasi blend.
 - [ ] Sprint'te FOV blend / camera shake gibi gameplay kamera efektleri.
-- [ ] `docs/UNREAL_BASICS_LESSONS.md` progress log + kanonik dosya listesi
+- [x] `docs/UNREAL_BASICS_LESSONS.md` progress log + kanonik dosya listesi
       guncel kalsin.
 
 ---
@@ -228,12 +228,15 @@ Durum: `[ ]` yapilmadi, `[~]` devam ediyor, `[x]` tamam.
 ## Ilgili Dosyalar
 
 - `public/assets/starter-content/Script/Player.actor.json` - SpringArm + Camera authored.
-- `engine/scene/components.ts` - `readSpringArmComponent` / `readCameraComponent` (su an cagrilmiyor).
-- `src/game/gameModes/tpsCharacterGameMode.ts` - sabit follow camera; control rotation buraya gelecek.
-- `src/game/followCamera.ts` - mevcut takip matematigi (donmeyen).
-- `src/game/gameModes/cameraControl.ts` - `applyMouseLook`, `forwardFromLookAngles`, `cameraPlanarPan` (yeniden kullanilacak).
-- `src/game/characterMovementSystem.ts` - kamera-relative hareket buraya baglanacak.
-- `src/game/gameModes/types.ts` - `consumeLookDelta`, `PlayerControllerDefinition`.
+- `engine/scene/components.ts` - `readSpringArmComponent` / `readCameraComponent`.
+- `src/game/playerController.ts` - runtime `PlayerController`: control rotation, input policy, possess/unpossess.
+- `src/game/gameModes/tpsCharacterGameMode.ts` - TPS possession, spring arm camera ve locomotion bridge.
+- `src/game/gameModes/defaultCameraGameMode.ts` - live camera pawn + runtime controller kullanimi.
+- `src/game/gameModes/projectGameMode.ts` - project GameMode'un TPS controller varsayilanlarini devralmasi.
+- `src/game/followCamera.ts` - fallback takip kamera matematigi.
+- `src/game/gameModes/cameraControl.ts` - `applyMouseLook`, `forwardFromLookAngles`, `cameraPlanarPan`.
+- `src/game/characterMovementSystem.ts` - kamera-relative hareket ve orient-to-control.
+- `src/game/gameModes/types.ts` - `consumeLookDelta`, `PlayerControllerDefinition`, `GameModeSession`.
 - `src/scene/RuntimeSceneApp.ts` - `pointerLook` -> `consumeLookDelta` baglantisi.
 </content>
 </invoke>

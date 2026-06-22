@@ -304,6 +304,23 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-22* - **Player Controller Faz 9 - Stateful runtime PlayerController
+  (tamam).** `docs/PLAYER_CONTROLLER_CHECKLIST.md` Faz 9'un ilk maddesi kapandi.
+  Yeni `src/game/playerController.ts` DOM'suz runtime controller katmani oldu:
+  `PlayerControllerDefinition` + `GameModeContext` uzerinden input mode,
+  pointer-look mode, cursor policy, possess/unpossess state ve controller-owned
+  `controlRotation` yonetiliyor. `TpsCharacterSession` artik control yaw/pitch'i
+  kendi alaninda tutmuyor; `RuntimePlayerController` kullaniyor ve
+  `controlYawForEntity`/debug readout'u oradan okuyor. Default camera mode da live
+  camera pawn possession'ini ayni controller ile yapiyor (`pawnEntityId: null`,
+  `possessed: true`). Project GameMode, TPS session'ini yeniden kullanirken
+  `TPS_PLAYER_CONTROLLER` varsayilanlarini kendi controller id'siyle devralir; bu
+  sayede pointer-lock/look-axis davranisi ortuk static TPS referansina bagli
+  kalmadi. **Test:** yeni engine testleri runtime controller possession/input
+  policy ve mapping-context look input davranisini kapsar. **Gate:** `npx.cmd tsc
+  --noEmit` temiz; engine **272** check. **Kalan Faz 9:** PlayerCameraManager
+  benzeri view target/blend ve sprint FOV/camera shake efektleri.
+
 - *2026-06-22* — **Player Character Faz 6 — Runtime debug paneli (tamam → tüm
   checklist kapandı).** `docs/completed/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md`'in son
   açık maddesi kapandı; Faz 0–6 hepsi `[x]`. `?debug` overlay'ine "game mode"

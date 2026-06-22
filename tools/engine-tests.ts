@@ -120,6 +120,7 @@ import {
   forwardFromLookAngles,
   lookAnglesFromForward,
 } from "../src/game/gameModes/cameraControl";
+import { RuntimePlayerController } from "../src/game/playerController";
 import {
   computePlayerStartSpawn,
   createDefaultPlayerCharacter,
@@ -5169,6 +5170,72 @@ check("cameraPlanarPan cancels opposing keys and keeps diagonals at unit speed",
   // Forward+right diagonal is not faster than a straight move.
   const diag = cameraPlanarPan(0, -1, { forward: true, back: false, left: false, right: true }, 4, 0.5);
   assert.ok(Math.abs(Math.hypot(diag.dx, diag.dz) - 2) < 1e-9);
+});
+
+check("runtime PlayerController owns possession and input policy", () => {
+  const { context, inputModes, pointerLookModes, mouseCursorVisible } = makeGameModeContext({});
+  const controller = new RuntimePlayerController(
+    {
+      id: "test.controller",
+      inputActions: ["look-x", "look-y"],
+      inputMode: "game",
+      pointerLookMode: "pointer-lock",
+      mouseCursor: "hide",
+      possess: "first-input-move-character",
+    },
+    context,
+  );
+
+  controller.setPawn("actor:0");
+  assert.deepEqual(controller.playerState, { pawnEntityId: "actor:0", possessed: false });
+  controller.possess();
+  assert.deepEqual(controller.playerState, { pawnEntityId: "actor:0", possessed: true });
+  assert.deepEqual(inputModes, ["game"]);
+  assert.deepEqual(mouseCursorVisible, [false]);
+  assert.deepEqual(pointerLookModes, ["pointer-lock"]);
+
+  controller.unpossess();
+  assert.deepEqual(controller.playerState, { pawnEntityId: null, possessed: false });
+  assert.deepEqual(inputModes, ["game", "ui"]);
+  assert.deepEqual(mouseCursorVisible, [false, true]);
+  assert.deepEqual(pointerLookModes, ["pointer-lock", "right-drag"]);
+});
+
+check("runtime PlayerController updates control rotation from mapped look input only", () => {
+  const actions = new ActionMap(
+    {},
+    {
+      GamepadRightX: "look-x",
+      GamepadRightY: "look-y",
+      IgnoredX: "ignored-x",
+    },
+  );
+  actions.handleAxis("GamepadRightX", 1);
+  actions.handleAxis("GamepadRightY", -1);
+  actions.handleAxis("IgnoredX", 1);
+  actions.advance();
+  const { context } = makeGameModeContext({
+    actions,
+    lookDeltas: [{ dx: 10, dy: 0 }, { dx: 100, dy: 0 }],
+  });
+  const controller = new RuntimePlayerController(
+    {
+      id: "test.look-controller",
+      inputActions: ["look-x", "look-y"],
+      inputMode: "game",
+      lookSensitivity: 0.01,
+      lookAxisRate: 10,
+      possess: "camera-pawn",
+    },
+    context,
+  );
+
+  controller.possess(null);
+  const rotation = controller.updateControlRotation(1);
+  assert.equal(rotation.yaw, -0.2);
+  assert.equal(rotation.pitch, 0.1);
+  context.setInputMode("ui");
+  assert.equal(controller.updateControlRotation(1), rotation);
 });
 
 check("default camera mode never possesses an input-move character", () => {
