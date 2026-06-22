@@ -1312,6 +1312,7 @@ export class StaticMeshEditor {
         this.previewAssetManifest(),
         materialId,
         this.textureLoader,
+        { maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy() },
       );
       this.previewMaterial = material;
       this.modelGroup.traverse((object) => {

@@ -14,6 +14,7 @@ import {
   DoubleSide,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  NoColorSpace,
   Object3D,
   PerspectiveCamera,
   PointLight,
@@ -6508,6 +6509,7 @@ check("material save payload requires a material path and canonical fields", () 
       baseColorTexture: "tex-stone-d",
       normalTexture: null,
       maskTexture: "tex-stone-m",
+      uvTiling: { x: 2, y: 3 },
       roughness: 0.72,
       metalness: 0,
       opacity: 1,
@@ -6528,6 +6530,7 @@ check("material save payload requires a material path and canonical fields", () 
     baseColorTexture: "tex-stone-d",
     normalTexture: null,
     maskTexture: "tex-stone-m",
+    uvTiling: { x: 2, y: 3 },
     roughness: 0.72,
     metalness: 0,
     opacity: 1,
@@ -6561,6 +6564,15 @@ check("material save payload requires a material path and canonical fields", () 
       roughness: 2,
     }),
   );
+  assert.throws(() =>
+    validateForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Bad",
+      uvTiling: { x: 0, y: 1 },
+    }),
+  );
 });
 
 check("starter material assets normalize to the canonical material shape", () => {
@@ -6575,6 +6587,7 @@ check("starter material assets normalize to the canonical material shape", () =>
     assert.ok(material.roughness >= 0 && material.roughness <= 1);
     assert.ok(material.metalness >= 0 && material.metalness <= 1);
     assert.ok(material.opacity >= 0 && material.opacity <= 1);
+    assert.ok(material.uvTiling.x > 0 && material.uvTiling.y > 0);
   }
 });
 
@@ -6620,8 +6633,10 @@ check("forge material mapping creates matching Three material types and fields",
       name: "Textured",
       baseColorTexture: "albedo",
       normalTexture: "normal",
+      uvTiling: { x: 3, y: 4 },
     }),
     { baseColorTexture, normalTexture },
+    { maxAnisotropy: 16 },
   );
   assert.ok(textured instanceof MeshStandardMaterial);
   assert.equal(textured.map, baseColorTexture);
@@ -6629,8 +6644,15 @@ check("forge material mapping creates matching Three material types and fields",
   assert.equal(baseColorTexture.colorSpace, SRGBColorSpace);
   assert.equal(baseColorTexture.wrapS, RepeatWrapping);
   assert.equal(baseColorTexture.wrapT, RepeatWrapping);
+  assert.equal(baseColorTexture.repeat.x, 3);
+  assert.equal(baseColorTexture.repeat.y, 4);
+  assert.equal(baseColorTexture.anisotropy, 8);
+  assert.equal(normalTexture.colorSpace, NoColorSpace);
   assert.equal(normalTexture.wrapS, RepeatWrapping);
   assert.equal(normalTexture.wrapT, RepeatWrapping);
+  assert.equal(normalTexture.repeat.x, 3);
+  assert.equal(normalTexture.repeat.y, 4);
+  assert.equal(normalTexture.anisotropy, 8);
   textured.dispose();
 
   const basic = createThreeMaterialFromForgeDef(
@@ -6734,6 +6756,7 @@ check("content-new resolves to typed stub files and folders", () => {
     baseColorTexture: null,
     normalTexture: null,
     maskTexture: null,
+    uvTiling: { x: 1, y: 1 },
     roughness: 0.8,
     metalness: 0,
     opacity: 1,
@@ -6759,6 +6782,7 @@ check("content-new resolves to typed stub files and folders", () => {
     baseColorTexture: null,
     normalTexture: null,
     maskTexture: null,
+    uvTiling: { x: 1, y: 1 },
     roughness: 0.3,
     metalness: 1,
     opacity: 1,

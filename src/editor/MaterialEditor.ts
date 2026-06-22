@@ -1,16 +1,10 @@
 import {
   AmbientLight,
-  BackSide,
   Color,
   DirectionalLight,
-  DoubleSide,
-  FrontSide,
   GridHelper,
   Mesh,
-  MeshBasicMaterial,
-  MeshStandardMaterial,
   PerspectiveCamera,
-  RepeatWrapping,
   Scene,
   SphereGeometry,
   SRGBColorSpace,
@@ -32,6 +26,7 @@ import {
 } from "@engine/assets/material";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { loadMaterialAsset, saveMaterialAsset } from "@/editor/materialStore";
+import { createThreeMaterialFromForgeDef } from "@engine/render-three/materials";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 type StatusTone = "info" | "success" | "warning" | "error";
@@ -232,6 +227,7 @@ export class MaterialEditor {
         <label class="me-row"><span>Base Texture</span><select data-me-field="baseColorTexture">${this.textureOptions("baseColorTexture")}</select></label>
         <label class="me-row"><span>Normal Texture</span><select data-me-field="normalTexture">${this.textureOptions("normalTexture")}</select></label>
         <label class="me-row"><span>Mask Texture</span><select data-me-field="maskTexture">${this.textureOptions("maskTexture")}</select></label>
+        ${this.uvTilingRow()}
       </div>
       <div class="me-section">
         <div class="me-section-title">Surface</div>
@@ -283,6 +279,18 @@ export class MaterialEditor {
     `;
   }
 
+  private uvTilingRow(): string {
+    return `
+      <label class="me-row">
+        <span>UV Tiling</span>
+        <span class="me-number-pair">
+          <input data-me-field="uvTilingX" type="number" min="0.001" max="100" step="0.1" value="${this.def.uvTiling.x}" title="Texture repeat on U/X" />
+          <input data-me-field="uvTilingY" type="number" min="0.001" max="100" step="0.1" value="${this.def.uvTiling.y}" title="Texture repeat on V/Y" />
+        </span>
+      </label>
+    `;
+  }
+
   private textureOptions(field: "baseColorTexture" | "normalTexture" | "maskTexture"): string {
     const current = this.def[field];
     const textures = this.options.assets?.filter((asset) => asset.assetType === "texture") ?? [];
@@ -308,6 +316,8 @@ export class MaterialEditor {
     else if (field === "baseColorTexture") next.baseColorTexture = input.value || null;
     else if (field === "normalTexture") next.normalTexture = input.value || null;
     else if (field === "maskTexture") next.maskTexture = input.value || null;
+    else if (field === "uvTilingX") next.uvTiling = { ...next.uvTiling, x: numberInput(input.value, 0.001, 100) };
+    else if (field === "uvTilingY") next.uvTiling = { ...next.uvTiling, y: numberInput(input.value, 0.001, 100) };
     else if (field === "roughness") next.roughness = numberInput(input.value, 0, 1);
     else if (field === "metalness") next.metalness = numberInput(input.value, 0, 1);
     else if (field === "opacity") next.opacity = numberInput(input.value, 0, 1);
@@ -342,33 +352,13 @@ export class MaterialEditor {
 
   private async updatePreviewMaterial(): Promise<void> {
     this.disposePreviewMaterial();
-    const shared = {
-      color: new Color(this.def.baseColor),
-      transparent: this.def.alphaMode === "blend" || this.def.opacity < 1,
-      opacity: this.def.opacity,
-      alphaTest: this.def.alphaMode === "mask" ? this.def.alphaTest : 0,
-      side: materialSide(this.def.side),
-    };
-    const material =
-      this.def.materialType === "basic"
-        ? new MeshBasicMaterial(shared)
-        : new MeshStandardMaterial({
-            ...shared,
-            roughness: this.def.roughness,
-            metalness: this.def.metalness,
-            emissive: new Color(this.def.emissive),
-            emissiveIntensity: this.def.emissiveIntensity,
-          });
     const baseMap = await this.loadTexture(this.def.baseColorTexture);
-    if (baseMap) {
-      baseMap.colorSpace = SRGBColorSpace;
-      material.map = baseMap;
-    }
-    if (material instanceof MeshStandardMaterial) {
-      const normalMap = await this.loadTexture(this.def.normalTexture);
-      if (normalMap) material.normalMap = normalMap;
-    }
-    material.needsUpdate = true;
+    const normalMap = await this.loadTexture(this.def.normalTexture);
+    const material = createThreeMaterialFromForgeDef(
+      this.def,
+      { baseColorTexture: baseMap, normalTexture: normalMap },
+      { maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy() },
+    );
     this.previewMaterial = material;
     this.sphere.material = material;
     this.renderPreview();
@@ -379,8 +369,6 @@ export class MaterialEditor {
     const asset = this.options.assets?.find((entry) => entry.id === assetId && entry.assetType === "texture");
     if (!asset) return null;
     const texture = await this.textureLoader.loadAsync(projectFileUrl(asset.path));
-    texture.wrapS = RepeatWrapping;
-    texture.wrapT = RepeatWrapping;
     this.loadedTextures.push(texture);
     return texture;
   }
@@ -448,10 +436,4 @@ function numberInput(value: string, min: number, max: number): number {
   const number = Number(value);
   if (!Number.isFinite(number)) return min;
   return Math.min(Math.max(number, min), max);
-}
-
-function materialSide(side: ForgeMaterialSide): typeof FrontSide | typeof BackSide | typeof DoubleSide {
-  if (side === "back") return BackSide;
-  if (side === "double") return DoubleSide;
-  return FrontSide;
 }

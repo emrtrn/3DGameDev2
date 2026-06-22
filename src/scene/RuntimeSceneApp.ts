@@ -1528,7 +1528,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (pending) return pending;
     const manifest = this.assetManifest;
     if (!manifest) return Promise.resolve(undefined);
-    const load = loadForgeMaterial(manifest, materialId, this.textureLoader)
+    const load = loadForgeMaterial(manifest, materialId, this.textureLoader, {
+      maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(),
+    })
       .then((material) => {
         this.materialCache.set(materialId, material);
         this.materialLoads.delete(materialId);

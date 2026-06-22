@@ -12,7 +12,6 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
-  RepeatWrapping,
   Scene,
   SRGBColorSpace,
   SphereGeometry,
@@ -27,13 +26,16 @@ import type {
   ForgeMaterialAlphaMode,
   ForgeMaterialSide,
   ForgeMaterialType,
+  ForgeMaterialUvTiling,
 } from "@engine/assets/material";
+import { configureForgeTexture } from "@engine/render-three/textureConfig";
 
 export interface ThumbnailMaterialPreview {
   materialType: ForgeMaterialType;
   baseColor: string;
   baseColorTextureUrl?: string;
   normalTextureUrl?: string;
+  uvTiling: ForgeMaterialUvTiling;
   roughness: number;
   metalness: number;
   opacity: number;
@@ -200,16 +202,19 @@ export class ThumbnailRenderer {
           });
     if (preview.baseColorTextureUrl) {
       const texture = await this.textureLoader.loadAsync(preview.baseColorTextureUrl);
-      texture.colorSpace = SRGBColorSpace;
-      texture.wrapS = RepeatWrapping;
-      texture.wrapT = RepeatWrapping;
-      material.map = texture;
+      material.map = configureForgeTexture(texture, {
+        srgb: true,
+        repeat: preview.uvTiling,
+        maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(),
+      });
     }
     if (preview.normalTextureUrl && material instanceof MeshStandardMaterial) {
       const texture = await this.textureLoader.loadAsync(preview.normalTextureUrl);
-      texture.wrapS = RepeatWrapping;
-      texture.wrapT = RepeatWrapping;
-      material.normalMap = texture;
+      material.normalMap = configureForgeTexture(texture, {
+        srgb: false,
+        repeat: preview.uvTiling,
+        maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(),
+      });
     }
     material.needsUpdate = true;
     return material;

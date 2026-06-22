@@ -2304,7 +2304,9 @@ export class SceneApp {
       return pending;
     }
     if (!this.manifest) return Promise.resolve(undefined);
-    const load = loadForgeMaterial(this.manifest, materialId, this.textureLoader)
+    const load = loadForgeMaterial(this.manifest, materialId, this.textureLoader, {
+      maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(),
+    })
       .then((material) => {
         this.materialCache.set(materialId, material);
         this.materialLoads.delete(materialId);

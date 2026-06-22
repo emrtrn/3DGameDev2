@@ -7,13 +7,12 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
-  RepeatWrapping,
-  SRGBColorSpace,
   type Material,
   type Texture,
 } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { ForgeMaterialDef, ForgeMaterialSide } from "../assets/material";
+import { configureForgeTexture } from "./textureConfig";
 
 export interface MaterialStats {
   basic: number;
@@ -24,6 +23,10 @@ export interface MaterialStats {
 export interface ForgeMaterialTextureMaps {
   baseColorTexture?: Texture | null;
   normalTexture?: Texture | null;
+}
+
+export interface ForgeMaterialOptions {
+  maxAnisotropy?: number;
 }
 
 export type ForgeThreeMaterial = MeshStandardMaterial | MeshBasicMaterial;
@@ -46,6 +49,7 @@ export const EMISSIVE_INTENSITY_SCALE = 1000;
 export function createThreeMaterialFromForgeDef(
   def: ForgeMaterialDef,
   textures: ForgeMaterialTextureMaps = {},
+  options: ForgeMaterialOptions = {},
 ): ForgeThreeMaterial {
   const shared = {
     name: def.name,
@@ -68,15 +72,18 @@ export function createThreeMaterialFromForgeDef(
         });
 
   if (textures.baseColorTexture) {
-    textures.baseColorTexture.colorSpace = SRGBColorSpace;
-    textures.baseColorTexture.wrapS = RepeatWrapping;
-    textures.baseColorTexture.wrapT = RepeatWrapping;
-    material.map = textures.baseColorTexture;
+    material.map = configureForgeTexture(textures.baseColorTexture, {
+      srgb: true,
+      repeat: def.uvTiling,
+      maxAnisotropy: options.maxAnisotropy,
+    });
   }
   if (textures.normalTexture && material instanceof MeshStandardMaterial) {
-    textures.normalTexture.wrapS = RepeatWrapping;
-    textures.normalTexture.wrapT = RepeatWrapping;
-    material.normalMap = textures.normalTexture;
+    material.normalMap = configureForgeTexture(textures.normalTexture, {
+      srgb: false,
+      repeat: def.uvTiling,
+      maxAnisotropy: options.maxAnisotropy,
+    });
   }
 
   material.needsUpdate = true;

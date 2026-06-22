@@ -12,6 +12,7 @@ export async function loadForgeMaterial(
   manifest: AssetManifest,
   materialId: string,
   textureLoader = new TextureLoader(),
+  options: { maxAnisotropy?: number } = {},
 ): Promise<ForgeThreeMaterial> {
   const materialRecord = assetRecordById(manifest, materialId);
   if (!materialRecord || assetType(materialRecord) !== "material") {
@@ -22,14 +23,18 @@ export async function loadForgeMaterial(
     throw new Error(`Material asset failed: ${response.status} ${response.statusText}`);
   }
   const def = normalizeForgeMaterialDef(await response.json(), materialRecord.name);
-  return createThreeMaterialFromForgeDef(def, {
-    baseColorTexture: def.baseColorTexture
-      ? await loadTextureByAssetId(manifest, def.baseColorTexture, textureLoader)
-      : null,
-    normalTexture: def.normalTexture
-      ? await loadTextureByAssetId(manifest, def.normalTexture, textureLoader)
-      : null,
-  });
+  return createThreeMaterialFromForgeDef(
+    def,
+    {
+      baseColorTexture: def.baseColorTexture
+        ? await loadTextureByAssetId(manifest, def.baseColorTexture, textureLoader)
+        : null,
+      normalTexture: def.normalTexture
+        ? await loadTextureByAssetId(manifest, def.normalTexture, textureLoader)
+        : null,
+    },
+    options,
+  );
 }
 
 async function loadTextureByAssetId(

@@ -17,6 +17,11 @@ export const FORGE_MATERIAL_PRESETS = [
 ] as const;
 export type ForgeMaterialPreset = (typeof FORGE_MATERIAL_PRESETS)[number];
 
+export interface ForgeMaterialUvTiling {
+  x: number;
+  y: number;
+}
+
 export interface ForgeMaterialDef {
   schema: 1;
   type: "material";
@@ -26,6 +31,7 @@ export interface ForgeMaterialDef {
   baseColorTexture: string | null;
   normalTexture: string | null;
   maskTexture: string | null;
+  uvTiling: ForgeMaterialUvTiling;
   roughness: number;
   metalness: number;
   opacity: number;
@@ -68,6 +74,7 @@ export function defaultForgeMaterialDef(
     baseColorTexture: null,
     normalTexture: null,
     maskTexture: null,
+    uvTiling: { x: 1, y: 1 },
     roughness: 0.8,
     metalness: 0,
     opacity: 1,
@@ -128,6 +135,7 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
     baseColorTexture: textureRefOrNull(input.baseColorTexture),
     normalTexture: textureRefOrNull(input.normalTexture),
     maskTexture: textureRefOrNull(input.maskTexture),
+    uvTiling: uvTilingOr(input.uvTiling, { x: 1, y: 1 }),
     roughness: clamp01(numberOr(input.roughness, 0.8)),
     metalness: clamp01(numberOr(input.metalness, 0)),
     opacity,
@@ -154,4 +162,17 @@ function colorOr(value: unknown, fallback: string): string {
 
 function textureRefOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function uvTilingOr(value: unknown, fallback: ForgeMaterialUvTiling): ForgeMaterialUvTiling {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
+  const input = value as Record<string, unknown>;
+  return {
+    x: clampUvTiling(numberOr(input.x, fallback.x)),
+    y: clampUvTiling(numberOr(input.y, fallback.y)),
+  };
+}
+
+function clampUvTiling(value: number): number {
+  return Math.min(Math.max(value, 0.001), 100);
 }

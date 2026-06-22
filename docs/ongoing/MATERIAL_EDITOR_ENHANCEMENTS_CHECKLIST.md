@@ -81,16 +81,16 @@ Material Editor formuna** küçük alanlar olarak eklenir. Bu, tamamlanmış che
 
 Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 
-- [ ] `engine/render-three/textureConfig.ts` + `configureForgeTexture()` helper'ı
-- [ ] `materials.ts` doku kurulumunu helper'a taşı (kopya kodu kaldır)
-- [ ] `MaterialEditor.ts` preview `loadTexture`'ı helper'a taşı
-- [ ] Anisotropy uygula (clamp'li `getMaxAnisotropy`); runtime + preview
-- [ ] `ForgeMaterialDef.uvTiling?: {x,y}` alanı + `defaultForgeMaterialDef`
-- [ ] `normalizeForgeMaterialDef` `uvTiling` oku/normalize et
-- [ ] `validateForgeMaterialDef`'e `uvTiling` ekle (0'dan büyük, makul üst sınır)
-- [ ] Material Editor formuna **UV Tiling X / Y** sayı kutuları + canlı preview
-- [ ] Thumbnail render'ı tiling/anisotropy ile tutarlı
-- [ ] `engine-tests.ts`: tiling normalize + validator round-trip
+- [x] `engine/render-three/textureConfig.ts` + `configureForgeTexture()` helper'ı
+- [x] `materials.ts` doku kurulumunu helper'a taşı (kopya kodu kaldır)
+- [x] `MaterialEditor.ts` preview `loadTexture`'ı helper'a taşı
+- [x] Anisotropy uygula (clamp'li `getMaxAnisotropy`); runtime + preview
+- [x] `ForgeMaterialDef.uvTiling?: {x,y}` alanı + `defaultForgeMaterialDef`
+- [x] `normalizeForgeMaterialDef` `uvTiling` oku/normalize et
+- [x] `validateForgeMaterialDef`'e `uvTiling` ekle (0'dan büyük, makul üst sınır)
+- [x] Material Editor formuna **UV Tiling X / Y** sayı kutuları + canlı preview
+- [x] Thumbnail render'ı tiling/anisotropy ile tutarlı
+- [x] `engine-tests.ts`: tiling normalize + validator round-trip
 
 **Kabul:** Zemin/yol materyali uzakta gözle görülür netleşir (anisotropy);
 tiling değiştirince preview ve sahne aynı döşemeyi gösterir.

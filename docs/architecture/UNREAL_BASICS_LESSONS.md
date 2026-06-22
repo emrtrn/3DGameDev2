@@ -92,6 +92,13 @@ tutkalı shell'lerde ince kalır.
   `parentMaterial` + yalnizca degisen alanlari tutan `overrides`. Runtime bu
   parent + overrides sonucunu normal Three.js material olarak resolve eder.
 
+- *2026-06-22* — **Material texture kalite karari.** Material Editor hafif/form
+  tabanli kalir; ayri Unreal tarzı Texture Asset Editor kurulmaz. Texture kalite
+  ve UV kontrolu canonical `.material.json` ustunden ilerler: `uvTiling` alanı,
+  ortak `configureForgeTexture()` helper'i, renderer limitine gore clamp'lenen
+  anisotropy, runtime/editor preview/thumbnail icin ayni texture ayari. Takip
+  dokumani: `docs/ongoing/MATERIAL_EDITOR_ENHANCEMENTS_CHECKLIST.md`.
+
 - *2026-06-20* — **Script Communication System kararı.** Forge, Unreal Blueprint
   Communication modelini görsel node VM olarak kopyalamayacak. Actor Script verisi
   iletişim sözleşmesini taşır; behavior mantığı `src/game/` TypeScript kodunda

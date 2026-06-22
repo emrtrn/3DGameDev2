@@ -1499,6 +1499,18 @@ function validateTextureRef(value: unknown, label: string): string | null {
   return value;
 }
 
+function validateUvTiling(value: unknown, label: string): Record<string, number> {
+  if (value === undefined) return { x: 1, y: 1 };
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  return {
+    x: validatePositiveSnap(input.x, `${label}.x`, 100),
+    y: validatePositiveSnap(input.y, `${label}.y`, 100),
+  };
+}
+
 export function validateForgeMaterialDef(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("material def must be an object");
@@ -1539,6 +1551,7 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     baseColorTexture: validateTextureRef(input.baseColorTexture, "material.baseColorTexture"),
     normalTexture: validateTextureRef(input.normalTexture, "material.normalTexture"),
     maskTexture: validateTextureRef(input.maskTexture, "material.maskTexture"),
+    uvTiling: validateUvTiling(input.uvTiling, "material.uvTiling"),
     roughness: validateOptionalNumber(input.roughness, "material.roughness", 0, 1) ?? 0.8,
     metalness: validateOptionalNumber(input.metalness, "material.metalness", 0, 1) ?? 0,
     opacity: opacity ?? 1,

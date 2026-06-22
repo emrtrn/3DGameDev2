@@ -1535,6 +1535,7 @@ export class EditorUi {
       baseColor: def.baseColor,
       ...(baseColorTexturePath ? { baseColorTextureUrl: projectFileUrl(baseColorTexturePath) } : {}),
       ...(normalTexturePath ? { normalTextureUrl: projectFileUrl(normalTexturePath) } : {}),
+      uvTiling: def.uvTiling,
       roughness: def.roughness,
       metalness: def.metalness,
       opacity: def.opacity,
