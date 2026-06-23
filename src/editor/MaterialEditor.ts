@@ -382,10 +382,10 @@ export class MaterialEditor {
 
   private textureColorNumberRow(
     label: string,
-    textureField: "emissiveTexture",
-    colorField: "emissive",
+    textureField: "emissiveTexture" | "layer1EmissiveTexture",
+    colorField: "emissive" | "layer1Emissive",
     color: string,
-    numberField: "emissiveIntensity",
+    numberField: "emissiveIntensity" | "layer1EmissiveIntensity",
     value: number,
     min: number,
     max: number,
@@ -398,19 +398,6 @@ export class MaterialEditor {
           <select data-me-field="${textureField}">${this.textureOptions(textureField)}</select>
           <input data-me-field="${colorField}" type="color" value="${escapeHtml(color)}" title="Color picker" />
           <input data-me-field="${numberField}" type="number" min="${min}" max="${max}" step="${step}" value="${value}" title="Constant value" />
-        </span>
-      </label>
-    `;
-  }
-
-  private unsupportedTextureColorNumberRow(label: string, color: string, value: number): string {
-    return `
-      <label class="me-row is-disabled" title="${label} texture is not implemented in the material schema/render path yet.">
-        <span>${label}</span>
-        <span class="me-input-triple">
-          <select disabled><option>Not implemented</option></select>
-          <input type="color" value="${escapeHtml(color)}" disabled />
-          <input type="number" min="0" max="20" step="0.1" value="${value}" title="Emissive constant intensity" disabled />
         </span>
       </label>
     `;
@@ -449,7 +436,7 @@ export class MaterialEditor {
               ${this.textureNumberRow("Layer R Map", "layer1RoughnessTexture", "layer1Roughness", blend.layer1.roughness, 0, 1, 0.01)}
               ${this.textureNumberRow("Layer M Map", "layer1MetalnessTexture", "layer1Metalness", blend.layer1.metalness, 0, 1, 0.01)}
               ${this.textureNumberRow("Layer O Map", "layer1OpacityTexture", "layer1Opacity", blend.layer1.opacity, 0, 1, 0.01)}
-              ${this.unsupportedTextureColorNumberRow("Layer E Map", "#000000", 0)}
+              ${this.textureColorNumberRow("Layer E Map", "layer1EmissiveTexture", "layer1Emissive", blend.layer1.emissive, "layer1EmissiveIntensity", blend.layer1.emissiveIntensity, 0, 20, 0.1)}
               ${this.unsupportedTextureNumberRow("Layer AO Map", 1)}
               ${this.vector2Row("Layer UV Tiling", "layer1UvTilingX", "layer1UvTilingY", blend.layer1.uvTiling.x, blend.layer1.uvTiling.y)}
             `
@@ -513,6 +500,7 @@ export class MaterialEditor {
       | "layer1RoughnessTexture"
       | "layer1MetalnessTexture"
       | "layer1OpacityTexture"
+      | "layer1EmissiveTexture"
       | "layerBlendMaskTexture",
   ): string {
     const current = isLayerTextureField(field)
@@ -539,6 +527,7 @@ export class MaterialEditor {
     if (field === "layer1RoughnessTexture") return layer1.roughnessTexture;
     if (field === "layer1MetalnessTexture") return layer1.metalnessTexture;
     if (field === "layer1OpacityTexture") return layer1.opacityTexture;
+    if (field === "layer1EmissiveTexture") return layer1.emissiveTexture;
     if (field === "layerBlendMaskTexture") return this.def.layerBlend?.maskTexture ?? null;
     return null;
   }
@@ -603,9 +592,12 @@ export class MaterialEditor {
     else if (field === "layer1RoughnessTexture") next.layer1.roughnessTexture = input.value || null;
     else if (field === "layer1MetalnessTexture") next.layer1.metalnessTexture = input.value || null;
     else if (field === "layer1OpacityTexture") next.layer1.opacityTexture = input.value || null;
+    else if (field === "layer1EmissiveTexture") next.layer1.emissiveTexture = input.value || null;
     else if (field === "layer1Roughness") next.layer1.roughness = numberInput(input.value, 0, 1);
     else if (field === "layer1Metalness") next.layer1.metalness = numberInput(input.value, 0, 1);
     else if (field === "layer1Opacity") next.layer1.opacity = numberInput(input.value, 0, 1);
+    else if (field === "layer1Emissive") next.layer1.emissive = input.value;
+    else if (field === "layer1EmissiveIntensity") next.layer1.emissiveIntensity = numberInput(input.value, 0, 20);
     else if (field === "layer1UvTilingX") next.layer1.uvTiling = { ...next.layer1.uvTiling, x: numberInput(input.value, 0.001, 100) };
     else if (field === "layer1UvTilingY") next.layer1.uvTiling = { ...next.layer1.uvTiling, y: numberInput(input.value, 0.001, 100) };
     else if (field === "layerBlendDriver") next.driver = input.value as ForgeMaterialLayerBlendDriver;
@@ -678,6 +670,7 @@ export class MaterialEditor {
       const layer1RoughnessMap = await this.loadTexture(this.def.layerBlend?.layer1.roughnessTexture ?? null, loadedTextures);
       const layer1MetalnessMap = await this.loadTexture(this.def.layerBlend?.layer1.metalnessTexture ?? null, loadedTextures);
       const layer1OpacityMap = await this.loadTexture(this.def.layerBlend?.layer1.opacityTexture ?? null, loadedTextures);
+      const layer1EmissiveMap = await this.loadTexture(this.def.layerBlend?.layer1.emissiveTexture ?? null, loadedTextures);
       const layerBlendMaskMap = await this.loadTexture(this.def.layerBlend?.maskTexture ?? null, loadedTextures);
       const material = createThreeMaterialFromForgeDef(
         this.def,
@@ -695,6 +688,7 @@ export class MaterialEditor {
           layer1RoughnessTexture: layer1RoughnessMap,
           layer1MetalnessTexture: layer1MetalnessMap,
           layer1OpacityTexture: layer1OpacityMap,
+          layer1EmissiveTexture: layer1EmissiveMap,
           layerBlendMaskTexture: layerBlendMaskMap,
         },
         { maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy() },
@@ -808,9 +802,12 @@ function defaultLayerBlend(current: ForgeMaterialLayerBlend | null): ForgeMateri
       roughnessTexture: current?.layer1.roughnessTexture ?? null,
       metalnessTexture: current?.layer1.metalnessTexture ?? null,
       opacityTexture: current?.layer1.opacityTexture ?? null,
+      emissiveTexture: current?.layer1.emissiveTexture ?? null,
       roughness: current?.layer1.roughness ?? 0.8,
       metalness: current?.layer1.metalness ?? 0,
       opacity: current?.layer1.opacity ?? 1,
+      emissive: current?.layer1.emissive ?? "#000000",
+      emissiveIntensity: current?.layer1.emissiveIntensity ?? 0,
       uvTiling: current?.layer1.uvTiling ?? { x: 1, y: 1 },
     },
     driver: current?.driver ?? "constant",
@@ -828,6 +825,7 @@ function isLayerTextureField(field: string): field is
   | "layer1RoughnessTexture"
   | "layer1MetalnessTexture"
   | "layer1OpacityTexture"
+  | "layer1EmissiveTexture"
   | "layerBlendMaskTexture" {
   return field.startsWith("layer1") || field === "layerBlendMaskTexture";
 }

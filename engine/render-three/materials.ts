@@ -41,6 +41,7 @@ export interface ForgeMaterialTextureMaps {
   layer1RoughnessTexture?: Texture | null;
   layer1MetalnessTexture?: Texture | null;
   layer1OpacityTexture?: Texture | null;
+  layer1EmissiveTexture?: Texture | null;
   layerBlendMaskTexture?: Texture | null;
 }
 
@@ -207,6 +208,13 @@ function applyLayerBlendMaterial(
         maxAnisotropy: options.maxAnisotropy,
       })
     : null;
+  const layer1EmissiveMap = textures.layer1EmissiveTexture
+    ? configureForgeTexture(textures.layer1EmissiveTexture, {
+        srgb: true,
+        repeat: layer1.uvTiling,
+        maxAnisotropy: options.maxAnisotropy,
+      })
+    : null;
   const layerBlendMaskMap = textures.layerBlendMaskTexture
     ? configureForgeTexture(textures.layerBlendMaskTexture, {
         srgb: false,
@@ -224,6 +232,7 @@ function applyLayerBlendMaterial(
     ...(layer1RoughnessMap ? { USE_FORGE_LAYER_ROUGHNESSMAP: "" } : {}),
     ...(layer1MetalnessMap ? { USE_FORGE_LAYER_METALNESSMAP: "" } : {}),
     ...(layer1OpacityMap ? { USE_FORGE_LAYER_OPACITYMAP: "" } : {}),
+    ...(layer1EmissiveMap ? { USE_FORGE_LAYER_EMISSIVEMAP: "" } : {}),
     ...(layerBlendMaskMap ? { USE_FORGE_LAYER_MASKMAP: "" } : {}),
   };
   if (layer1.opacity < 1 || layer1OpacityMap) {
@@ -236,6 +245,7 @@ function applyLayerBlendMaterial(
       layer1RoughnessMap,
       layer1MetalnessMap,
       layer1OpacityMap,
+      layer1EmissiveMap,
       layerBlendMaskMap,
     });
   };
@@ -248,6 +258,7 @@ function applyLayerBlendMaterial(
       layer1RoughnessMap ? "r" : "rough",
       layer1MetalnessMap ? "m" : "metal",
       layer1OpacityMap ? "o" : "opacity",
+      layer1EmissiveMap ? "e" : "emissive",
       layerBlendMaskMap ? "mask" : "no-mask",
     ].join(":");
 }
@@ -261,6 +272,7 @@ function patchLayerBlendShader(
     layer1RoughnessMap: Texture | null;
     layer1MetalnessMap: Texture | null;
     layer1OpacityMap: Texture | null;
+    layer1EmissiveMap: Texture | null;
     layerBlendMaskMap: Texture | null;
   },
 ): void {
@@ -268,6 +280,11 @@ function patchLayerBlendShader(
   shader.uniforms.forgeLayerRoughness = { value: blend.layer1.roughness };
   shader.uniforms.forgeLayerMetalness = { value: blend.layer1.metalness };
   shader.uniforms.forgeLayerOpacity = { value: blend.layer1.opacity };
+  shader.uniforms.forgeLayerEmissive = {
+    value: new Color(blend.layer1.emissive).multiplyScalar(
+      blend.layer1.emissiveIntensity * EMISSIVE_INTENSITY_SCALE,
+    ),
+  };
   shader.uniforms.forgeLayerTiling = {
     value: new Vector2(blend.layer1.uvTiling.x, blend.layer1.uvTiling.y),
   };
@@ -288,6 +305,9 @@ function patchLayerBlendShader(
   }
   if (maps.layer1OpacityMap) {
     shader.uniforms.forgeLayerOpacityMap = { value: maps.layer1OpacityMap };
+  }
+  if (maps.layer1EmissiveMap) {
+    shader.uniforms.forgeLayerEmissiveMap = { value: maps.layer1EmissiveMap };
   }
   if (maps.layerBlendMaskMap) {
     shader.uniforms.forgeLayerMaskMap = { value: maps.layerBlendMaskMap };
@@ -330,6 +350,7 @@ uniform vec3 forgeLayerColor;
 uniform float forgeLayerRoughness;
 uniform float forgeLayerMetalness;
 uniform float forgeLayerOpacity;
+uniform vec3 forgeLayerEmissive;
 uniform vec2 forgeLayerTiling;
 uniform float forgeLayerAmount;
 uniform float forgeLayerMin;
@@ -352,6 +373,9 @@ varying vec3 vForgeLayerWorldNormal;
 #endif
 #ifdef USE_FORGE_LAYER_OPACITYMAP
   uniform sampler2D forgeLayerOpacityMap;
+#endif
+#ifdef USE_FORGE_LAYER_EMISSIVEMAP
+  uniform sampler2D forgeLayerEmissiveMap;
 #endif
 ${maskTextureUniform}
 float forgeLayerBlendFactor() {
@@ -403,6 +427,15 @@ float forgeLayerOpacityFactor = forgeLayerOpacity;
   forgeLayerOpacityFactor *= texture2D( forgeLayerOpacityMap, vUv * forgeLayerTiling ).g;
 #endif
 diffuseColor.a = mix( diffuseColor.a, forgeLayerOpacityFactor, forgeLayerBlend );`,
+    )
+    .replace(
+      "#include <emissivemap_fragment>",
+      `#include <emissivemap_fragment>
+vec3 forgeLayerEmissiveRadiance = forgeLayerEmissive;
+#ifdef USE_FORGE_LAYER_EMISSIVEMAP
+  forgeLayerEmissiveRadiance *= texture2D( forgeLayerEmissiveMap, vUv * forgeLayerTiling ).rgb;
+#endif
+totalEmissiveRadiance = mix( totalEmissiveRadiance, forgeLayerEmissiveRadiance, forgeLayerBlend );`,
     )
     .replace(
       "#include <normal_fragment_maps>",
