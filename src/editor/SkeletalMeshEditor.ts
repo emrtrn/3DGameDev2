@@ -41,6 +41,7 @@ import { projectFileUrl } from "@/project/ProjectSystem";
 import {
   ANIMATION_SET_ROLES,
   BLEND_SPACE_TYPES,
+  MONTAGE_SLOTS,
   defaultAssetSkeleton,
   defaultBlendSpaceAxis,
   loadAssetSkeleton,
@@ -49,10 +50,12 @@ import {
   type AnimationSetRole,
   type AssetSkeletonBlendSpaceDef,
   type AssetSkeletonDef,
+  type AssetSkeletonMontageDef,
   type AssetSkeletonSocketDef,
   type BlendSpaceAxisDef,
   type BlendSpaceSampleDef,
   type BlendSpaceType,
+  type MontageSlot,
 } from "@/editor/assetSkeletonStore";
 
 export interface SkeletalMeshEditorOptions {
@@ -170,6 +173,8 @@ export class SkeletalMeshEditor {
   private readonly morphTargets: MorphTargetControl[] = [];
   private boneRoots: BoneNode[] = [];
   private bones: Bone[] = [];
+  /** Every named node in the model — upper-body root candidates (skinned or rigid). */
+  private nodeNames: string[] = [];
   private clips: AnimationClip[] = [];
   private skeleton: AssetSkeletonDef = defaultAssetSkeleton();
 
@@ -178,6 +183,7 @@ export class SkeletalMeshEditor {
   private action: AnimationAction | null = null;
   private selectedClipName = "";
   private selectedBlendSpaceName: string | null = null;
+  private selectedMontageName: string | null = null;
   private blendPreviewActive = false;
   private blendPreviewPhase = 0;
   private readonly blendPreviewParams = { x: 0, y: 0 };
@@ -357,9 +363,15 @@ export class SkeletalMeshEditor {
     this.morphTargets.length = 0;
     const morphTargetsByName = new Map<string, MorphTargetControl>();
     const boneSet = new Set<Bone>();
+    const nodeNames: string[] = [];
+    const seenNodeNames = new Set<string>();
     const stats = emptyStats();
 
     root.traverse((object) => {
+      if (object.name && !seenNodeNames.has(object.name)) {
+        seenNodeNames.add(object.name);
+        nodeNames.push(object.name);
+      }
       if (object instanceof Bone) boneSet.add(object);
       if (!(object instanceof Mesh)) return;
       stats.meshCount += 1;
@@ -398,6 +410,7 @@ export class SkeletalMeshEditor {
     this.stats = stats;
     this.bones = [...boneSet];
     this.boneRoots = buildBoneTree(this.bones);
+    this.nodeNames = nodeNames;
   }
 
   private collectMorphTargets(mesh: Mesh, targets: Map<string, MorphTargetControl>): void {
@@ -665,6 +678,30 @@ export class SkeletalMeshEditor {
         }
       </div>
       <div class="sm-section">
+        <div class="sm-section-title">Upper-Body Root</div>
+        <div class="sm-row">
+          <span>Current</span>
+          <strong>${this.skeleton.upperBodyBone ? escapeHtml(this.skeleton.upperBodyBone) : "(none · full-body)"}</strong>
+        </div>
+        <label class="sm-row">
+          <span>Node</span>
+          <select data-skel-upper-root>${this.upperRootOptions(this.skeleton.upperBodyBone ?? "")}</select>
+        </label>
+        <div class="sm-prim-list">
+          ${
+            this.selectedBone?.name && this.selectedBone.name !== this.skeleton.upperBodyBone
+              ? `<button type="button" class="sm-menu-item" data-skel-upper-root-set>Set “${escapeHtml(this.selectedBone.name)}” as Upper-Body Root</button>`
+              : ""
+          }
+          ${
+            this.skeleton.upperBodyBone
+              ? `<button type="button" class="sm-menu-item" data-skel-upper-root-clear>Clear Upper-Body Root</button>`
+              : ""
+          }
+        </div>
+        <div class="sm-hint">Bones at/under this node blend to <strong>upperBody</strong> montages; the rest keep locomotion.</div>
+      </div>
+      <div class="sm-section">
         <div class="sm-section-title">Sockets <span class="sm-count">${this.skeleton.sockets.length}</span></div>
         <div class="sm-prim-list">
           ${
@@ -792,6 +829,7 @@ export class SkeletalMeshEditor {
         }
       </div>
       ${this.renderBlendSpaceDetails()}
+      ${this.renderMontageDetails()}
     `;
   }
 
@@ -920,6 +958,72 @@ export class SkeletalMeshEditor {
             ? `<div class="sm-hint">Assign clips that exist in this asset to preview the blend.</div>`
             : ""
       }
+    `;
+  }
+
+  private renderMontageDetails(): string {
+    const selected = this.getSelectedMontage();
+    return `
+      <div class="sm-section">
+        <div class="sm-section-title">Montages <span class="sm-count">${this.skeleton.montages.length}</span></div>
+        <div class="sm-prim-list">
+          ${
+            this.clips.length
+              ? `<button type="button" class="sm-menu-item" data-skel-montage-add>Add Montage</button>`
+              : `<div class="sm-empty">Import a clip before authoring a montage.</div>`
+          }
+          ${
+            this.skeleton.montages.length
+              ? this.skeleton.montages.map((montage) => this.renderMontageRow(montage)).join("")
+              : `<div class="sm-empty">No montages authored yet.</div>`
+          }
+        </div>
+        ${selected ? this.renderMontageEditor(selected) : ""}
+        <div class="sm-hint">TPS convention: an <strong>upperBody</strong> montage named “aim” (held) and “fire” (one-shot) auto-bind to RMB/LMB in Play.</div>
+      </div>
+    `;
+  }
+
+  private renderMontageRow(montage: AssetSkeletonMontageDef): string {
+    const isSelected = montage.name === this.selectedMontageName;
+    const clipKnown = this.clips.some((clip) => clip.name === montage.clip);
+    return `
+      <div class="sm-socket-row ${isSelected ? "is-selected" : ""}">
+        <button type="button" class="sm-socket-main" data-skel-montage-select="${escapeHtml(montage.name)}">
+          <strong>${escapeHtml(montage.name)}</strong>
+          <small>${escapeHtml(montage.clip)}${clipKnown ? "" : " (missing)"} · ${montage.slot === "fullBody" ? "Full Body" : "Upper Body"} · ${montage.loop ? "loop" : "one-shot"}</small>
+        </button>
+        <button type="button" class="sm-prim-del" data-skel-montage-delete="${escapeHtml(montage.name)}" title="Delete">✕</button>
+      </div>
+    `;
+  }
+
+  private renderMontageEditor(montage: AssetSkeletonMontageDef): string {
+    return `
+      <div class="sm-section sm-blend-editor">
+        <div class="sm-section-title">Edit “${escapeHtml(montage.name)}”</div>
+        <label class="sm-row"><span>Name</span><input type="text" data-skel-montage-name value="${escapeHtml(montage.name)}" /></label>
+        <label class="sm-row">
+          <span>Clip</span>
+          <select data-skel-montage-clip>${this.blendSampleClipOptions(montage.clip)}</select>
+        </label>
+        <label class="sm-row">
+          <span>Slot</span>
+          <select data-skel-montage-slot>
+            ${MONTAGE_SLOTS.map(
+              (slot) => `<option value="${slot}" ${slot === montage.slot ? "selected" : ""}>${slot === "upperBody" ? "Upper Body" : "Full Body"}</option>`,
+            ).join("")}
+          </select>
+        </label>
+        <label class="sm-row sm-toggle"><input type="checkbox" data-skel-montage-loop ${montage.loop ? "checked" : ""} /><span>Loop while held</span></label>
+        <label class="sm-row"><span>Blend In (s)</span><input type="text" data-skel-montage-blend="in" value="${montage.blendInSeconds}" /></label>
+        <label class="sm-row"><span>Blend Out (s)</span><input type="text" data-skel-montage-blend="out" value="${montage.blendOutSeconds}" /></label>
+        ${
+          montage.slot === "upperBody" && !this.skeleton.upperBodyBone
+            ? `<div class="sm-hint">Set an Upper-Body Root in Skeleton mode, or this montage plays full-body.</div>`
+            : ""
+        }
+      </div>
     `;
   }
 
@@ -1066,7 +1170,17 @@ export class SkeletalMeshEditor {
     this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-morph-reset]")?.addEventListener("click", () => {
       this.resetMorphTargets();
     });
+    this.detailsHost.querySelector<HTMLSelectElement>("[data-skel-upper-root]")?.addEventListener("change", (event) => {
+      this.setUpperBodyBone((event.target as HTMLSelectElement).value || null);
+    });
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-upper-root-set]")?.addEventListener("click", () => {
+      this.setUpperBodyBone(this.selectedBone?.name ?? null);
+    });
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-upper-root-clear]")?.addEventListener("click", () => {
+      this.setUpperBodyBone(null);
+    });
     this.bindBlendSpaceControls();
+    this.bindMontageControls();
   }
 
   private bindBlendSpaceControls(): void {
@@ -1120,6 +1234,35 @@ export class SkeletalMeshEditor {
     this.detailsHost.querySelectorAll<HTMLInputElement>("[data-skel-blend-param]").forEach((input) => {
       input.addEventListener("input", () => {
         this.setBlendPreviewParam(input.dataset.skelBlendParam as "x" | "y", Number(input.value));
+      });
+    });
+  }
+
+  private bindMontageControls(): void {
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-montage-add]")?.addEventListener("click", () => {
+      this.addMontage();
+    });
+    this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-montage-select]").forEach((button) => {
+      button.addEventListener("click", () => this.selectMontage(button.dataset.skelMontageSelect ?? null));
+    });
+    this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-montage-delete]").forEach((button) => {
+      button.addEventListener("click", () => this.deleteMontage(button.dataset.skelMontageDelete ?? ""));
+    });
+    this.detailsHost.querySelector<HTMLInputElement>("[data-skel-montage-name]")?.addEventListener("change", (event) => {
+      this.renameMontage((event.target as HTMLInputElement).value);
+    });
+    this.detailsHost.querySelector<HTMLSelectElement>("[data-skel-montage-clip]")?.addEventListener("change", (event) => {
+      this.setMontageClip((event.target as HTMLSelectElement).value);
+    });
+    this.detailsHost.querySelector<HTMLSelectElement>("[data-skel-montage-slot]")?.addEventListener("change", (event) => {
+      this.setMontageSlot((event.target as HTMLSelectElement).value as MontageSlot);
+    });
+    this.detailsHost.querySelector<HTMLInputElement>("[data-skel-montage-loop]")?.addEventListener("change", (event) => {
+      this.setMontageLoop((event.target as HTMLInputElement).checked);
+    });
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-skel-montage-blend]").forEach((input) => {
+      input.addEventListener("change", () => {
+        this.setMontageBlend(input.dataset.skelMontageBlend as "in" | "out", input.value);
       });
     });
   }
@@ -1391,6 +1534,37 @@ export class SkeletalMeshEditor {
       .join("");
   }
 
+  private upperRootOptions(selected: string): string {
+    const known = !selected || this.nodeNames.includes(selected);
+    const missing =
+      selected && !known
+        ? `<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)} (missing)</option>`
+        : "";
+    const none = `<option value="" ${selected ? "" : "selected"}>None (full-body)</option>`;
+    return (
+      none +
+      missing +
+      this.nodeNames
+        .map(
+          (name) =>
+            `<option value="${escapeHtml(name)}" ${name === selected ? "selected" : ""}>${escapeHtml(name)}</option>`,
+        )
+        .join("")
+    );
+  }
+
+  private setUpperBodyBone(name: string | null): void {
+    const next = name && name.length > 0 ? name : undefined;
+    if (next === this.skeleton.upperBodyBone) return;
+    const skeleton: AssetSkeletonDef = { ...this.skeleton };
+    if (next) skeleton.upperBodyBone = next;
+    else delete skeleton.upperBodyBone;
+    this.skeleton = skeleton;
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus(next ? `Upper-body root set to ${next}.` : "Upper-body root cleared.");
+  }
+
   private setAnimationRole(role: AnimationSetRole, clipName: string): void {
     if (!ANIMATION_SET_ROLES.includes(role)) return;
     const animationSet: Partial<Record<AnimationSetRole, string>> = { ...this.skeleton.animationSet };
@@ -1657,6 +1831,118 @@ export class SkeletalMeshEditor {
     );
     if (weights.length === 0) return "No clips contribute at this parameter.";
     return weights.map((entry) => `${entry.clip} ${Math.round(entry.weight * 100)}%`).join("  ·  ");
+  }
+
+  private getSelectedMontage(): AssetSkeletonMontageDef | null {
+    if (!this.selectedMontageName) return null;
+    return this.skeleton.montages.find((montage) => montage.name === this.selectedMontageName) ?? null;
+  }
+
+  private replaceSelectedMontage(next: AssetSkeletonMontageDef): void {
+    const current = this.selectedMontageName;
+    if (!current) return;
+    this.skeleton = {
+      ...this.skeleton,
+      montages: this.skeleton.montages.map((montage) => (montage.name === current ? next : montage)),
+    };
+    this.selectedMontageName = next.name;
+    this.markDirty();
+  }
+
+  private addMontage(): void {
+    const clip = this.clips[0]?.name ?? "";
+    if (!clip) {
+      this.setStatus("No clips available to drive a montage.", "warning");
+      return;
+    }
+    const taken = new Set(this.skeleton.montages.map((montage) => montage.name));
+    let name = "montage";
+    for (let index = 2; taken.has(name); index += 1) name = `montage_${index}`;
+    const montage: AssetSkeletonMontageDef = {
+      name,
+      clip,
+      slot: "upperBody",
+      loop: false,
+      blendInSeconds: 0.12,
+      blendOutSeconds: 0.2,
+    };
+    this.skeleton = { ...this.skeleton, montages: [...this.skeleton.montages, montage] };
+    this.selectedMontageName = name;
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus(`Added montage ${name}.`);
+  }
+
+  private selectMontage(name: string | null): void {
+    this.selectedMontageName = name;
+    this.renderDetails();
+  }
+
+  private deleteMontage(name: string): void {
+    if (!name) return;
+    this.skeleton = {
+      ...this.skeleton,
+      montages: this.skeleton.montages.filter((montage) => montage.name !== name),
+    };
+    if (this.selectedMontageName === name) this.selectedMontageName = null;
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus(`Deleted montage ${name}.`);
+  }
+
+  private renameMontage(rawName: string): void {
+    const montage = this.getSelectedMontage();
+    if (!montage) return;
+    const name = rawName.trim();
+    const collision = this.skeleton.montages.some((other) => other !== montage && other.name === name);
+    if (!name || collision) {
+      this.setStatus(
+        !name ? "Montage name cannot be empty." : `Montage "${name}" already exists.`,
+        "warning",
+      );
+      this.renderDetails();
+      return;
+    }
+    this.replaceSelectedMontage({ ...montage, name });
+    this.renderDetails();
+  }
+
+  private setMontageClip(clip: string): void {
+    const montage = this.getSelectedMontage();
+    if (!montage || !clip) return;
+    this.replaceSelectedMontage({ ...montage, clip });
+    this.renderDetails();
+  }
+
+  private setMontageSlot(slot: MontageSlot): void {
+    const montage = this.getSelectedMontage();
+    if (!montage || !MONTAGE_SLOTS.includes(slot)) return;
+    this.replaceSelectedMontage({ ...montage, slot });
+    this.renderDetails();
+  }
+
+  private setMontageLoop(loop: boolean): void {
+    const montage = this.getSelectedMontage();
+    if (!montage) return;
+    this.replaceSelectedMontage({ ...montage, loop });
+    this.renderDetails();
+  }
+
+  private setMontageBlend(field: "in" | "out", value: string): void {
+    const montage = this.getSelectedMontage();
+    if (!montage) return;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      this.renderDetails();
+      return;
+    }
+    const clamped = Number(Math.min(Math.max(numeric, 0), 4).toFixed(3));
+    const next =
+      field === "in"
+        ? { ...montage, blendInSeconds: clamped }
+        : { ...montage, blendOutSeconds: clamped };
+    this.replaceSelectedMontage(next);
+    this.renderDetails();
   }
 
   private selectClip(name: string, options: { autoplay: boolean; crossfade: boolean }): void {

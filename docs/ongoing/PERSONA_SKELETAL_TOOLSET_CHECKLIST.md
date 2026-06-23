@@ -271,7 +271,7 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [ ] Klip timeline'ında **notify** işaretleri ekle/düzenle (ayak sesi, hasar
       penceresi, efekt tetikleyici)
 - [ ] `notifies[]` sidecar formatı + runtime'da notify yayını (event akışı)
-- [~] **Montage-lite + Upper Body slot (runtime bağlandı; notify + editör authoring pending).**
+- [~] **Montage-lite + Upper Body slot (runtime + editör authoring bağlandı; notify pending).**
       Unreal'in "Slot + Layered Blend Per Bone" mekaniğinin **veri** karşılığı kuruldu
       (node-graph yok). Şema: `*.skeleton.json` `montages[]`
       (`{name, clip, slot:"upperBody"|"fullBody", loop, blendIn/OutSeconds}`) +
@@ -284,9 +284,12 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
       `tpsCharacterGameMode`: `upperBodyBone` varsa layered, yoksa düz CrossfadeAnimator
       (geriye dönük). RMB→aim pozu (üst gövde), LMB→fire montage; **bacaklar yürürken
       üst gövde ateş eder**. Demo `character-a`: `torso` maske kökü, hazır
-      `holding-both`(aim)/`holding-both-shoot`(fire) klipleri. **Pending:** notify
-      yayını, editör authoring (maske kökü Skeleton Tree'den seçimi + montage UI),
-      `fullBody` slot, kemik-başına yumuşak blend (şu an sert ayrım).
+      `holding-both`(aim)/`holding-both-shoot`(fire) klipleri. **Editör authoring
+      tamamlandı** (Adım 2 aşağıda): Skeleton mode'da Upper-Body Root seçimi (tüm
+      named node'lardan, skinned VEYA rigid rig), Animation mode'da Montages bölümü
+      (ad/clip/slot/loop/blendIn/Out CRUD, `fullBody` slot dahil). **Pending:** notify
+      yayını, montage canlı önizleme (opsiyonel), kemik-başına yumuşak blend (şu an
+      sert ayrım).
 - [ ] (opsiyonel) Montage section'ları / basit branching — Animation Composite
       ihtiyacını da büyük ölçüde karşılar
 
@@ -314,32 +317,30 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 
 **Yapılacaklar:**
 
-- [ ] **Upper-Body Root seçimi (Skeleton mode):** `renderSkeletonDetails` "Selected
-      Bone" bölümüne, seçili kemik varken **"Set as Upper-Body Root"** + mevcut değeri
-      gösteren satır + **"Clear"**. `this.skeleton.upperBodyBone` yazar. (Opsiyonel:
-      üst-gövde alt-ağacını bone tree'de/viewport'ta vurgula — `collectSubtreeNodeNames`
-      [`engine/render-three/bodyMask.ts`](../../engine/render-three/bodyMask.ts) yeniden
-      kullanılabilir.)
-- [ ] **Montages bölümü (Animation mode):** `renderAnimationDetails` sonuna Blend Space
-      gibi bir "Montages" section: liste (ad/clip/slot/loop), **Add Montage** (default
-      `{name:"montage", clip: ilk klip, slot:"upperBody", loop:false, blendIn:0.12,
-      blendOut:0.2}`), seç → düzenle (ad text, clip dropdown=`blendSampleClipOptions`
-      benzeri None'suz liste, slot select=`MONTAGE_SLOTS`, loop checkbox, blendIn/Out
-      text), sil. Yinelenen ad / boş clip engelle (validator zaten atar ama UI'da uyar).
-- [ ] **(Opsiyonel) Montage önizleme:** "Play Montage" → editör viewport'unda layered
-      sonucu göster. `LayeredCharacterAnimator`'ı
-      ([`engine/render-three/layeredCharacterAnimator.ts`](../../engine/render-three/layeredCharacterAnimator.ts))
-      editörde kur (root = yüklenen model, clips = `this.clips`, upperBodyBone =
-      `this.skeleton.upperBodyBone`); `playLocomotion(seçili klip)` + `playMontage`/`setAim`
-      ile önizle, `mixers`'ı render döngüsünde `update`'le. Not: editör şu an tek mixer
-      (`this.mixer`) kullanıyor; layered iki mixer ekler — render loop'ta ikisini de
-      ilerlet. Bu opsiyonel; minimum sürümde önizleme atlanıp sadece authoring yapılır.
-- [ ] **İpucu metni:** game mode konvansiyonu — TPS, `"aim"` (held) ve `"fire"`
-      (one-shot) adlı `upperBody` montage'larını otomatik tanır; UI'da küçük bir hint.
-      (Editör generic kalsın — kuralı zorlama, sadece bilgilendir.)
-- [ ] **Gate:** `npx tsc --noEmit` temiz; mümkünse el ile bir montage ekle→kaydet→
-      `*.skeleton.json`'da görünüyor + Play'de çalışıyor doğrulaması. engine-tests
-      zaten normalize/validate'i kapsıyor (yeni saf mantık yoksa ek test gerekmez).
+- [x] **Upper-Body Root seçimi (Skeleton mode):** `renderSkeletonDetails` içinde ayrı
+      bir **"Upper-Body Root"** section: mevcut değeri gösteren satır + tüm named
+      node'lardan **Node dropdown** (`upperRootOptions`, eksik değeri "(missing)" gösterir)
+      + seçili kemik varken **"Set … as Upper-Body Root"** kısayolu + **"Clear"**.
+      `setUpperBodyBone` `this.skeleton.upperBodyBone`'ı mutate eder. Node listesi
+      `collectModelInfo`'da toplanır (`this.nodeNames`) → **skinned VEYA rigid rig**
+      (Kenney `character-a`'nın `torso`'su gibi Bone olmayan node'lar dahil) çalışır.
+- [x] **Montages bölümü (Animation mode):** `renderMontageDetails` Blend Space desenini
+      taklit eder: liste (ad/clip/slot/loop, eksik clip "(missing)"), **Add Montage**
+      (default `{name:"montage", clip: ilk klip, slot:"upperBody", loop:false,
+      blendIn:0.12, blendOut:0.2}`), seç → düzenle (ad text, clip dropdown=
+      `blendSampleClipOptions` None'suz, slot select=`MONTAGE_SLOTS` `fullBody` dahil,
+      loop checkbox, blendIn/Out text [0,4]'e kırpılır), sil. Yinelenen ad/boş ad UI'da
+      uyarır (validator zaten atar).
+- [ ] **(Opsiyonel) Montage önizleme:** ATLANDI (minimum sürüm). `LayeredCharacterAnimator`'ı
+      editörde kurup iki mixer'ı render loop'ta ilerletmek gerekir; authoring blind
+      yapılıyor (klip, Animation Clips listesinden tek-klip önizlenebilir). İleride eklenebilir.
+- [x] **İpucu metni:** Montages section'ında game mode konvansiyonu hint'i — `upperBody`
+      `"aim"` (held) + `"fire"` (one-shot) RMB/LMB'ye otomatik bağlanır. `upperBody`
+      montage + `upperBodyBone` yokken editörde uyarı. (Editör generic kalır, kural
+      zorlanmaz.)
+- [x] **Gate:** `npx tsc --noEmit` temiz; `npm run test:engine` 296/296 yeşil. El ile
+      Play doğrulaması (montage ekle→kaydet→runtime) kullanıcıya bırakıldı (dev server
+      gerekir). engine-tests normalize/validate'i zaten kapsıyor (yeni saf mantık yok).
 
 **Gotcha:** Montage `clip` dropdown'ı **None içermemeli** (boş clip save'de reddedilir);
 Blend Space sample'larında çözdüğüm gibi `blendSampleClipOptions` desenini kullan.
