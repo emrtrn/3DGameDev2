@@ -285,6 +285,8 @@ onBeforeCompile yolunu seçer.
       dokusu Three.js `alphaMap` ile uyumlu olarak lineer `.g` kanalından okunur.
 - [x] `Layer E Map` schema/runtime/preview/thumbnail desteği. Layer emissive
       dokusu sRGB okunur; color picker ve Constant intensity ile blend edilir.
+- [x] `Layer AO Map` schema/runtime/preview/thumbnail desteği. Layer AO dokusu
+      lineer okunur; Constant değeri AO intensity olarak uygulanır.
 - [ ] **Deferred bug:** `maskTexture`/Blend Mask atanırken preview/runtime davranışı
       kullanıcı testinde halen beklenen sonucu vermiyor. Shader/schema tarafındaki
       önceki sertleştirmelere rağmen problem çözülmüş sayılmayacak; ayrı oturumda
@@ -315,8 +317,6 @@ aynı render eder (regresyon yok).
 - Triplanar projeksiyon (UV'siz dünya-uzayı doku).
 - Texture import ayarları sidecar'ı (sRGB/linear, wrap, filter override) —
   gerekirse, yine ayrı editör değil.
-- Layer AO map slotunun gerçek schema + renderer desteği. Details UI bu alanı
-  şimdilik pasif `Not implemented` olarak gösterir; sahte kayıt alanı yazmaz.
 - Normal `Constant3Vector` authoring. Details UI şimdilik alanı pasif gösterir;
   normal map yoksa mevcut mesh normal yolu korunur.
 

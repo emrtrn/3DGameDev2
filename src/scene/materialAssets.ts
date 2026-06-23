@@ -68,6 +68,9 @@ export async function loadForgeMaterial(
       layer1EmissiveTexture: def.layerBlend?.layer1.emissiveTexture
         ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.emissiveTexture, textureLoader)
         : null,
+      layer1AoTexture: def.layerBlend?.layer1.aoTexture
+        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.aoTexture, textureLoader)
+        : null,
       layerBlendMaskTexture: def.layerBlend?.maskTexture
         ? await loadTextureByAssetId(manifest, def.layerBlend.maskTexture, textureLoader)
         : null,

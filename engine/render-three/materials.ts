@@ -42,6 +42,7 @@ export interface ForgeMaterialTextureMaps {
   layer1MetalnessTexture?: Texture | null;
   layer1OpacityTexture?: Texture | null;
   layer1EmissiveTexture?: Texture | null;
+  layer1AoTexture?: Texture | null;
   layerBlendMaskTexture?: Texture | null;
 }
 
@@ -215,6 +216,13 @@ function applyLayerBlendMaterial(
         maxAnisotropy: options.maxAnisotropy,
       })
     : null;
+  const layer1AoMap = textures.layer1AoTexture
+    ? configureForgeTexture(textures.layer1AoTexture, {
+        srgb: false,
+        repeat: layer1.uvTiling,
+        maxAnisotropy: options.maxAnisotropy,
+      })
+    : null;
   const layerBlendMaskMap = textures.layerBlendMaskTexture
     ? configureForgeTexture(textures.layerBlendMaskTexture, {
         srgb: false,
@@ -233,6 +241,7 @@ function applyLayerBlendMaterial(
     ...(layer1MetalnessMap ? { USE_FORGE_LAYER_METALNESSMAP: "" } : {}),
     ...(layer1OpacityMap ? { USE_FORGE_LAYER_OPACITYMAP: "" } : {}),
     ...(layer1EmissiveMap ? { USE_FORGE_LAYER_EMISSIVEMAP: "" } : {}),
+    ...(layer1AoMap ? { USE_FORGE_LAYER_AOMAP: "" } : {}),
     ...(layerBlendMaskMap ? { USE_FORGE_LAYER_MASKMAP: "" } : {}),
   };
   if (layer1.opacity < 1 || layer1OpacityMap) {
@@ -246,6 +255,7 @@ function applyLayerBlendMaterial(
       layer1MetalnessMap,
       layer1OpacityMap,
       layer1EmissiveMap,
+      layer1AoMap,
       layerBlendMaskMap,
     });
   };
@@ -259,6 +269,7 @@ function applyLayerBlendMaterial(
       layer1MetalnessMap ? "m" : "metal",
       layer1OpacityMap ? "o" : "opacity",
       layer1EmissiveMap ? "e" : "emissive",
+      layer1AoMap ? "ao" : "no-ao",
       layerBlendMaskMap ? "mask" : "no-mask",
     ].join(":");
 }
@@ -273,6 +284,7 @@ function patchLayerBlendShader(
     layer1MetalnessMap: Texture | null;
     layer1OpacityMap: Texture | null;
     layer1EmissiveMap: Texture | null;
+    layer1AoMap: Texture | null;
     layerBlendMaskMap: Texture | null;
   },
 ): void {
@@ -280,6 +292,7 @@ function patchLayerBlendShader(
   shader.uniforms.forgeLayerRoughness = { value: blend.layer1.roughness };
   shader.uniforms.forgeLayerMetalness = { value: blend.layer1.metalness };
   shader.uniforms.forgeLayerOpacity = { value: blend.layer1.opacity };
+  shader.uniforms.forgeLayerAoIntensity = { value: blend.layer1.aoIntensity };
   shader.uniforms.forgeLayerEmissive = {
     value: new Color(blend.layer1.emissive).multiplyScalar(
       blend.layer1.emissiveIntensity * EMISSIVE_INTENSITY_SCALE,
@@ -308,6 +321,9 @@ function patchLayerBlendShader(
   }
   if (maps.layer1EmissiveMap) {
     shader.uniforms.forgeLayerEmissiveMap = { value: maps.layer1EmissiveMap };
+  }
+  if (maps.layer1AoMap) {
+    shader.uniforms.forgeLayerAoMap = { value: maps.layer1AoMap };
   }
   if (maps.layerBlendMaskMap) {
     shader.uniforms.forgeLayerMaskMap = { value: maps.layerBlendMaskMap };
@@ -350,6 +366,7 @@ uniform vec3 forgeLayerColor;
 uniform float forgeLayerRoughness;
 uniform float forgeLayerMetalness;
 uniform float forgeLayerOpacity;
+uniform float forgeLayerAoIntensity;
 uniform vec3 forgeLayerEmissive;
 uniform vec2 forgeLayerTiling;
 uniform float forgeLayerAmount;
@@ -376,6 +393,9 @@ varying vec3 vForgeLayerWorldNormal;
 #endif
 #ifdef USE_FORGE_LAYER_EMISSIVEMAP
   uniform sampler2D forgeLayerEmissiveMap;
+#endif
+#ifdef USE_FORGE_LAYER_AOMAP
+  uniform sampler2D forgeLayerAoMap;
 #endif
 ${maskTextureUniform}
 float forgeLayerBlendFactor() {
@@ -436,6 +456,29 @@ vec3 forgeLayerEmissiveRadiance = forgeLayerEmissive;
   forgeLayerEmissiveRadiance *= texture2D( forgeLayerEmissiveMap, vUv * forgeLayerTiling ).rgb;
 #endif
 totalEmissiveRadiance = mix( totalEmissiveRadiance, forgeLayerEmissiveRadiance, forgeLayerBlend );`,
+    )
+    .replace(
+      "#include <aomap_fragment>",
+      `float forgeBaseAmbientOcclusion = 1.0;
+#ifdef USE_AOMAP
+  forgeBaseAmbientOcclusion = ( texture2D( aoMap, vAoMapUv ).r - 1.0 ) * aoMapIntensity + 1.0;
+#endif
+float forgeLayerAmbientOcclusion = 1.0;
+#ifdef USE_FORGE_LAYER_AOMAP
+  forgeLayerAmbientOcclusion = ( texture2D( forgeLayerAoMap, vUv * forgeLayerTiling ).r - 1.0 ) * forgeLayerAoIntensity + 1.0;
+#endif
+float ambientOcclusion = mix( forgeBaseAmbientOcclusion, forgeLayerAmbientOcclusion, forgeLayerBlend );
+reflectedLight.indirectDiffuse *= ambientOcclusion;
+#if defined( USE_CLEARCOAT )
+  clearcoatSpecularIndirect *= ambientOcclusion;
+#endif
+#if defined( USE_SHEEN )
+  sheenSpecularIndirect *= ambientOcclusion;
+#endif
+#if defined( USE_ENVMAP ) && defined( STANDARD )
+  float dotNV = saturate( dot( geometryNormal, geometryViewDir ) );
+  reflectedLight.indirectSpecular *= computeSpecularOcclusion( dotNV, ambientOcclusion, material.roughness );
+#endif`,
     )
     .replace(
       "#include <normal_fragment_maps>",

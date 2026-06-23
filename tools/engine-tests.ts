@@ -6534,11 +6534,13 @@ check("material save payload requires a material path and canonical fields", () 
           metalnessTexture: null,
           opacityTexture: "tex-snow-o",
           emissiveTexture: "tex-snow-e",
+          aoTexture: "tex-snow-ao",
           roughness: 0.9,
           metalness: 0,
           opacity: 0.85,
           emissive: "#203040",
           emissiveIntensity: 1.25,
+          aoIntensity: 0.7,
           uvTiling: { x: 4, y: 4 },
         },
         driver: "slope",
@@ -6585,11 +6587,13 @@ check("material save payload requires a material path and canonical fields", () 
         metalnessTexture: null,
         opacityTexture: "tex-snow-o",
         emissiveTexture: "tex-snow-e",
+        aoTexture: "tex-snow-ao",
         roughness: 0.9,
         metalness: 0,
         opacity: 0.85,
         emissive: "#203040",
         emissiveIntensity: 1.25,
+        aoIntensity: 0.7,
         uvTiling: { x: 4, y: 4 },
       },
       driver: "slope",
@@ -6840,6 +6844,7 @@ check("forge material mapping creates matching Three material types and fields",
   const layer1MetalnessTexture = new Texture();
   const layer1OpacityTexture = new Texture();
   const layer1EmissiveTexture = new Texture();
+  const layer1AoTexture = new Texture();
   const layerBlendMaskTexture = new Texture();
   const layerBlend = createThreeMaterialFromForgeDef(
     normalizeForgeMaterialDef({
@@ -6858,11 +6863,13 @@ check("forge material mapping creates matching Three material types and fields",
           metalnessTexture: "snow-m",
           opacityTexture: "snow-o",
           emissiveTexture: "snow-e",
+          aoTexture: "snow-ao",
           roughness: 0.9,
           metalness: 0.1,
           opacity: 0.55,
           emissive: "#101820",
           emissiveIntensity: 1.5,
+          aoIntensity: 0.65,
           uvTiling: { x: 5, y: 6 },
         },
         driver: "maskTexture",
@@ -6882,6 +6889,7 @@ check("forge material mapping creates matching Three material types and fields",
       layer1MetalnessTexture,
       layer1OpacityTexture,
       layer1EmissiveTexture,
+      layer1AoTexture,
       layerBlendMaskTexture,
     },
     { maxAnisotropy: 16 },
@@ -6893,25 +6901,28 @@ check("forge material mapping creates matching Three material types and fields",
   assert.equal(layerBlend.defines?.USE_FORGE_LAYER_MASKMAP, "");
   assert.equal(layerBlend.defines?.USE_FORGE_LAYER_OPACITYMAP, "");
   assert.equal(layerBlend.defines?.USE_FORGE_LAYER_EMISSIVEMAP, "");
+  assert.equal(layerBlend.defines?.USE_FORGE_LAYER_AOMAP, "");
   assert.equal(layerBlend.transparent, true);
-  assert.match(layerBlend.customProgramCacheKey(), /forge-layer-blend-v1:maskTexture:bc:n:r:m:o:e:mask/);
+  assert.match(layerBlend.customProgramCacheKey(), /forge-layer-blend-v1:maskTexture:bc:n:r:m:o:e:ao:mask/);
   assert.equal(layer1BaseColorTexture.repeat.x, 5);
   assert.equal(layer1BaseColorTexture.repeat.y, 6);
   assert.equal(layer1BaseColorTexture.anisotropy, 8);
   assert.equal(layer1OpacityTexture.colorSpace, NoColorSpace);
   assert.equal(layer1EmissiveTexture.colorSpace, SRGBColorSpace);
+  assert.equal(layer1AoTexture.colorSpace, NoColorSpace);
   assert.equal(layerBlendMaskTexture.colorSpace, NoColorSpace);
   const shader = {
     uniforms: {},
     vertexShader: "#include <common>\nvoid main(){\n#include <worldpos_vertex>\n}",
     fragmentShader:
-      "#include <common>\nvoid main(){\n#include <map_fragment>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>\n#include <alphamap_fragment>\n#include <emissivemap_fragment>\n#include <normal_fragment_maps>\n}",
+      "#include <common>\nvoid main(){\n#include <map_fragment>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>\n#include <alphamap_fragment>\n#include <emissivemap_fragment>\n#include <aomap_fragment>\n#include <normal_fragment_maps>\n}",
   } as Parameters<MeshStandardMaterial["onBeforeCompile"]>[0];
   layerBlend.onBeforeCompile(shader, null!);
   assert.ok("forgeLayerMap" in shader.uniforms);
   assert.ok("forgeLayerNormalMap" in shader.uniforms);
   assert.ok("forgeLayerOpacityMap" in shader.uniforms);
   assert.ok("forgeLayerEmissiveMap" in shader.uniforms);
+  assert.ok("forgeLayerAoMap" in shader.uniforms);
   assert.ok("forgeLayerMaskMap" in shader.uniforms);
   assert.match(shader.vertexShader, /vForgeLayerWorldPosition/);
   assert.match(shader.fragmentShader, /forgeLayerBlendFactor/);
@@ -6921,6 +6932,7 @@ check("forge material mapping creates matching Three material types and fields",
   assert.match(shader.fragmentShader, /metalnessFactor = mix/);
   assert.match(shader.fragmentShader, /diffuseColor\.a = mix/);
   assert.match(shader.fragmentShader, /totalEmissiveRadiance = mix/);
+  assert.match(shader.fragmentShader, /ambientOcclusion = mix/);
   assert.match(shader.fragmentShader, /normalize\( mix\( normal/);
   layerBlend.dispose();
 

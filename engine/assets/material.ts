@@ -39,11 +39,13 @@ export interface ForgeMaterialLayer {
   metalnessTexture: string | null;
   opacityTexture: string | null;
   emissiveTexture: string | null;
+  aoTexture: string | null;
   roughness: number;
   metalness: number;
   opacity: number;
   emissive: string;
   emissiveIntensity: number;
+  aoIntensity: number;
   uvTiling: ForgeMaterialUvTiling;
 }
 
@@ -290,11 +292,13 @@ function layerOr(value: unknown): ForgeMaterialLayer | null {
     metalnessTexture: textureRefOrNull(input.metalnessTexture),
     opacityTexture: textureRefOrNull(input.opacityTexture),
     emissiveTexture: textureRefOrNull(input.emissiveTexture),
+    aoTexture: textureRefOrNull(input.aoTexture),
     roughness: clamp01(numberOr(input.roughness, 0.8)),
     metalness: clamp01(numberOr(input.metalness, 0)),
     opacity: clamp01(numberOr(input.opacity, 1)),
     emissive: colorOr(input.emissive, "#000000"),
     emissiveIntensity: Math.max(0, numberOr(input.emissiveIntensity, 0)),
+    aoIntensity: clamp01(numberOr(input.aoIntensity, 1)),
     uvTiling: uvTilingOr(input.uvTiling, { x: 1, y: 1 }),
   };
 }

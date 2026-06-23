@@ -47,6 +47,7 @@ export interface ThumbnailMaterialPreview {
   layer1MetalnessTextureUrl?: string;
   layer1OpacityTextureUrl?: string;
   layer1EmissiveTextureUrl?: string;
+  layer1AoTextureUrl?: string;
   layerBlendMaskTextureUrl?: string;
   uvTiling: ForgeMaterialUvTiling;
   roughness: number;
@@ -215,6 +216,7 @@ export class ThumbnailRenderer {
           layer1MetalnessTexture: await this.loadPreviewTexture(preview.layer1MetalnessTextureUrl),
           layer1OpacityTexture: await this.loadPreviewTexture(preview.layer1OpacityTextureUrl),
           layer1EmissiveTexture: await this.loadPreviewTexture(preview.layer1EmissiveTextureUrl),
+          layer1AoTexture: await this.loadPreviewTexture(preview.layer1AoTextureUrl),
           layerBlendMaskTexture: await this.loadPreviewTexture(preview.layerBlendMaskTextureUrl),
         },
         { maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy() },

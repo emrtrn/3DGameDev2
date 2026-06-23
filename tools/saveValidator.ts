@@ -1525,12 +1525,14 @@ function validateForgeMaterialLayer(value: unknown, label: string): Record<strin
     metalnessTexture: validateTextureRef(input.metalnessTexture, `${label}.metalnessTexture`),
     opacityTexture: validateTextureRef(input.opacityTexture, `${label}.opacityTexture`),
     emissiveTexture: validateTextureRef(input.emissiveTexture, `${label}.emissiveTexture`),
+    aoTexture: validateTextureRef(input.aoTexture, `${label}.aoTexture`),
     roughness: validateOptionalNumber(input.roughness, `${label}.roughness`, 0, 1) ?? 0.8,
     metalness: validateOptionalNumber(input.metalness, `${label}.metalness`, 0, 1) ?? 0,
     opacity: validateOptionalNumber(input.opacity, `${label}.opacity`, 0, 1) ?? 1,
     emissive: validateColorHex(input.emissive ?? "#000000", `${label}.emissive`),
     emissiveIntensity:
       validateOptionalNumber(input.emissiveIntensity, `${label}.emissiveIntensity`, 0, 20) ?? 0,
+    aoIntensity: validateOptionalNumber(input.aoIntensity, `${label}.aoIntensity`, 0, 1) ?? 1,
     uvTiling: validateUvTiling(input.uvTiling, `${label}.uvTiling`),
   };
 }
