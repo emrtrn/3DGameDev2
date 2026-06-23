@@ -18,9 +18,18 @@
         "max": 6
       },
       "samples": [
-        { "clip": "idle", "x": 0 },
-        { "clip": "walk", "x": 3 },
-        { "clip": "sprint", "x": 6 }
+        {
+          "clip": "idle",
+          "x": 0
+        },
+        {
+          "clip": "walk",
+          "x": 3
+        },
+        {
+          "clip": "sprint",
+          "x": 6
+        }
       ]
     }
   ],
@@ -41,10 +50,18 @@
       "loop": false,
       "blendInSeconds": 0.06,
       "blendOutSeconds": 0.18
+    },
+    {
+      "name": "emote1",
+      "clip": "emote-yes",
+      "slot": "upperBody",
+      "loop": false,
+      "blendInSeconds": 0.12,
+      "blendOutSeconds": 0.2
     }
   ],
-  "upperBodyBone": "torso",
   "preview": {
     "selectedClip": "static"
-  }
+  },
+  "upperBodyBone": "torso"
 }

@@ -140,7 +140,7 @@ import {
   hasPlayerCharacter,
 } from "../src/game/gameModes/playerSpawn";
 import { defaultCameraGameMode } from "../src/game/gameModes/defaultCameraGameMode";
-import { tpsCharacterGameMode } from "../src/game/gameModes/tpsCharacterGameMode";
+import { resolveMontageBindings, tpsCharacterGameMode } from "../src/game/gameModes/tpsCharacterGameMode";
 import type {
   GameModeContext,
   InputMode,
@@ -6883,6 +6883,74 @@ check("skeleton save payload requires a .skeleton.json path and canonical metada
       },
     }),
   );
+  // Montage input triggers round-trip; defaults fill, explicit fields preserved.
+  const triggered = validateSaveSkeletonPayload({
+    path: "assets/characters/Hero.skeleton.json",
+    skeleton: {
+      montages: [
+        { name: "emote1", clip: "wave", slot: "upperBody", trigger: { action: "emote", mode: "press" } },
+        { name: "block", clip: "guard", slot: "upperBody", trigger: { action: "block", mode: "hold" } },
+      ],
+    },
+  });
+  assert.deepEqual(triggered.skeleton.montages, [
+    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2, trigger: { action: "emote", mode: "press" } },
+    { name: "block", clip: "guard", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2, trigger: { action: "block", mode: "hold" } },
+  ]);
+  // A trigger with an empty action or an unknown mode is rejected.
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: { montages: [{ name: "x", clip: "c", trigger: { action: "" } }] },
+    }),
+  );
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: { montages: [{ name: "x", clip: "c", trigger: { action: "emote", mode: "toggle" } }] },
+    }),
+  );
+});
+
+check("asset skeleton montage triggers normalize, defaulting mode and dropping empty actions", () => {
+  const skeleton = normalizeAssetSkeleton({
+    schema: 1,
+    montages: [
+      { name: "emote1", clip: "wave", slot: "upperBody", trigger: { action: "emote", mode: "press" } },
+      { name: "guard", clip: "block", slot: "upperBody", trigger: { action: "block", mode: "weird" } },
+      { name: "noact", clip: "c", slot: "upperBody", trigger: { action: "" } },
+      { name: "notrig", clip: "c2", slot: "upperBody" },
+    ],
+  });
+  assert.equal(skeleton.montages.length, 4);
+  assert.deepEqual(skeleton.montages[0]?.trigger, { action: "emote", mode: "press" });
+  // An unknown mode falls back to "press".
+  assert.deepEqual(skeleton.montages[1]?.trigger, { action: "block", mode: "press" });
+  // An empty action drops the trigger; an absent trigger stays absent.
+  assert.equal(skeleton.montages[2]?.trigger, undefined);
+  assert.equal(skeleton.montages[3]?.trigger, undefined);
+});
+
+check("resolveMontageBindings honors explicit triggers and the aim/fire convention", () => {
+  const bindings = resolveMontageBindings([
+    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.1, blendOutSeconds: 0.2, trigger: { action: "emote", mode: "press" } },
+    // No trigger: aim/fire names map by convention (backward compatibility).
+    { name: "aim", clip: "hold", slot: "upperBody", loop: true, blendInSeconds: 0.18, blendOutSeconds: 0.22 },
+    { name: "fire", clip: "shoot", slot: "upperBody", loop: false, blendInSeconds: 0.06, blendOutSeconds: 0.18 },
+    // No trigger + non-convention name: skipped (code-triggered only).
+    { name: "stagger", clip: "hit", slot: "upperBody", loop: false, blendInSeconds: 0.1, blendOutSeconds: 0.1 },
+    // fullBody montages are not input-bound yet: skipped.
+    { name: "dance", clip: "spin", slot: "fullBody", loop: false, blendInSeconds: 0.1, blendOutSeconds: 0.2, trigger: { action: "dance", mode: "press" } },
+  ]);
+  assert.deepEqual(
+    bindings.map((b) => ({ clip: b.clip, action: b.action, mode: b.mode })),
+    [
+      { clip: "wave", action: "emote", mode: "press" },
+      { clip: "hold", action: "aim", mode: "hold" },
+      { clip: "shoot", action: "fire", mode: "press" },
+    ],
+  );
+  assert.equal(resolveMontageBindings(undefined).length, 0);
 });
 
 check("asset skeleton sidecar normalizes animation metadata", () => {

@@ -290,6 +290,17 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
       (ad/clip/slot/loop/blendIn/Out CRUD, `fullBody` slot dahil). **Pending:** notify
       yayını, montage canlı önizleme (opsiyonel), kemik-başına yumuşak blend (şu an
       sert ayrım).
+- [x] **Montage → input trigger (data-driven).** Montage'a opsiyonel
+      `trigger: {action, mode:"press"|"hold"}` alanı eklendi; editörde Montage editörünün
+      "Input Trigger" bölümünden yazılır. Runtime `tpsCharacterGameMode.resolveMontageBindings`
+      authored trigger'ı (yoksa aim/fire isim konvansiyonunu) çözer; `hold` montage'lar
+      basılıyken üst gövdeyi sahiplenir (ilki kazanır), `press` montage'lar basış anında
+      tek-atış oynar. `action` → tuş eşlemesi `DEFAULT_INPUT_BINDINGS`'te
+      ([RuntimeSceneApp.ts](../../src/scene/RuntimeSceneApp.ts)); jenerik bir `emote`
+      aksiyonu **KeyQ**'ya bağlandı. Şema+validator+normalize allowlist'te, engine-tests
+      kapsıyor. **Kısıt:** trigger'lar şu an yalnız `upperBody` slot + `upperBodyBone`
+      authored karakterlerde çalışır (layered animator); `fullBody`/non-layered runtime
+      pending. Tuş eşlemesi şimdilik kodda (ileride proje verisine taşınabilir).
 - [ ] (opsiyonel) Montage section'ları / basit branching — Animation Composite
       ihtiyacını da büyük ölçüde karşılar
 

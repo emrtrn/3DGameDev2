@@ -32,7 +32,11 @@ import {
   EMPTY_LOCOMOTION_CONFIG,
   type LocomotionAssetConfig,
 } from "@/game/locomotionAnimation";
-import type { AssetSkeletonMontageDef } from "@/scene/assetSkeletonLoader";
+import type {
+  AssetSkeletonMontageDef,
+  MontageTriggerDef,
+  MontageTriggerMode,
+} from "@/scene/assetSkeletonLoader";
 import {
   cameraProjectionFromComponent,
   desiredSpringArmCameraPose,
@@ -75,12 +79,45 @@ const SPRINT_SHAKE_FREQUENCY_HZ = 8;
 /** Crossfade duration (seconds) between locomotion clips. */
 const ANIMATION_CROSSFADE_SECONDS = 0.18;
 
-/** Finds an authored upper-body montage by its gameplay convention name. */
-function findUpperBodyMontage(
+/** An upper-body montage resolved to the input action + mode that triggers it. */
+export interface MontageBinding {
+  readonly clip: string;
+  readonly action: string;
+  readonly mode: MontageTriggerMode;
+  readonly blendInSeconds: number;
+  readonly blendOutSeconds: number;
+}
+
+/**
+ * Resolves authored upper-body montages to input bindings. An explicit
+ * `trigger` wins; otherwise the TPS naming convention applies (a montage named
+ * "aim" holds, one named "fire" presses) so characters authored before the
+ * trigger field keep their behavior. Montages without either are skipped (they
+ * are triggered by game code, not input).
+ */
+export function resolveMontageBindings(
   montages: readonly AssetSkeletonMontageDef[] | undefined,
-  name: string,
-): AssetSkeletonMontageDef | null {
-  return montages?.find((montage) => montage.name === name && montage.slot === "upperBody") ?? null;
+): MontageBinding[] {
+  const bindings: MontageBinding[] = [];
+  for (const montage of montages ?? []) {
+    if (montage.slot !== "upperBody") continue;
+    const trigger = montage.trigger ?? defaultTriggerForName(montage.name);
+    if (!trigger) continue;
+    bindings.push({
+      clip: montage.clip,
+      action: trigger.action,
+      mode: trigger.mode,
+      blendInSeconds: montage.blendInSeconds,
+      blendOutSeconds: montage.blendOutSeconds,
+    });
+  }
+  return bindings;
+}
+
+function defaultTriggerForName(name: string): MontageTriggerDef | null {
+  if (name === "aim") return { action: "aim", mode: "hold" };
+  if (name === "fire") return { action: "fire", mode: "press" };
+  return null;
 }
 
 /** Resolves the explicit player character a TPS session should possess. */
@@ -111,9 +148,9 @@ export class TpsCharacterSession implements GameModeSession {
   private layered: LayeredCharacterAnimator | null = null;
   /** Clip names available on the active animator, for the locomotion selector. */
   private clipNames: ReadonlySet<string> = new Set();
-  /** Authored upper-body montages keyed by gameplay convention name. */
-  private aimMontage: AssetSkeletonMontageDef | null = null;
-  private fireMontage: AssetSkeletonMontageDef | null = null;
+  /** Input-bound upper-body montages, split by trigger mode. */
+  private holdMontages: MontageBinding[] = [];
+  private pressMontages: MontageBinding[] = [];
   /** The player asset's authored locomotion config (blend space + anim-set). */
   private locomotionConfig: LocomotionAssetConfig = EMPTY_LOCOMOTION_CONFIG;
   private followPose: FollowCameraPose | null = null;
@@ -161,8 +198,9 @@ export class TpsCharacterSession implements GameModeSession {
     // Resolve the authored locomotion config (blend space + anim-set) from the
     // character's skeleton sidecar; drives grounded blending and clip selection.
     this.locomotionConfig = locomotionConfigForSkeleton(player.skeleton);
-    this.aimMontage = findUpperBodyMontage(player.skeleton?.montages, "aim");
-    this.fireMontage = findUpperBodyMontage(player.skeleton?.montages, "fire");
+    const bindings = resolveMontageBindings(player.skeleton?.montages);
+    this.holdMontages = bindings.filter((binding) => binding.mode === "hold");
+    this.pressMontages = bindings.filter((binding) => binding.mode === "press");
     // Following the player owns the view; stop the resize handler resetting it.
     this.context.markCameraControlled();
   }
@@ -258,23 +296,31 @@ export class TpsCharacterSession implements GameModeSession {
   }
 
   /**
-   * Drives the upper-body slot from input: hold RMB (`aim`) to layer the aim pose
-   * over locomotion, tap LMB (`fire`) for a one-shot fire montage. Both only run
-   * when a layered animator and the matching montages are authored.
+   * Drives the upper-body slot from authored montage input bindings: `hold`
+   * montages layer a pose over locomotion while their action is held (the first
+   * one wins); `press` montages fire a one-shot on the press tick. Bindings come
+   * from the skeleton sidecar — explicit triggers or the aim/fire convention.
+   * Only runs when a layered animator (an authored upper-body bone) exists.
    */
   private updateUpperBody(deltaSeconds: number): void {
     const layered = this.layered;
     if (!layered) return;
     const gameInput = this.context.getInputMode() !== "ui";
-    if (this.aimMontage) {
-      const aiming = gameInput && this.context.actions.held("aim");
-      layered.setAim(aiming ? this.aimMontage.clip : null, this.aimMontage.blendInSeconds);
+    if (this.holdMontages.length > 0) {
+      const active = gameInput
+        ? this.holdMontages.find((binding) => this.context.actions.held(binding.action)) ?? null
+        : null;
+      layered.setAim(active ? active.clip : null, active?.blendInSeconds ?? 0.18);
     }
-    if (this.fireMontage && gameInput && this.context.actions.pressed("fire")) {
-      layered.playMontage(this.fireMontage.clip, {
-        blendInSeconds: this.fireMontage.blendInSeconds,
-        blendOutSeconds: this.fireMontage.blendOutSeconds,
-      });
+    if (gameInput) {
+      for (const binding of this.pressMontages) {
+        if (this.context.actions.pressed(binding.action)) {
+          layered.playMontage(binding.clip, {
+            blendInSeconds: binding.blendInSeconds,
+            blendOutSeconds: binding.blendOutSeconds,
+          });
+        }
+      }
     }
     layered.update(deltaSeconds);
   }

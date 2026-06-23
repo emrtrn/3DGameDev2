@@ -223,6 +223,7 @@ const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   KeyD: "move-right",
   ArrowRight: "move-right",
   KeyE: "interact",
+  KeyQ: "emote",
   Space: "jump",
   ShiftLeft: "sprint",
   ShiftRight: "sprint",

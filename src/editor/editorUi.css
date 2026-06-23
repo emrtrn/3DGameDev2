@@ -1481,6 +1481,12 @@ body.editor-mode #debug-stats {
   padding: 6px;
 }
 
+/* Animation Clips list: show ~5 rows, scroll the rest. */
+.sm-clip-list {
+  max-height: 184px;
+  overflow-y: auto;
+}
+
 .sm-bone-row,
 .sm-clip-row {
   display: grid;

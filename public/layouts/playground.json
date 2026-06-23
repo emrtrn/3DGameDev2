@@ -188,7 +188,7 @@
   "worldSettings": {
     "staticObjectsCastShadow": true,
     "backgroundColor": "#ffffff",
-    "gameMode": "assets/starter-content/Script/MyGameMode.actor.json"
+    "gameMode": "forge.tpsCharacter"
   },
   "skyAtmosphere": {
     "rayleigh": 1,
@@ -281,5 +281,15 @@
       "parallax": true
     }
   ],
-  "actors": []
+  "actors": [
+    {
+      "classRef": "assets/starter-content/Script/Script_Lamp.actor.json",
+      "position": [
+        -1.05,
+        0.25,
+        0.41
+      ],
+      "rotationYDeg": 0
+    }
+  ]
 }
