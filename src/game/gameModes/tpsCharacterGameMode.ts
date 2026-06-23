@@ -25,8 +25,11 @@ import {
 } from "@/game/followCamera";
 import {
   classifyLocomotion,
-  selectLocomotionClip,
+  locomotionConfigForSkeleton,
+  resolveLocomotionAnimation,
   DEFAULT_LOCOMOTION_THRESHOLDS,
+  EMPTY_LOCOMOTION_CONFIG,
+  type LocomotionAssetConfig,
 } from "@/game/locomotionAnimation";
 import {
   cameraProjectionFromComponent,
@@ -93,6 +96,8 @@ export class TpsCharacterSession implements GameModeSession {
   private readonly controller: RuntimePlayerController;
   private player: RuntimeCharacterRef | null = null;
   private animator: CrossfadeAnimator | null = null;
+  /** The player asset's authored locomotion config (blend space + anim-set). */
+  private locomotionConfig: LocomotionAssetConfig = EMPTY_LOCOMOTION_CONFIG;
   private followPose: FollowCameraPose | null = null;
   private activeCameraSource: "follow config" | "spring arm component" = "follow config";
 
@@ -121,6 +126,9 @@ export class TpsCharacterSession implements GameModeSession {
     animator.play(player.placement.animation ?? "idle", 0);
     this.context.addMixer(animator.mixer);
     this.animator = animator;
+    // Resolve the authored locomotion config (blend space + anim-set) from the
+    // character's skeleton sidecar; drives grounded blending and clip selection.
+    this.locomotionConfig = locomotionConfigForSkeleton(player.skeleton);
     // Following the player owns the view; stop the resize handler resetting it.
     this.context.markCameraControlled();
   }
@@ -200,8 +208,14 @@ export class TpsCharacterSession implements GameModeSession {
     if (!animator) return;
     const report = this.context.getLocomotion(player.entityId);
     if (!report) return;
-    const clip = selectLocomotionClip(report, animator.clips, DEFAULT_LOCOMOTION_THRESHOLDS);
-    if (clip) animator.play(clip, ANIMATION_CROSSFADE_SECONDS);
+    const result = resolveLocomotionAnimation(
+      report,
+      animator.clips,
+      this.locomotionConfig,
+      DEFAULT_LOCOMOTION_THRESHOLDS,
+    );
+    if (result.kind === "blend") animator.playBlend(result.weights);
+    else if (result.clip) animator.play(result.clip, ANIMATION_CROSSFADE_SECONDS);
   }
 
   private updateGameplayCameraEffects(player: RuntimeCharacterRef): void {

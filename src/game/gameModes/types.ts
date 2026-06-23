@@ -15,6 +15,7 @@ import type { LayoutCharacter } from "@engine/scene/layout";
 import type { Entity } from "@engine/scene/entity";
 import type { Aabb3 } from "@/game/collision";
 import type { LocomotionInput } from "@/game/locomotionAnimation";
+import type { AssetSkeletonDef } from "@/scene/assetSkeletonLoader";
 
 export type Vec3 = [number, number, number];
 export type InputMode = "game" | "ui" | "game-and-ui";
@@ -118,6 +119,12 @@ export interface RuntimeCharacterRef {
   readonly parentClass?: "character";
   readonly hasCharacterMovement?: boolean;
   readonly entity?: Entity;
+  /**
+   * Authored skeletal metadata (`*.skeleton.json`) for this character's asset:
+   * blend spaces, sockets, the anim-set role map. Attached by the runtime shell
+   * after the sidecar loads; absent until then (and when no sidecar exists).
+   */
+  skeleton?: AssetSkeletonDef;
 }
 
 /**

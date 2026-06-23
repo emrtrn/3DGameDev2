@@ -10,14 +10,18 @@
   },
   "blendSpaces": [
     {
-      "name": "BlendSpace",
+      "name": "Locomotion",
       "type": "1d",
       "axisX": {
         "name": "Speed",
         "min": 0,
-        "max": 4
+        "max": 6
       },
-      "samples": []
+      "samples": [
+        { "clip": "idle", "x": 0 },
+        { "clip": "walk", "x": 3 },
+        { "clip": "sprint", "x": 6 }
+      ]
     }
   ],
   "notifies": [],

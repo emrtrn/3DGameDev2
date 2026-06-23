@@ -12,6 +12,13 @@
  *      snapping to a T-pose.
  */
 
+import {
+  resolveBlendSpaceWeights,
+  type AnimationSetRole,
+  type AssetSkeletonBlendSpaceDef,
+  type BlendSampleWeight,
+} from "@/scene/assetSkeletonLoader";
+
 /** Per-frame movement snapshot the player behavior reports to the shell. */
 export interface LocomotionInput {
   /** Intended planar speed this tick (units/s), before collision clamping. */
@@ -72,14 +79,37 @@ const CLIP_FALLBACKS: Record<LocomotionState, readonly string[]> = {
 };
 
 /**
- * Resolves a semantic state to a concrete clip name present in `available`,
- * walking the state's fallback chain. As a last resort returns any available
- * clip; returns null only when the asset has no clips at all.
+ * Per-state preference order of *semantic roles* (not clip names). Used to walk
+ * the authored anim-set: a missing run falls back to the authored walk, then
+ * idle; a missing fall to jump, then idle. Asset-agnostic, since the anim-set
+ * maps each role to whatever clip the asset names it.
+ */
+const ROLE_FALLBACKS: Record<LocomotionState, readonly AnimationSetRole[]> = {
+  idle: ["idle"],
+  walk: ["walk", "idle"],
+  run: ["run", "walk", "idle"],
+  jump: ["jump", "idle"],
+  fall: ["fall", "jump", "idle"],
+};
+
+/**
+ * Resolves a semantic state to a concrete clip name present in `available`.
+ * Authored intent wins: when an `animationSet` (role→clip map, from the asset's
+ * `*.skeleton.json`) is supplied, the state's role-fallback chain is consulted
+ * first. Failing that — or with no anim-set — it walks the clip-name vocabulary
+ * heuristic, then returns any available clip; null only when there are none.
  */
 export function resolveLocomotionClip(
   state: LocomotionState,
   available: ReadonlySet<string>,
+  animationSet?: Partial<Record<AnimationSetRole, string>>,
 ): string | null {
+  if (animationSet) {
+    for (const role of ROLE_FALLBACKS[state]) {
+      const clip = animationSet[role];
+      if (clip && available.has(clip)) return clip;
+    }
+  }
   for (const name of CLIP_FALLBACKS[state]) {
     if (available.has(name)) return name;
   }
@@ -94,4 +124,92 @@ export function selectLocomotionClip(
   thresholds?: LocomotionThresholds,
 ): string | null {
   return resolveLocomotionClip(classifyLocomotion(input, thresholds), available);
+}
+
+/**
+ * The runtime locomotion output: either a single clip (the crossfade fallback,
+ * used airborne and when no blend space is authored) or a weighted blend (a
+ * blend space's per-clip weights for the smooth idle↔walk↔run transition).
+ */
+export type LocomotionAnimation =
+  | { readonly kind: "clip"; readonly clip: string | null }
+  | { readonly kind: "blend"; readonly weights: readonly BlendSampleWeight[] };
+
+/**
+ * Picks the blend space that drives ground locomotion from an asset's authored
+ * set: a non-empty 1D space named `Locomotion` (case-insensitive) wins, else the
+ * first non-empty 1D space. Returns null when none qualifies (the caller then
+ * stays on the single-clip selector). 2D spaces are reserved for aim/other axes.
+ */
+export function pickLocomotionBlendSpace(
+  blendSpaces: readonly AssetSkeletonBlendSpaceDef[],
+): AssetSkeletonBlendSpaceDef | null {
+  const oneDimensional = blendSpaces.filter(
+    (blend) => blend.type === "1d" && blend.samples.length > 0,
+  );
+  return (
+    oneDimensional.find((blend) => blend.name.trim().toLowerCase() === "locomotion") ??
+    oneDimensional[0] ??
+    null
+  );
+}
+
+/**
+ * The asset-authored inputs to locomotion resolution, both read from the
+ * character's `*.skeleton.json`: the ground blend space (or null) and the
+ * role→clip anim-set. Built once per possessed character via
+ * {@link locomotionConfigForSkeleton}.
+ */
+export interface LocomotionAssetConfig {
+  readonly blendSpace: AssetSkeletonBlendSpaceDef | null;
+  readonly animationSet: Partial<Record<AnimationSetRole, string>>;
+}
+
+/** Empty config: no blend space, no authored anim-set (clip-name heuristics only). */
+export const EMPTY_LOCOMOTION_CONFIG: LocomotionAssetConfig = { blendSpace: null, animationSet: {} };
+
+/**
+ * Derives the runtime locomotion config from a loaded skeleton sidecar: picks
+ * the ground-locomotion blend space and carries the anim-set. Tolerates a
+ * missing skeleton (asset without a sidecar) by returning the empty config.
+ */
+export function locomotionConfigForSkeleton(
+  skeleton:
+    | {
+        readonly blendSpaces: readonly AssetSkeletonBlendSpaceDef[];
+        readonly animationSet: Partial<Record<AnimationSetRole, string>>;
+      }
+    | null
+    | undefined,
+): LocomotionAssetConfig {
+  if (!skeleton) return EMPTY_LOCOMOTION_CONFIG;
+  return {
+    blendSpace: pickLocomotionBlendSpace(skeleton.blendSpaces),
+    animationSet: skeleton.animationSet,
+  };
+}
+
+/**
+ * Resolves the per-tick locomotion animation. When the entity is grounded and a
+ * locomotion blend space is configured, the planar speed drives its X axis into
+ * per-clip weights (filtered to clips the asset actually carries); if at least
+ * one survives, a weighted blend is returned. Otherwise — airborne, no blend
+ * space, or no resolvable blend clip — it falls back to the single-clip selector,
+ * which honours the authored anim-set before the clip-name heuristic.
+ */
+export function resolveLocomotionAnimation(
+  input: LocomotionInput,
+  available: ReadonlySet<string>,
+  config: LocomotionAssetConfig,
+  thresholds: LocomotionThresholds = DEFAULT_LOCOMOTION_THRESHOLDS,
+): LocomotionAnimation {
+  const state = classifyLocomotion(input, thresholds);
+  const grounded = state === "idle" || state === "walk" || state === "run";
+  if (grounded && config.blendSpace) {
+    const weights = resolveBlendSpaceWeights(config.blendSpace, { x: input.planarSpeed }).filter(
+      (entry) => available.has(entry.clip),
+    );
+    if (weights.length > 0) return { kind: "blend", weights };
+  }
+  return { kind: "clip", clip: resolveLocomotionClip(state, available, config.animationSet) };
 }

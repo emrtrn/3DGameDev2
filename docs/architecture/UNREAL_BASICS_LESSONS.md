@@ -317,6 +317,41 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-23* - **Authored anim-set runtime'a baglandi (clip fallback).** Tek-klip
+  locomotion secicisi artik karakterin authored `animationSet`'ini (rol→klip,
+  `*.skeleton.json`) onurlandiriyor; onceden yalnizca sabit `CLIP_FALLBACKS` klip-ismi
+  sozlugunu kullaniyordu (Kenney "idle/walk/sprint" vokabuleri), keyfi isimli klipleri
+  goremiyordu. `resolveLocomotionClip(state, available, animationSet?)` once `ROLE_FALLBACKS`
+  semantik zinciriyle (run→walk→idle, fall→jump→idle) authored rolu cozer, sonra eski
+  klip-ismi heuristigi, sonra herhangi bir klip — yani anim-set yoksa davranis aynen
+  korunur (geriye donuk uyumlu). Iki sidecar-turevli girdi tek `LocomotionAssetConfig`
+  (blendSpace + animationSet) altinda toplandi; `locomotionConfigForSkeleton(skeleton)`
+  possess'te bir kez kurar; `resolveLocomotionAnimation`'in 3. parametresi blendSpace
+  yerine config oldu. Demo `character-a` anim-set'i jump/fall→"walk" maplediginden artik
+  ziplarken idle yerine walk oynar (authored niyet; istenirse editorde degistirilir).
+  Gate: build temiz, test:engine 294 check (yeni: anim-set override + role-fallback +
+  config builder). Karar: anim-set blend space'ten BAGIMSIZ — grounded'da blend space
+  varsa o kazanir, anim-set yalnizca tek-klip fallback (airborne / blend-yok) yolunu besler.
+- *2026-06-23* - **Blend Space runtime tuketimi - locomotion'a baglandi.** Editorde
+  authoring'i biten blend space artik Play'de locomotion'i suruyor (onceki kayitta
+  "authoring-only" diye ertelenmisti). Engine: `CrossfadeAnimator.playBlend(weights)`
+  — faz-senkron agirlikli oynatma (her klip blend-agirlikli ortak referans sureyle bir
+  dongu tamamlar, walk<->run ayak temasi hizali; yeni katilan klip mevcut faza
+  alinir), tek-klip `play()` ile karsilikli dislayan (biri digerinin action'larini
+  durdurur). Saf `src/game/locomotionAnimation.ts`: `pickLocomotionBlendSpace`
+  (1D, ad "Locomotion" ya da ilk kullanilabilir 1D) + `resolveLocomotionAnimation`
+  (grounded+blend space → agirlik; airborne/blend-space-yok/klip-bulunamaz → tek-klip
+  fallback). `RuntimeSceneApp.loadCharacterSkeletons` sahne yuklenirken `*.skeleton.json`
+  sidecar'larini (deduped) `RuntimeCharacterRef.skeleton`'a iliştirir; possess
+  oncesinde. `tpsCharacterGameMode.updateAnimation` karara gore `playBlend`/`play`.
+  Demo `character-a.skeleton.json` bos "BlendSpace" yerine idle@0/walk@3/sprint@6
+  "Locomotion" (axis 0..6, pawn speed 3 / sprint x2'ye gore) — boylece walk<->sprint
+  artik sicrama yerine harmanlaniyor. Gate: build (tsc + vite) temiz, test:engine 292
+  check (yeni: playBlend mod gecisi + pickLocomotionBlendSpace + resolveLocomotionAnimation).
+  Karar: blend space referansi konvansiyon (ad/ilk-1D) — sidecar'a explicit "locomotion
+  blend space" alani EKLENMEDI; gerekirse sonra. Calismadi: el ile Play dogrulamasi
+  (dev server demo layout'u autosave ettiginden baslatilmadi); davranis unit testlerle
+  kapsandi.
 - *2026-06-23* - **Persona Blend Space (data) - Faz 2 tamam.** Skeletal mesh
   editorune Unreal Blend Space'in *data* karsiligi eklendi (node-graph YOK; karar
   PERSONA_SKELETAL_TOOLSET_CHECKLIST Bolum D'de sabit). Veri modeli + saf

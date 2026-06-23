@@ -99,8 +99,12 @@ import { groundedAt, stepVerticalMotion } from "../src/game/verticalMotion";
 import { resolvePlanarMovement, type Aabb3 } from "../src/game/collision";
 import {
   classifyLocomotion,
+  locomotionConfigForSkeleton,
+  pickLocomotionBlendSpace,
+  resolveLocomotionAnimation,
   resolveLocomotionClip,
   selectLocomotionClip,
+  type LocomotionAssetConfig,
   type LocomotionInput,
 } from "../src/game/locomotionAnimation";
 import { initialInteractionState, stepInteractionTrigger } from "../src/game/interaction";
@@ -4356,6 +4360,52 @@ check("resolveLocomotionClip: walks the fallback chain to an available clip", ()
   assert.equal(resolveLocomotionClip("idle", new Set<string>()), null);
 });
 
+check("resolveLocomotionClip: an authored anim-set overrides the clip-name heuristic", () => {
+  // The asset names its clips arbitrarily; the heuristic vocabulary can't guess them.
+  const available = new Set(["Anim_Stand", "Anim_Stroll", "Anim_Dash"]);
+  const animationSet = { idle: "Anim_Stand", walk: "Anim_Stroll", run: "Anim_Dash" };
+  assert.equal(resolveLocomotionClip("idle", available, animationSet), "Anim_Stand");
+  assert.equal(resolveLocomotionClip("walk", available, animationSet), "Anim_Stroll");
+  assert.equal(resolveLocomotionClip("run", available, animationSet), "Anim_Dash");
+  // Roles with no authored clip walk the role-fallback chain: run->walk->idle,
+  // fall->jump->idle. Here jump/fall are unauthored, so both degrade to idle's clip.
+  assert.equal(resolveLocomotionClip("jump", available, animationSet), "Anim_Stand");
+  assert.equal(resolveLocomotionClip("fall", available, animationSet), "Anim_Stand");
+  // A missing run with an authored walk falls back to the authored walk clip.
+  assert.equal(
+    resolveLocomotionClip("run", new Set(["Anim_Stand", "Anim_Stroll"]), {
+      idle: "Anim_Stand",
+      walk: "Anim_Stroll",
+    }),
+    "Anim_Stroll",
+  );
+  // A stale authored clip (absent from the asset) is skipped for the name heuristic.
+  assert.equal(resolveLocomotionClip("idle", new Set(["idle"]), { idle: "Gone" }), "idle");
+});
+
+check("locomotionConfigForSkeleton: derives blend space + anim-set, tolerates no sidecar", () => {
+  const empty = locomotionConfigForSkeleton(null);
+  assert.equal(empty.blendSpace, null);
+  assert.deepEqual(empty.animationSet, {});
+
+  const config = locomotionConfigForSkeleton({
+    animationSet: { idle: "idle", walk: "walk" },
+    blendSpaces: [
+      {
+        name: "Locomotion",
+        type: "1d",
+        axisX: { name: "Speed", min: 0, max: 4 },
+        samples: [
+          { clip: "idle", x: 0 },
+          { clip: "walk", x: 4 },
+        ],
+      },
+    ],
+  });
+  assert.equal(config.blendSpace?.name, "Locomotion");
+  assert.deepEqual(config.animationSet, { idle: "idle", walk: "walk" });
+});
+
 check("selectLocomotionClip: composes classify + resolve end to end", () => {
   const clips = new Set(["idle", "walk", "sprint"]);
   assert.equal(selectLocomotionClip(ground(0), clips), "idle");
@@ -4377,6 +4427,127 @@ check("CrossfadeAnimator: exposes its clips and tracks the current clip on play"
   assert.equal(animator.currentClip, "walk");
   animator.play("missing"); // unknown clip is a no-op
   assert.equal(animator.currentClip, "walk");
+});
+
+check("CrossfadeAnimator: playBlend enters blend mode and play() leaves it", () => {
+  const root = new Object3D();
+  const clips = [
+    new AnimationClip("idle", 1, []),
+    new AnimationClip("walk", 1, []),
+    new AnimationClip("run", 1, []),
+    new AnimationClip("jump", 1, []),
+  ];
+  const animator = new CrossfadeAnimator(root, clips);
+  animator.play("idle", 0);
+  assert.equal(animator.isBlending, false);
+
+  // A weighted blend takes over: clip mode clears, blend mode engages.
+  animator.playBlend([
+    { clip: "idle", weight: 0.3 },
+    { clip: "walk", weight: 0.7 },
+  ]);
+  assert.equal(animator.isBlending, true);
+  assert.equal(animator.currentClip, null);
+
+  // Unknown / zero-weight clips are ignored; an all-zero set is a no-op (holds).
+  animator.playBlend([{ clip: "walk", weight: 1 }, { clip: "ghost", weight: 5 }]);
+  assert.equal(animator.isBlending, true);
+  animator.playBlend([]);
+  assert.equal(animator.isBlending, true);
+
+  // Switching to a single clip (e.g. going airborne) exits blend mode cleanly.
+  animator.play("jump", 0.1);
+  assert.equal(animator.isBlending, false);
+  assert.equal(animator.currentClip, "jump");
+});
+
+check("pickLocomotionBlendSpace: prefers a named 1D space, else the first usable one", () => {
+  const oneDimensional = (name: string): AssetSkeletonBlendSpaceDef => ({
+    name,
+    type: "1d",
+    axisX: { name: "Speed", min: 0, max: 4 },
+    samples: [
+      { clip: "idle", x: 0 },
+      { clip: "walk", x: 4 },
+    ],
+  });
+  assert.equal(pickLocomotionBlendSpace([]), null);
+  // A 2D space or an empty 1D space never qualifies for ground locomotion.
+  assert.equal(
+    pickLocomotionBlendSpace([
+      { name: "Aim", type: "2d", axisX: { name: "X", min: -1, max: 1 }, axisY: { name: "Y", min: -1, max: 1 }, samples: [{ clip: "c", x: 0, y: 0 }] },
+      { name: "Empty", type: "1d", axisX: { name: "Speed", min: 0, max: 4 }, samples: [] },
+    ]),
+    null,
+  );
+  // The case-insensitive "Locomotion" name wins over an earlier 1D space.
+  const picked = pickLocomotionBlendSpace([oneDimensional("Movement"), oneDimensional("locomotion")]);
+  assert.equal(picked?.name, "locomotion");
+  // Otherwise the first usable 1D space is chosen.
+  assert.equal(pickLocomotionBlendSpace([oneDimensional("Movement")])?.name, "Movement");
+});
+
+check("resolveLocomotionAnimation: blends on the ground, falls back to a clip airborne", () => {
+  const available = new Set(["idle", "walk", "run", "jump"]);
+  const blend: AssetSkeletonBlendSpaceDef = {
+    name: "Locomotion",
+    type: "1d",
+    axisX: { name: "Speed", min: 0, max: 4 },
+    samples: [
+      { clip: "idle", x: 0 },
+      { clip: "walk", x: 2 },
+      { clip: "run", x: 4 },
+    ],
+  };
+  const config = (blendSpace: AssetSkeletonBlendSpaceDef | null): LocomotionAssetConfig => ({
+    blendSpace,
+    animationSet: {},
+  });
+  // Grounded mid-speed blends the two bracketing clips by weight.
+  const blended = resolveLocomotionAnimation(ground(1), available, config(blend));
+  assert.equal(blended.kind, "blend");
+  if (blended.kind === "blend") {
+    assert.deepEqual(blended.weights, [
+      { clip: "idle", weight: 0.5 },
+      { clip: "walk", weight: 0.5 },
+    ]);
+  }
+  // Airborne ignores the blend space and uses the single-clip selector.
+  const airborne = resolveLocomotionAnimation(
+    { planarSpeed: 0, grounded: false, velocityY: 4 },
+    available,
+    config(blend),
+  );
+  assert.deepEqual(airborne, { kind: "clip", clip: "jump" });
+  // No blend space -> single clip even on the ground.
+  assert.deepEqual(resolveLocomotionAnimation(ground(2), available, config(null)), {
+    kind: "clip",
+    clip: "walk",
+  });
+  // A blend space whose clips the asset lacks degrades to the clip fallback.
+  const missingClips: AssetSkeletonBlendSpaceDef = {
+    name: "Locomotion",
+    type: "1d",
+    axisX: { name: "Speed", min: 0, max: 4 },
+    samples: [{ clip: "absent", x: 0 }],
+  };
+  assert.deepEqual(resolveLocomotionAnimation(ground(0), available, config(missingClips)), {
+    kind: "clip",
+    clip: "idle",
+  });
+  // The clip-fallback branch honours the authored anim-set (custom clip names).
+  const authored: LocomotionAssetConfig = {
+    blendSpace: null,
+    animationSet: { jump: "Anim_Leap", walk: "Anim_Stroll" },
+  };
+  assert.deepEqual(
+    resolveLocomotionAnimation(
+      { planarSpeed: 0, grounded: false, velocityY: 5 },
+      new Set(["Anim_Leap", "Anim_Stroll"]),
+      authored,
+    ),
+    { kind: "clip", clip: "Anim_Leap" },
+  );
 });
 
 check("input-move behavior: reports the movement snapshot and sprint raises planar speed", () => {

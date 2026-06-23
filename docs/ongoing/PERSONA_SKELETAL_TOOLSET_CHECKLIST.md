@@ -251,6 +251,20 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
       - Save validator [`saveValidator.ts`](../../tools/saveValidator.ts):
         `validateBlendSpaces` (eksen/örnek tip kontrolü, 2D'de y zorunlu, yinelenen
         ad reddi). engine-tests: normalize + 1D/2D resolver + save round-trip.
+      - **Runtime tüketimi (bağlandı):** `CrossfadeAnimator.playBlend` faz-senkron
+        ağırlıklı oynatma (tek-klip yoluyla karşılıklı dışlayan); `src/game`'de saf
+        `pickLocomotionBlendSpace` + `resolveLocomotionAnimation` (grounded+blend
+        space → ağırlık, yoksa/airborne tek klip); `RuntimeSceneApp` karakter
+        sidecar'larını ref'lere iliştirir; `tpsCharacterGameMode.updateAnimation`
+        karara göre `playBlend`/`play`. Konvansiyon: 1D, ad "Locomotion" (yoksa ilk
+        kullanılabilir 1D), X ekseni planar hız. Demo `character-a.skeleton.json`
+        idle@0/walk@3/sprint@6 ile etkin.
+      - **Anim-set rol haritası da bağlandı:** `resolveLocomotionClip` artık authored
+        `animationSet`'i (rol→klip) önce kullanıyor (ROLE_FALLBACKS ile run→walk→idle,
+        fall→jump→idle semantik zinciri), sonra eski klip-ismi sözlüğü heuristiği.
+        Tek-klip fallback'i (airborne / blend space yok) keyfi klip isimli asset'lerde
+        de doğru çalışır. `LocomotionAssetConfig` (blendSpace + animationSet) +
+        `locomotionConfigForSkeleton` possess'te bir kez kurulur.
 
 ### Faz 3 — Animation Notifies + Montage-lite (ertelenmiş)
 

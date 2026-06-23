@@ -183,6 +183,11 @@ import {
   loadAssetMaterialSlots,
   type AssetMaterialSlotsDef,
 } from "@/scene/assetMaterialSlotsLoader";
+import {
+  defaultAssetSkeleton,
+  loadAssetSkeleton,
+  type AssetSkeletonDef,
+} from "@/scene/assetSkeletonLoader";
 import { assetPath, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
@@ -727,7 +732,36 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.playAutoPlayAudio(sceneDocument);
     void this.playAutoPlayParticles(sceneDocument);
 
+    // Character skeletal metadata (blend spaces / anim-set) drives the Game Mode's
+    // locomotion animator, so attach it to the refs before the session possesses.
+    await this.loadCharacterSkeletons();
     await this.startGameMode();
+  }
+
+  /**
+   * Loads each character's `*.skeleton.json` sidecar (deduped per asset) and
+   * attaches the result to every {@link RuntimeCharacterRef}. The Game Mode reads
+   * `ref.skeleton` to drive blend-space locomotion; assets without a sidecar get
+   * the safe empty default. Runs after the refs are built, before possession.
+   */
+  private async loadCharacterSkeletons(): Promise<void> {
+    if (!this.assetLoader || this.characterRefs.length === 0) return;
+    const manifest = await this.assetLoader.loadManifest();
+    const byAsset = new Map<string, Promise<AssetSkeletonDef>>();
+    const skeletonFor = (assetId: string): Promise<AssetSkeletonDef> => {
+      let pending = byAsset.get(assetId);
+      if (!pending) {
+        const asset = manifest.assets.find((entry) => entry.id === assetId);
+        pending = asset ? loadAssetSkeleton(assetPath(asset)) : Promise.resolve(defaultAssetSkeleton());
+        byAsset.set(assetId, pending);
+      }
+      return pending;
+    };
+    await Promise.all(
+      this.characterRefs.map(async (ref) => {
+        ref.skeleton = await skeletonFor(ref.placement.assetId);
+      }),
+    );
   }
 
   /** Maps manifest `sound` + effect (`.effect.json`) asset ids to fetchable file URLs. */
