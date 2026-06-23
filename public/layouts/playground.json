@@ -145,14 +145,15 @@
       "placements": [
         {
           "position": [
-            -0.38,
-            1.82,
-            0.81
+            0,
+            2,
+            0
           ],
-          "materialSlot": "mirror-material",
+          "scaleLocked": true,
+          "materialSlot": "concratetile-material",
           "simulatePhysics": true,
           "rotationYDeg": 0,
-          "scale": 0.29
+          "scale": 1
         }
       ]
     },

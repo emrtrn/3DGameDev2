@@ -40,6 +40,7 @@ export interface ForgeMaterialTextureMaps {
   layer1NormalTexture?: Texture | null;
   layer1RoughnessTexture?: Texture | null;
   layer1MetalnessTexture?: Texture | null;
+  layer1OpacityTexture?: Texture | null;
   layerBlendMaskTexture?: Texture | null;
 }
 
@@ -199,6 +200,13 @@ function applyLayerBlendMaterial(
         maxAnisotropy: options.maxAnisotropy,
       })
     : null;
+  const layer1OpacityMap = textures.layer1OpacityTexture
+    ? configureForgeTexture(textures.layer1OpacityTexture, {
+        srgb: false,
+        repeat: layer1.uvTiling,
+        maxAnisotropy: options.maxAnisotropy,
+      })
+    : null;
   const layerBlendMaskMap = textures.layerBlendMaskTexture
     ? configureForgeTexture(textures.layerBlendMaskTexture, {
         srgb: false,
@@ -215,14 +223,19 @@ function applyLayerBlendMaterial(
     ...(layer1NormalMap ? { USE_FORGE_LAYER_NORMALMAP: "" } : {}),
     ...(layer1RoughnessMap ? { USE_FORGE_LAYER_ROUGHNESSMAP: "" } : {}),
     ...(layer1MetalnessMap ? { USE_FORGE_LAYER_METALNESSMAP: "" } : {}),
+    ...(layer1OpacityMap ? { USE_FORGE_LAYER_OPACITYMAP: "" } : {}),
     ...(layerBlendMaskMap ? { USE_FORGE_LAYER_MASKMAP: "" } : {}),
   };
+  if (layer1.opacity < 1 || layer1OpacityMap) {
+    material.transparent = true;
+  }
   material.onBeforeCompile = (shader) => {
     patchLayerBlendShader(shader, blend, {
       layer1Map,
       layer1NormalMap,
       layer1RoughnessMap,
       layer1MetalnessMap,
+      layer1OpacityMap,
       layerBlendMaskMap,
     });
   };
@@ -234,6 +247,7 @@ function applyLayerBlendMaterial(
       layer1NormalMap ? "n" : "no-n",
       layer1RoughnessMap ? "r" : "rough",
       layer1MetalnessMap ? "m" : "metal",
+      layer1OpacityMap ? "o" : "opacity",
       layerBlendMaskMap ? "mask" : "no-mask",
     ].join(":");
 }
@@ -246,12 +260,14 @@ function patchLayerBlendShader(
     layer1NormalMap: Texture | null;
     layer1RoughnessMap: Texture | null;
     layer1MetalnessMap: Texture | null;
+    layer1OpacityMap: Texture | null;
     layerBlendMaskMap: Texture | null;
   },
 ): void {
   shader.uniforms.forgeLayerColor = { value: new Color(blend.layer1.baseColor) };
   shader.uniforms.forgeLayerRoughness = { value: blend.layer1.roughness };
   shader.uniforms.forgeLayerMetalness = { value: blend.layer1.metalness };
+  shader.uniforms.forgeLayerOpacity = { value: blend.layer1.opacity };
   shader.uniforms.forgeLayerTiling = {
     value: new Vector2(blend.layer1.uvTiling.x, blend.layer1.uvTiling.y),
   };
@@ -269,6 +285,9 @@ function patchLayerBlendShader(
   }
   if (maps.layer1MetalnessMap) {
     shader.uniforms.forgeLayerMetalnessMap = { value: maps.layer1MetalnessMap };
+  }
+  if (maps.layer1OpacityMap) {
+    shader.uniforms.forgeLayerOpacityMap = { value: maps.layer1OpacityMap };
   }
   if (maps.layerBlendMaskMap) {
     shader.uniforms.forgeLayerMaskMap = { value: maps.layerBlendMaskMap };
@@ -310,6 +329,7 @@ vForgeLayerWorldNormal = normalize( mat3( modelMatrix ) * forgeLayerWorldNormal 
 uniform vec3 forgeLayerColor;
 uniform float forgeLayerRoughness;
 uniform float forgeLayerMetalness;
+uniform float forgeLayerOpacity;
 uniform vec2 forgeLayerTiling;
 uniform float forgeLayerAmount;
 uniform float forgeLayerMin;
@@ -329,6 +349,9 @@ varying vec3 vForgeLayerWorldNormal;
 #endif
 #ifdef USE_FORGE_LAYER_METALNESSMAP
   uniform sampler2D forgeLayerMetalnessMap;
+#endif
+#ifdef USE_FORGE_LAYER_OPACITYMAP
+  uniform sampler2D forgeLayerOpacityMap;
 #endif
 ${maskTextureUniform}
 float forgeLayerBlendFactor() {
@@ -371,6 +394,15 @@ float forgeLayerMetalnessFactor = forgeLayerMetalness;
   forgeLayerMetalnessFactor *= texture2D( forgeLayerMetalnessMap, vUv * forgeLayerTiling ).b;
 #endif
 metalnessFactor = mix( metalnessFactor, forgeLayerMetalnessFactor, forgeLayerBlend );`,
+    )
+    .replace(
+      "#include <alphamap_fragment>",
+      `#include <alphamap_fragment>
+float forgeLayerOpacityFactor = forgeLayerOpacity;
+#ifdef USE_FORGE_LAYER_OPACITYMAP
+  forgeLayerOpacityFactor *= texture2D( forgeLayerOpacityMap, vUv * forgeLayerTiling ).g;
+#endif
+diffuseColor.a = mix( diffuseColor.a, forgeLayerOpacityFactor, forgeLayerBlend );`,
     )
     .replace(
       "#include <normal_fragment_maps>",

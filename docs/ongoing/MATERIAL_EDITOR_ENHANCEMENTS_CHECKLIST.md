@@ -281,6 +281,8 @@ onBeforeCompile yolunu seçer.
       Layer Blend ve Layer Settings grupları.
 - [x] Base Material `Opacity Map` + `Emissive Map` gerçek schema/runtime/preview/
       thumbnail desteği.
+- [x] `Layer O Map` schema/runtime/preview/thumbnail desteği. Layer opacity
+      dokusu Three.js `alphaMap` ile uyumlu olarak lineer `.g` kanalından okunur.
 - [ ] **Deferred bug:** `maskTexture`/Blend Mask atanırken preview/runtime davranışı
       kullanıcı testinde halen beklenen sonucu vermiyor. Shader/schema tarafındaki
       önceki sertleştirmelere rağmen problem çözülmüş sayılmayacak; ayrı oturumda
@@ -311,9 +313,9 @@ aynı render eder (regresyon yok).
 - Triplanar projeksiyon (UV'siz dünya-uzayı doku).
 - Texture import ayarları sidecar'ı (sRGB/linear, wrap, filter override) —
   gerekirse, yine ayrı editör değil.
-- Layer Opacity/Layer Emissive/Layer AO map slotlarının gerçek schema + renderer
-  desteği. Details UI bu alanları şimdilik pasif `Not implemented` olarak gösterir;
-  sahte kayıt alanı yazmaz.
+- Layer Emissive/Layer AO map slotlarının gerçek schema + renderer desteği.
+  Details UI bu alanları şimdilik pasif `Not implemented` olarak gösterir; sahte
+  kayıt alanı yazmaz.
 - Normal `Constant3Vector` authoring. Details UI şimdilik alanı pasif gösterir;
   normal map yoksa mevcut mesh normal yolu korunur.
 

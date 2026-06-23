@@ -6532,8 +6532,10 @@ check("material save payload requires a material path and canonical fields", () 
           normalTexture: "tex-snow-n",
           roughnessTexture: "tex-snow-r",
           metalnessTexture: null,
+          opacityTexture: "tex-snow-o",
           roughness: 0.9,
           metalness: 0,
+          opacity: 0.85,
           uvTiling: { x: 4, y: 4 },
         },
         driver: "slope",
@@ -6578,8 +6580,10 @@ check("material save payload requires a material path and canonical fields", () 
         normalTexture: "tex-snow-n",
         roughnessTexture: "tex-snow-r",
         metalnessTexture: null,
+        opacityTexture: "tex-snow-o",
         roughness: 0.9,
         metalness: 0,
+        opacity: 0.85,
         uvTiling: { x: 4, y: 4 },
       },
       driver: "slope",
@@ -6828,6 +6832,7 @@ check("forge material mapping creates matching Three material types and fields",
   const layer1NormalTexture = new Texture();
   const layer1RoughnessTexture = new Texture();
   const layer1MetalnessTexture = new Texture();
+  const layer1OpacityTexture = new Texture();
   const layerBlendMaskTexture = new Texture();
   const layerBlend = createThreeMaterialFromForgeDef(
     normalizeForgeMaterialDef({
@@ -6844,8 +6849,10 @@ check("forge material mapping creates matching Three material types and fields",
           normalTexture: "snow-n",
           roughnessTexture: "snow-r",
           metalnessTexture: "snow-m",
+          opacityTexture: "snow-o",
           roughness: 0.9,
           metalness: 0.1,
+          opacity: 0.55,
           uvTiling: { x: 5, y: 6 },
         },
         driver: "maskTexture",
@@ -6863,6 +6870,7 @@ check("forge material mapping creates matching Three material types and fields",
       layer1NormalTexture,
       layer1RoughnessTexture,
       layer1MetalnessTexture,
+      layer1OpacityTexture,
       layerBlendMaskTexture,
     },
     { maxAnisotropy: 16 },
@@ -6872,20 +6880,24 @@ check("forge material mapping creates matching Three material types and fields",
   assert.equal(layerBlend.defines?.USE_FORGE_LAYER_MAP, "");
   assert.equal(layerBlend.defines?.USE_FORGE_LAYER_NORMALMAP, "");
   assert.equal(layerBlend.defines?.USE_FORGE_LAYER_MASKMAP, "");
-  assert.match(layerBlend.customProgramCacheKey(), /forge-layer-blend-v1:maskTexture:bc:n:r:m:mask/);
+  assert.equal(layerBlend.defines?.USE_FORGE_LAYER_OPACITYMAP, "");
+  assert.equal(layerBlend.transparent, true);
+  assert.match(layerBlend.customProgramCacheKey(), /forge-layer-blend-v1:maskTexture:bc:n:r:m:o:mask/);
   assert.equal(layer1BaseColorTexture.repeat.x, 5);
   assert.equal(layer1BaseColorTexture.repeat.y, 6);
   assert.equal(layer1BaseColorTexture.anisotropy, 8);
+  assert.equal(layer1OpacityTexture.colorSpace, NoColorSpace);
   assert.equal(layerBlendMaskTexture.colorSpace, NoColorSpace);
   const shader = {
     uniforms: {},
     vertexShader: "#include <common>\nvoid main(){\n#include <worldpos_vertex>\n}",
     fragmentShader:
-      "#include <common>\nvoid main(){\n#include <map_fragment>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>\n#include <normal_fragment_maps>\n}",
+      "#include <common>\nvoid main(){\n#include <map_fragment>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>\n#include <alphamap_fragment>\n#include <normal_fragment_maps>\n}",
   } as Parameters<MeshStandardMaterial["onBeforeCompile"]>[0];
   layerBlend.onBeforeCompile(shader, null!);
   assert.ok("forgeLayerMap" in shader.uniforms);
   assert.ok("forgeLayerNormalMap" in shader.uniforms);
+  assert.ok("forgeLayerOpacityMap" in shader.uniforms);
   assert.ok("forgeLayerMaskMap" in shader.uniforms);
   assert.match(shader.vertexShader, /vForgeLayerWorldPosition/);
   assert.match(shader.fragmentShader, /forgeLayerBlendFactor/);
@@ -6893,6 +6905,7 @@ check("forge material mapping creates matching Three material types and fields",
   assert.match(shader.fragmentShader, /diffuseColor\.rgb = mix/);
   assert.match(shader.fragmentShader, /roughnessFactor = mix/);
   assert.match(shader.fragmentShader, /metalnessFactor = mix/);
+  assert.match(shader.fragmentShader, /diffuseColor\.a = mix/);
   assert.match(shader.fragmentShader, /normalize\( mix\( normal/);
   layerBlend.dispose();
 

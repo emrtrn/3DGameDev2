@@ -37,8 +37,10 @@ export interface ForgeMaterialLayer {
   normalTexture: string | null;
   roughnessTexture: string | null;
   metalnessTexture: string | null;
+  opacityTexture: string | null;
   roughness: number;
   metalness: number;
+  opacity: number;
   uvTiling: ForgeMaterialUvTiling;
 }
 
@@ -283,8 +285,10 @@ function layerOr(value: unknown): ForgeMaterialLayer | null {
     normalTexture: textureRefOrNull(input.normalTexture),
     roughnessTexture: textureRefOrNull(input.roughnessTexture),
     metalnessTexture: textureRefOrNull(input.metalnessTexture),
+    opacityTexture: textureRefOrNull(input.opacityTexture),
     roughness: clamp01(numberOr(input.roughness, 0.8)),
     metalness: clamp01(numberOr(input.metalness, 0)),
+    opacity: clamp01(numberOr(input.opacity, 1)),
     uvTiling: uvTilingOr(input.uvTiling, { x: 1, y: 1 }),
   };
 }

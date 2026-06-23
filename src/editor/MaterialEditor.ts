@@ -317,14 +317,16 @@ export class MaterialEditor {
       | "aoTexture"
       | "opacityTexture"
       | "layer1RoughnessTexture"
-      | "layer1MetalnessTexture",
+      | "layer1MetalnessTexture"
+      | "layer1OpacityTexture",
     numberField:
       | "roughness"
       | "metalness"
       | "aoIntensity"
       | "opacity"
       | "layer1Roughness"
-      | "layer1Metalness",
+      | "layer1Metalness"
+      | "layer1Opacity",
     value: number,
     min: number,
     max: number,
@@ -446,7 +448,7 @@ export class MaterialEditor {
               ${this.textureVector3Row("Layer N Map", "layer1NormalTexture", [0, 0, 1], false)}
               ${this.textureNumberRow("Layer R Map", "layer1RoughnessTexture", "layer1Roughness", blend.layer1.roughness, 0, 1, 0.01)}
               ${this.textureNumberRow("Layer M Map", "layer1MetalnessTexture", "layer1Metalness", blend.layer1.metalness, 0, 1, 0.01)}
-              ${this.unsupportedTextureNumberRow("Layer O Map", 1)}
+              ${this.textureNumberRow("Layer O Map", "layer1OpacityTexture", "layer1Opacity", blend.layer1.opacity, 0, 1, 0.01)}
               ${this.unsupportedTextureColorNumberRow("Layer E Map", "#000000", 0)}
               ${this.unsupportedTextureNumberRow("Layer AO Map", 1)}
               ${this.vector2Row("Layer UV Tiling", "layer1UvTilingX", "layer1UvTilingY", blend.layer1.uvTiling.x, blend.layer1.uvTiling.y)}
@@ -510,6 +512,7 @@ export class MaterialEditor {
       | "layer1NormalTexture"
       | "layer1RoughnessTexture"
       | "layer1MetalnessTexture"
+      | "layer1OpacityTexture"
       | "layerBlendMaskTexture",
   ): string {
     const current = isLayerTextureField(field)
@@ -535,6 +538,7 @@ export class MaterialEditor {
     if (field === "layer1NormalTexture") return layer1.normalTexture;
     if (field === "layer1RoughnessTexture") return layer1.roughnessTexture;
     if (field === "layer1MetalnessTexture") return layer1.metalnessTexture;
+    if (field === "layer1OpacityTexture") return layer1.opacityTexture;
     if (field === "layerBlendMaskTexture") return this.def.layerBlend?.maskTexture ?? null;
     return null;
   }
@@ -598,8 +602,10 @@ export class MaterialEditor {
     else if (field === "layer1NormalTexture") next.layer1.normalTexture = input.value || null;
     else if (field === "layer1RoughnessTexture") next.layer1.roughnessTexture = input.value || null;
     else if (field === "layer1MetalnessTexture") next.layer1.metalnessTexture = input.value || null;
+    else if (field === "layer1OpacityTexture") next.layer1.opacityTexture = input.value || null;
     else if (field === "layer1Roughness") next.layer1.roughness = numberInput(input.value, 0, 1);
     else if (field === "layer1Metalness") next.layer1.metalness = numberInput(input.value, 0, 1);
+    else if (field === "layer1Opacity") next.layer1.opacity = numberInput(input.value, 0, 1);
     else if (field === "layer1UvTilingX") next.layer1.uvTiling = { ...next.layer1.uvTiling, x: numberInput(input.value, 0.001, 100) };
     else if (field === "layer1UvTilingY") next.layer1.uvTiling = { ...next.layer1.uvTiling, y: numberInput(input.value, 0.001, 100) };
     else if (field === "layerBlendDriver") next.driver = input.value as ForgeMaterialLayerBlendDriver;
@@ -671,6 +677,7 @@ export class MaterialEditor {
       const layer1NormalMap = await this.loadTexture(this.def.layerBlend?.layer1.normalTexture ?? null, loadedTextures);
       const layer1RoughnessMap = await this.loadTexture(this.def.layerBlend?.layer1.roughnessTexture ?? null, loadedTextures);
       const layer1MetalnessMap = await this.loadTexture(this.def.layerBlend?.layer1.metalnessTexture ?? null, loadedTextures);
+      const layer1OpacityMap = await this.loadTexture(this.def.layerBlend?.layer1.opacityTexture ?? null, loadedTextures);
       const layerBlendMaskMap = await this.loadTexture(this.def.layerBlend?.maskTexture ?? null, loadedTextures);
       const material = createThreeMaterialFromForgeDef(
         this.def,
@@ -687,6 +694,7 @@ export class MaterialEditor {
           layer1NormalTexture: layer1NormalMap,
           layer1RoughnessTexture: layer1RoughnessMap,
           layer1MetalnessTexture: layer1MetalnessMap,
+          layer1OpacityTexture: layer1OpacityMap,
           layerBlendMaskTexture: layerBlendMaskMap,
         },
         { maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy() },
@@ -799,8 +807,10 @@ function defaultLayerBlend(current: ForgeMaterialLayerBlend | null): ForgeMateri
       normalTexture: current?.layer1.normalTexture ?? null,
       roughnessTexture: current?.layer1.roughnessTexture ?? null,
       metalnessTexture: current?.layer1.metalnessTexture ?? null,
+      opacityTexture: current?.layer1.opacityTexture ?? null,
       roughness: current?.layer1.roughness ?? 0.8,
       metalness: current?.layer1.metalness ?? 0,
+      opacity: current?.layer1.opacity ?? 1,
       uvTiling: current?.layer1.uvTiling ?? { x: 1, y: 1 },
     },
     driver: current?.driver ?? "constant",
@@ -817,6 +827,7 @@ function isLayerTextureField(field: string): field is
   | "layer1NormalTexture"
   | "layer1RoughnessTexture"
   | "layer1MetalnessTexture"
+  | "layer1OpacityTexture"
   | "layerBlendMaskTexture" {
   return field.startsWith("layer1") || field === "layerBlendMaskTexture";
 }
