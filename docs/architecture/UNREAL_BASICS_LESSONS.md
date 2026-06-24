@@ -317,6 +317,19 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-24* - **Ragdoll Aşama 3 KAPANDI: editör "Simulate" önizleme (3d).** Runtime ragdoll (3b+3a+3c)
+  kullanıcı tarafından Play'de doğrulandıktan sonra son faz 3d eklendi. `SkeletalMeshEditor` Physics
+  modunda **Simulate** toggle: editör-içi `new PhysicsSubsystem({backend:"rapier"})` + modelin ayak
+  hizasına `Box3` ile yerleşen statik ground entity, sonra **runtime `createRagdollDriver`'ı AYNEN yeniden
+  kullanır** (DRY — editör kendi fizik/sürme kodunu yazmaz). Driver modelin gerçek bone node'larını sürer
+  → wireframe body overlay'leri + constraint çizgileri canlı takip eder (PhAT-style önizleme). Başlamadan
+  `snapshotModelPose` (tüm node local TRS), Stop'ta `restoreModelPose` + overlay rebuild. Simüle ederken
+  authoring UI gizli (salt-önizleme). Yaşam döngüsü: mod değişimi + `close()` simülasyonu durdurup Rapier
+  `dispose` eder (sızıntı yok). Gate: tsc temiz, test:engine **315** (yeni saf mantık yok, hepsi 3b/3a/3c'de),
+  vite build temiz — **oyun bundle'ı byte-aynı (194.49 kB), Rapier hâlâ lazy `vendor-physics` chunk**
+  (editör PhysicsSubsystem import'u oyun chunk'ına sızmadı). Sınır: cone/twist limitsiz → önizleme floppy;
+  uniform-scale. **Aşama 3 tamamen bitti.** Sıradaki opsiyonel yönler: gerçek ölüm/hasar tetiği (R yerine),
+  cone-twist limiti (daha yeni Rapier), demo `character-a`'ya body author'lama, get-up geri-blend.
 - *2026-06-24* - **Runtime ragdoll (Persona Faz 4 / Aşama 3: 3b+3a+3c tamam).** Karakter kinematik
   animasyondan dinamik fizik ragdoll'una geçiyor. **3b (saf):** `src/game/ragdollSpec.ts`
   `buildRagdollSpec(bodies, constraints, resolveBoneWorld)` → world-yerleşik body'ler (`boneWorld ∘

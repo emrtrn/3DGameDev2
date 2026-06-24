@@ -21,6 +21,7 @@ import {
   MeshBasicMaterial,
   Object3D,
   PerspectiveCamera,
+  Quaternion,
   Scene,
   SkeletonHelper,
   SkinnedMesh,
@@ -37,7 +38,14 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { VertexNormalsHelper } from "three/examples/jsm/helpers/VertexNormalsHelper.js";
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
+import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
+import type { Entity } from "@engine/scene/entity";
 import type { Vec3 } from "@engine/scene/layout";
+import {
+  createRagdollDriver,
+  type RagdollDriver,
+  type RagdollPhysicsBridge,
+} from "@/game/ragdollDriver";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { OrbitViewportCamera, createAssetViewportRig } from "@/editor/assetViewportCamera";
 import {
@@ -177,6 +185,13 @@ export class SkeletalMeshEditor {
   private mode: PersonaMode = "skeleton";
   private rafId = 0;
   private disposed = false;
+  /** Live PhAT "Simulate" preview: a local Rapier world driving the model's bones. */
+  private physicsSim: {
+    readonly physics: PhysicsSubsystem;
+    readonly driver: RagdollDriver;
+    /** Pre-sim local transforms, restored on stop so authoring resumes from rest. */
+    readonly restore: Map<Object3D, { position: Vector3; quaternion: Quaternion; scale: Vector3 }>;
+  } | null = null;
   private skeletonHelper: SkeletonHelper | null = null;
   private readonly normalHelpers: VertexNormalsHelper[] = [];
   private readonly socketOverlays: SocketOverlay[] = [];
@@ -495,6 +510,14 @@ export class SkeletalMeshEditor {
         this.mixer?.update(delta * this.playRate);
         this.updateTimelineFromAction();
       }
+      if (this.physicsSim) {
+        this.physicsSim.physics.update({
+          deltaSeconds: Math.min(delta, 1 / 30),
+          elapsedSeconds: this.clock.elapsedTime,
+          frame: 0,
+        });
+        this.physicsSim.driver.update();
+      }
       this.updateBoneMarker();
       this.updateNormalHelpers();
       if (this.mode === "physics") this.updatePhysicsConstraintLines();
@@ -624,6 +647,7 @@ export class SkeletalMeshEditor {
     const prev = this.mode;
     this.mode = next;
     if (prev === "physics" && next !== "physics") {
+      this.stopPhysicsSimulation();
       this.disposePhysicsOverlays();
       this.transformControls?.detach();
       this.attachSelectedSocketGizmo();
@@ -1465,8 +1489,10 @@ export class SkeletalMeshEditor {
   // --- Physics mode (PhAT-lite bodies) ----------------------------------
 
   private renderPhysicsDetails(): string {
+    if (this.physicsSim) return this.renderSimulateSection();
     const selected = this.getSelectedBody();
     return `
+      ${this.renderSimulateSection()}
       <div class="sm-section">
         <div class="sm-section-title">Physics Bodies <span class="sm-count">${this.skeleton.physicsBodies.length}</span></div>
         <div class="sm-prim-list">
@@ -1486,6 +1512,120 @@ export class SkeletalMeshEditor {
       </div>
       ${this.renderConstraintSection()}
     `;
+  }
+
+  /** "Simulate" toggle: drops the authored bodies into a live local ragdoll preview. */
+  private renderSimulateSection(): string {
+    const simulating = this.physicsSim !== null;
+    const canSimulate = this.skeleton.physicsBodies.length > 0;
+    const button = simulating
+      ? `<button type="button" class="sm-menu-item is-active" data-skel-sim-toggle>■ Stop Simulation</button>`
+      : canSimulate
+        ? `<button type="button" class="sm-menu-item" data-skel-sim-toggle>▶ Simulate</button>`
+        : `<div class="sm-empty">Add physics bodies to simulate a ragdoll.</div>`;
+    return `
+      <div class="sm-section">
+        <div class="sm-section-title">Simulate</div>
+        <div class="sm-prim-list">${button}</div>
+        <div class="sm-hint">${
+          simulating
+            ? "Live ragdoll preview — bodies fall under gravity onto a ground plane. Stop to resume authoring."
+            : "Preview the ragdoll: spawns the bodies/constraints as dynamic physics and drives the mesh. Joints have no swing/twist limit yet (floppy)."
+        }</div>
+      </div>
+    `;
+  }
+
+  private async togglePhysicsSimulation(): Promise<void> {
+    if (this.physicsSim) this.stopPhysicsSimulation();
+    else await this.startPhysicsSimulation();
+  }
+
+  /**
+   * Starts a self-contained Rapier world (a static ground + the authored ragdoll)
+   * and drives the model's bones from it via the runtime `RagdollDriver` — so the
+   * preview reuses the exact runtime ragdoll path. The model's pre-sim pose is
+   * snapshotted for restore on stop.
+   */
+  private async startPhysicsSimulation(): Promise<void> {
+    const bodies = this.skeleton.physicsBodies;
+    if (this.physicsSim || bodies.length === 0) return;
+    this.transformControls?.detach();
+    this.playing = false;
+    const physics = new PhysicsSubsystem({ backend: "rapier" });
+    physics.setEntities([this.simulationGroundEntity()]);
+    await physics.init();
+    if (this.disposed || !physics.usesRapier()) {
+      physics.dispose();
+      return;
+    }
+    const bridge: RagdollPhysicsBridge = {
+      spawnRagdoll: (desc, options) => physics.spawnRagdoll(desc, options),
+      sampleRagdoll: (id) => physics.sampleRagdoll(id),
+      despawnRagdoll: (id) => physics.despawnRagdoll(id),
+    };
+    const restore = this.snapshotModelPose();
+    const driver = createRagdollDriver(this.modelGroup, bodies, this.skeleton.physicsConstraints, bridge);
+    if (!driver) {
+      physics.dispose();
+      return;
+    }
+    this.physicsSim = { physics, driver, restore };
+    this.renderDetails();
+  }
+
+  private stopPhysicsSimulation(): void {
+    const sim = this.physicsSim;
+    if (!sim) return;
+    this.physicsSim = null;
+    sim.driver.dispose();
+    sim.physics.dispose();
+    this.restoreModelPose(sim.restore);
+    // Skip UI work when leaving via mode-switch/close (caller rebuilds/disposes).
+    if (!this.disposed && this.mode === "physics") {
+      this.rebuildPhysicsOverlays();
+      this.renderDetails();
+    }
+  }
+
+  /** A large static ground box at the model's feet so the ragdoll lands. */
+  private simulationGroundEntity(): Entity {
+    const bounds = new Box3().setFromObject(this.modelGroup);
+    const groundTop = bounds.isEmpty() ? 0 : bounds.min.y;
+    return {
+      id: "__skeletal_sim_ground",
+      components: {
+        Transform: { position: [0, groundTop - 0.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [50, 1, 50], isStatic: true, isSensor: false },
+      },
+    };
+  }
+
+  private snapshotModelPose(): Map<
+    Object3D,
+    { position: Vector3; quaternion: Quaternion; scale: Vector3 }
+  > {
+    const snapshot = new Map<Object3D, { position: Vector3; quaternion: Quaternion; scale: Vector3 }>();
+    this.modelGroup.traverse((object) => {
+      snapshot.set(object, {
+        position: object.position.clone(),
+        quaternion: object.quaternion.clone(),
+        scale: object.scale.clone(),
+      });
+    });
+    return snapshot;
+  }
+
+  private restoreModelPose(
+    snapshot: Map<Object3D, { position: Vector3; quaternion: Quaternion; scale: Vector3 }>,
+  ): void {
+    for (const [object, transform] of snapshot) {
+      object.position.copy(transform.position);
+      object.quaternion.copy(transform.quaternion);
+      object.scale.copy(transform.scale);
+      object.updateMatrix();
+    }
+    this.modelGroup.updateMatrixWorld(true);
   }
 
   private renderConstraintSection(): string {
@@ -1978,6 +2118,9 @@ export class SkeletalMeshEditor {
   }
 
   private bindPhysicsControls(): void {
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-sim-toggle]")?.addEventListener("click", () => {
+      void this.togglePhysicsSimulation();
+    });
     this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-body-add]")?.addEventListener("click", () => {
       this.addBody();
     });
@@ -2777,6 +2920,7 @@ export class SkeletalMeshEditor {
   close(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.stopPhysicsSimulation();
     cancelAnimationFrame(this.rafId);
     this.resizeObserver.disconnect();
     this.action?.stop();

@@ -60,6 +60,111 @@
       "blendOutSeconds": 0.2
     }
   ],
+  "physicsBodies": [
+    {
+      "name": "body",
+      "bone": "leg-left_1",
+      "shape": "box",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "size": [
+        0.5508,
+        1.3771,
+        0.5508
+      ]
+    },
+    {
+      "name": "Torso",
+      "bone": "torso",
+      "shape": "box",
+      "position": [
+        0,
+        0.1891,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "size": [
+        0.2,
+        0.2774,
+        0.2
+      ]
+    },
+    {
+      "name": "body_3",
+      "bone": "leg-right_1",
+      "shape": "box",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "size": [
+        0.5848,
+        1.462,
+        0.5848
+      ]
+    },
+    {
+      "name": "TorsoUpper",
+      "bone": "torso_1",
+      "shape": "box",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "size": [
+        1.5797,
+        1.8972,
+        1
+      ]
+    }
+  ],
+  "physicsConstraints": [
+    {
+      "name": "constraint",
+      "bodyA": "Torso",
+      "bodyB": "body_3",
+      "swingDeg": 45,
+      "twistDeg": 30
+    },
+    {
+      "name": "constraint_2",
+      "bodyA": "Torso",
+      "bodyB": "body",
+      "swingDeg": 45,
+      "twistDeg": 30
+    },
+    {
+      "name": "constraint_3",
+      "bodyA": "Torso",
+      "bodyB": "TorsoUpper",
+      "swingDeg": 45,
+      "twistDeg": 30
+    }
+  ],
   "preview": {
     "selectedClip": "static"
   },
