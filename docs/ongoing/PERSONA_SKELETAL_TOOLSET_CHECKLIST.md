@@ -290,37 +290,40 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
       (ad/clip/slot/loop/blendIn/Out CRUD, `fullBody` slot dahil). **Pending:** notify
       yayını, montage canlı önizleme (opsiyonel), kemik-başına yumuşak blend (şu an
       sert ayrım).
-- [~] **Montage → input bağı: KOD katmanında, Player/Character'a ait (yön değişti).**
-      Geçici olarak montage'a sidecar `trigger: {action, mode}` alanı + editör "Input
-      Trigger" UI'ı eklenmişti; **kullanıcı mimari itirazıyla bu yaklaşım supersede
-      edildi.** Gerekçe: input eşlemesi bir Character/kod sorumluluğudur, paylaşılan
-      skeletal-mesh asset'i değil (aynı mesh bir NPC'ye verilirse "emote→Q" bağı
-      anlamsızca taşınır). Forge'da axis mapping (look) ve action mapping (move/jump)
-      zaten **kodda** (`DEFAULT_INPUT_BINDINGS`, key→action); montage→input de aynı
-      desenle kodda çözülür. Unreal eşlemesi: skeletal mesh/AnimBP montage'ı *sağlar*
-      (asset), Character BP input'la `PlayAnimMontage` *çağırır*.
-      - **Korunan:** `tpsCharacterGameMode` genel hold/press montage döngüsü
-        (`resolveMontageBindings`; ilk basılı hold kazanır, press tek-atış);
-        `KeyQ → "emote"`; Skeletal Mesh Editor Montage authoring UI (klip/slot/loop/blend).
-      - **Geri alınacak (ileride):** `*.skeleton.json` montage'ından `trigger` alanı
-        (schema [`assetSkeletonLoader.ts`](../../src/scene/assetSkeletonLoader.ts),
-        validator [`saveValidator.ts`](../../tools/saveValidator.ts), editör "Input
-        Trigger" UI [`SkeletalMeshEditor.ts`](../../src/editor/SkeletalMeshEditor.ts),
-        ilgili engine-tests). `MONTAGE_TRIGGER_MODES`/`MontageTriggerMode` (press/hold)
-        nötr bir yerde tutulabilir (kod-map de aynı mode'u kullanır).
-      - **Yeni hedef (ileride, kullanıcı istedikçe montage-başına):**
-        (1) kod-map `src/game/montageInputBindings.ts` `action → {montage, mode}`;
-        (2) `resolveMontageBindings` action→montage'ı sidecar trigger yerine kod-map'ten
-        okur, klip/slot/blend'i `skeleton.montages`'tan ada göre çözer, aim/fire isim
-        konvansiyonu geriye-dönük varsayılan kalır (kod-map çakışmada kazanır);
-        (3) **Details salt-okunur gösterim:** ActorScriptEditor'da MeshRenderer node'unun
-        altında (assetId bir `skeletalMesh` ise) mesh'in montage'larını + kod-map'i +
-        `DEFAULT_INPUT_BINDINGS`'i okuyup `emote1 → emote → Q` zincirini listeler.
-      - **İş akışı:** kullanıcı Skeletal Mesh Editor'da montage oluşturur → ajana
-        "Player'a şu tuşu ata" der → ajan kod-map'e satır ekler → Details'te görünür.
+- [x] **Montage → input bağı: KOD katmanına taşındı (sidecar `trigger` geri alındı).**
+      (2026-06-24) Geçici sidecar `trigger: {action, mode}` alanı + editör "Input Trigger"
+      UI'ı **kaldırıldı**; input eşlemesi artık kod-map'te. Gerekçe: input eşlemesi bir
+      Character/kod sorumluluğudur, paylaşılan skeletal-mesh asset'i değil (aynı mesh bir
+      NPC'ye verilirse "emote→Q" bağı anlamsızca taşınır). Forge'da axis mapping (look) ve
+      action mapping (move/jump) zaten **kodda** (`DEFAULT_INPUT_BINDINGS`, key→action);
+      montage→input de aynı desenle kodda çözülür. Unreal eşlemesi: skeletal mesh/AnimBP
+      montage'ı *sağlar* (asset), Character BP input'la `PlayAnimMontage` *çağırır*.
+      - **[x] Geri alındı:** `*.skeleton.json` montage'ından `trigger` alanı + tipleri
+        ([`assetSkeletonLoader.ts`](../../src/scene/assetSkeletonLoader.ts) schema/normalize,
+        [`saveValidator.ts`](../../tools/saveValidator.ts) `validateMontageTrigger`, editör
+        "Input Trigger" UI + `setMontageTrigger*` [`SkeletalMeshEditor.ts`](../../src/editor/SkeletalMeshEditor.ts),
+        `assetSkeletonStore` re-export'ları, ilgili engine-tests). `MONTAGE_TRIGGER_MODES`/
+        `MontageTriggerMode` artık nötr kod-map modülünde.
+      - **[x] Kod-map:** [`src/game/montageInputBindings.ts`](../../src/game/montageInputBindings.ts)
+        — `MontageInputBinding {action, montage, mode}` + `MONTAGE_INPUT_BINDINGS` (varsayılan
+        boş) + `MONTAGE_TRIGGER_MODES`/`MontageTriggerMode`'un yeni evi. Ajan kullanıcı
+        istedikçe montage-başına satır ekler.
+      - **[x] Çözümleyici bağlandı:** `resolveMontageBindings(montages, codeMap=MONTAGE_INPUT_BINDINGS)`
+        artık kod-map + aim/fire isim konvansiyonunu birleştirir (konvansiyon geriye-dönük
+        varsayılan; kod-map ada göre çakışmada kazanır), klip/slot/blend'i `skeleton.montages`'tan
+        çözer. `upperBody` dışı slot atlanır.
+      - **[x] Details salt-okunur gösterim:** [`ActorScriptEditor.ts`](../../src/editor/ActorScriptEditor.ts)
+        MeshRenderer node'unun altında (assetId `skeletalMesh` ise) **"Montage Inputs"** paneli:
+        mesh'in `*.skeleton.json` montage'larını lazy yükler (cache + tek re-render), her montage
+        için `resolveMontageBindings` + `keysForAction`/`formatInputCode` ile `aim → aim → Right
+        Mouse (hold)` zincirini, bağsızları "no input binding", `fullBody`'leri "full body · not
+        input-bound" gösterir (salt-okunur; düzenleme kodda). `DEFAULT_INPUT_BINDINGS` paylaşılan
+        modüle çıkarıldı ([`src/game/defaultInputBindings.ts`](../../src/game/defaultInputBindings.ts);
+        `RuntimeSceneApp` artık oradan okur). Demo: `Player.actor.json` → character-a → aim/fire/emote1.
+      - **İş akışı:** kullanıcı Skeletal Mesh Editor'da montage oluşturur → ajana "Player'a şu
+        tuşu ata" der → ajan kod-map'e satır ekler → (Details gösterimi gelince) Details'te görünür.
       - **Kısıt (bugün):** çalıştırma yalnız `upperBody` slot + `upperBodyBone` authored
         karakterlerde (layered animator); `fullBody`/non-layered runtime pending.
-      - Plan: `~/.claude/plans/twinkly-discovering-sprout.md`.
 - [ ] (opsiyonel) Montage section'ları / basit branching — Animation Composite
       ihtiyacını da büyük ölçüde karşılar
 
@@ -426,7 +429,7 @@ Blend Space sample'larında çözdüğüm gibi `blendSampleClipOptions` desenini
    gömülmez (paylaşılan mesh asset'i input intent'i taşımamalı; Unreal'de de Character
    BP `PlayAnimMontage` çağırır, skeletal mesh çağırmaz). Skeletal mesh yalnız montage
    **klip tanımı** sağlar; "hangi tuş hangi montajı oynatır" kod-map'te yaşar ve ajan
-   montage-başına atar. Atanan tuşlar Details'te, Player'ın MeshRenderer (skeletal
-   mesh) bileşeni altında salt-okunur gösterilir. Geçici eklenen sidecar `trigger`
-   alanı bu kararla supersede edildi (geri alma + yeni hedef Faz 3'te listelendi).
-   İlgili plan: `~/.claude/plans/twinkly-discovering-sprout.md`.
+   montage-başına atar. **Uygulandı (2026-06-24):** sidecar `trigger` alanı geri alındı,
+   kod-map `src/game/montageInputBindings.ts` kuruldu, `resolveMontageBindings` kod-map +
+   aim/fire konvansiyonunu birleştirecek şekilde yeniden bağlandı (Faz 3'e bkz). **Kalan:**
+   atanan tuşları Player'ın MeshRenderer bileşeni altında salt-okunur gösteren Details paneli.

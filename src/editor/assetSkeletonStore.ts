@@ -12,7 +12,6 @@ export {
   ANIMATION_SET_ROLES,
   BLEND_SPACE_TYPES,
   MONTAGE_SLOTS,
-  MONTAGE_TRIGGER_MODES,
   defaultAssetSkeleton,
   defaultBlendSpaceAxis,
   loadAssetSkeleton,
@@ -32,8 +31,6 @@ export type {
   BlendSpaceSampleDef,
   BlendSpaceType,
   MontageSlot,
-  MontageTriggerDef,
-  MontageTriggerMode,
 } from "@/scene/assetSkeletonLoader";
 
 export async function saveAssetSkeleton(

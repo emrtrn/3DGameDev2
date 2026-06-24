@@ -66,22 +66,6 @@ export interface BlendSampleWeight {
 export const MONTAGE_SLOTS = ["upperBody", "fullBody"] as const;
 export type MontageSlot = (typeof MONTAGE_SLOTS)[number];
 
-export const MONTAGE_TRIGGER_MODES = ["press", "hold"] as const;
-export type MontageTriggerMode = (typeof MONTAGE_TRIGGER_MODES)[number];
-
-/**
- * Binds a montage to a named input action so the runtime fires it from input
- * (the data form of an Unreal input → montage notify). The action name is
- * resolved to physical keys/buttons by the runtime `ActionMap` bindings, keeping
- * the asset free of device-specific key codes.
- */
-export interface MontageTriggerDef {
-  /** Named input action (e.g. "emote", "fire"); a key maps to it at runtime. */
-  action: string;
-  /** "press" plays once on key-down; "hold" layers the pose while held. */
-  mode: MontageTriggerMode;
-}
-
 /**
  * A one-shot or held action clip layered over the base locomotion — the data
  * form of an Unreal Animation Montage played into a slot. `upperBody` montages
@@ -102,8 +86,6 @@ export interface AssetSkeletonMontageDef {
   blendInSeconds: number;
   /** Crossfade-out seconds when it ends/returns to base. */
   blendOutSeconds: number;
-  /** Optional input binding; absent means the montage is triggered by game code. */
-  trigger?: MontageTriggerDef;
 }
 
 export interface AssetSkeletonPreviewPrefs {
@@ -196,18 +178,9 @@ function normalizeMontages(value: unknown): AssetSkeletonMontageDef[] {
       blendInSeconds: normalizeBlendSeconds(input.blendInSeconds, 0.12),
       blendOutSeconds: normalizeBlendSeconds(input.blendOutSeconds, 0.2),
     };
-    const trigger = normalizeMontageTrigger(input.trigger);
-    if (trigger) montage.trigger = trigger;
     result.push(montage);
   }
   return result;
-}
-
-function normalizeMontageTrigger(value: unknown): MontageTriggerDef | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const input = value as Record<string, unknown>;
-  if (typeof input.action !== "string" || input.action.length === 0) return undefined;
-  return { action: input.action, mode: input.mode === "hold" ? "hold" : "press" };
 }
 
 function normalizeBlendSeconds(value: unknown, fallback: number): number {

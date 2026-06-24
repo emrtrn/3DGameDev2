@@ -14,7 +14,8 @@ import { AssetLoader } from "./assetLoader";
 import { loadRoomLayout } from "./roomLayout";
 import { EngineApp } from "@engine/core/EngineApp";
 import { AnimationSubsystem } from "@engine/render-three/animationSubsystem";
-import { ActionMap, type ActionBindings } from "@engine/input/actionMap";
+import { ActionMap } from "@engine/input/actionMap";
+import { DEFAULT_INPUT_BINDINGS } from "@/game/defaultInputBindings";
 import { InputSubsystem } from "@engine/input/inputSubsystem";
 import {
   BehaviorSubsystem,
@@ -212,24 +213,6 @@ import {
   parseEffectDefinition,
   type EffectDefinition,
 } from "@engine/render-three/particleEffect";
-
-const DEFAULT_INPUT_BINDINGS: ActionBindings = {
-  KeyW: "move-forward",
-  ArrowUp: "move-forward",
-  KeyS: "move-back",
-  ArrowDown: "move-back",
-  KeyA: "move-left",
-  ArrowLeft: "move-left",
-  KeyD: "move-right",
-  ArrowRight: "move-right",
-  KeyE: "interact",
-  KeyQ: "emote",
-  Space: "jump",
-  ShiftLeft: "sprint",
-  ShiftRight: "sprint",
-  Mouse0: "fire",
-  Mouse2: "aim",
-};
 
 /**
  * Live gameplay readout for the `?debug` overlay: the active Game Mode, the pawn

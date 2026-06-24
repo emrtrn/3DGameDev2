@@ -1635,7 +1635,6 @@ function validateBlendSpaces(value: unknown): Record<string, unknown>[] {
 }
 
 const MONTAGE_SLOTS = ["upperBody", "fullBody"] as const;
-const MONTAGE_TRIGGER_MODES = ["press", "hold"] as const;
 
 function validateBlendSeconds(value: unknown, label: string, fallback: number): number {
   if (value === undefined || value === null) return fallback;
@@ -1670,27 +1669,7 @@ function validateMontage(value: unknown, label: string): Record<string, unknown>
     blendInSeconds: validateBlendSeconds(input.blendInSeconds, `${label}.blendInSeconds`, 0.12),
     blendOutSeconds: validateBlendSeconds(input.blendOutSeconds, `${label}.blendOutSeconds`, 0.2),
   };
-  const trigger = validateMontageTrigger(input.trigger, `${label}.trigger`);
-  if (trigger) output.trigger = trigger;
   return output;
-}
-
-function validateMontageTrigger(value: unknown, label: string): Record<string, unknown> | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label} must be an object`);
-  }
-  const input = value as Record<string, unknown>;
-  if (typeof input.action !== "string" || input.action.length === 0) {
-    throw new Error(`${label}.action must be a non-empty string`);
-  }
-  if (
-    input.mode !== undefined &&
-    !MONTAGE_TRIGGER_MODES.includes(input.mode as (typeof MONTAGE_TRIGGER_MODES)[number])
-  ) {
-    throw new Error(`${label}.mode must be one of ${MONTAGE_TRIGGER_MODES.join(", ")}`);
-  }
-  return { action: input.action, mode: input.mode === "hold" ? "hold" : "press" };
 }
 
 function validateMontages(value: unknown): Record<string, unknown>[] {

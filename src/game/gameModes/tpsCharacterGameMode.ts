@@ -32,11 +32,10 @@ import {
   EMPTY_LOCOMOTION_CONFIG,
   type LocomotionAssetConfig,
 } from "@/game/locomotionAnimation";
-import type {
-  AssetSkeletonMontageDef,
-  MontageTriggerDef,
-  MontageTriggerMode,
-} from "@/scene/assetSkeletonLoader";
+import {
+  resolveMontageBindings,
+  type MontageBinding,
+} from "@/game/montageInputBindings";
 import {
   cameraProjectionFromComponent,
   desiredSpringArmCameraPose,
@@ -78,47 +77,6 @@ const SPRINT_SHAKE_FREQUENCY_HZ = 8;
 
 /** Crossfade duration (seconds) between locomotion clips. */
 const ANIMATION_CROSSFADE_SECONDS = 0.18;
-
-/** An upper-body montage resolved to the input action + mode that triggers it. */
-export interface MontageBinding {
-  readonly clip: string;
-  readonly action: string;
-  readonly mode: MontageTriggerMode;
-  readonly blendInSeconds: number;
-  readonly blendOutSeconds: number;
-}
-
-/**
- * Resolves authored upper-body montages to input bindings. An explicit
- * `trigger` wins; otherwise the TPS naming convention applies (a montage named
- * "aim" holds, one named "fire" presses) so characters authored before the
- * trigger field keep their behavior. Montages without either are skipped (they
- * are triggered by game code, not input).
- */
-export function resolveMontageBindings(
-  montages: readonly AssetSkeletonMontageDef[] | undefined,
-): MontageBinding[] {
-  const bindings: MontageBinding[] = [];
-  for (const montage of montages ?? []) {
-    if (montage.slot !== "upperBody") continue;
-    const trigger = montage.trigger ?? defaultTriggerForName(montage.name);
-    if (!trigger) continue;
-    bindings.push({
-      clip: montage.clip,
-      action: trigger.action,
-      mode: trigger.mode,
-      blendInSeconds: montage.blendInSeconds,
-      blendOutSeconds: montage.blendOutSeconds,
-    });
-  }
-  return bindings;
-}
-
-function defaultTriggerForName(name: string): MontageTriggerDef | null {
-  if (name === "aim") return { action: "aim", mode: "hold" };
-  if (name === "fire") return { action: "fire", mode: "press" };
-  return null;
-}
 
 /** Resolves the explicit player character a TPS session should possess. */
 export function resolvePlayerCharacter(

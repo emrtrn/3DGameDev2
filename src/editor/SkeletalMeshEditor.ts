@@ -42,7 +42,6 @@ import {
   ANIMATION_SET_ROLES,
   BLEND_SPACE_TYPES,
   MONTAGE_SLOTS,
-  MONTAGE_TRIGGER_MODES,
   defaultAssetSkeleton,
   defaultBlendSpaceAxis,
   loadAssetSkeleton,
@@ -57,7 +56,6 @@ import {
   type BlendSpaceSampleDef,
   type BlendSpaceType,
   type MontageSlot,
-  type MontageTriggerMode,
 } from "@/editor/assetSkeletonStore";
 
 export interface SkeletalMeshEditorOptions {
@@ -1020,19 +1018,7 @@ export class SkeletalMeshEditor {
         <label class="sm-row sm-toggle"><input type="checkbox" data-skel-montage-loop ${montage.loop ? "checked" : ""} /><span>Loop while held</span></label>
         <label class="sm-row"><span>Blend In (s)</span><input type="text" data-skel-montage-blend="in" value="${montage.blendInSeconds}" /></label>
         <label class="sm-row"><span>Blend Out (s)</span><input type="text" data-skel-montage-blend="out" value="${montage.blendOutSeconds}" /></label>
-        <div class="sm-blend-axis">
-          <div class="sm-blend-axis-label">Input Trigger</div>
-          <label class="sm-row"><span>Action</span><input type="text" data-skel-montage-trigger-action value="${escapeHtml(montage.trigger?.action ?? "")}" placeholder="e.g. emote" /></label>
-          <label class="sm-row">
-            <span>Mode</span>
-            <select data-skel-montage-trigger-mode ${montage.trigger ? "" : "disabled"}>
-              ${MONTAGE_TRIGGER_MODES.map(
-                (mode) => `<option value="${mode}" ${mode === (montage.trigger?.mode ?? "press") ? "selected" : ""}>${mode === "press" ? "Press (one-shot)" : "Hold (while down)"}</option>`,
-              ).join("")}
-            </select>
-          </label>
-          <div class="sm-hint">Bind this action to a key in the runtime input bindings; empty = code-triggered only.${montage.slot === "fullBody" ? " Triggers currently fire upperBody montages only." : ""}</div>
-        </div>
+        <div class="sm-hint">Input is bound in game code, not here: a montage defines the clip; which key plays it lives in the Character/code map.</div>
         ${
           montage.slot === "upperBody" && !this.skeleton.upperBodyBone
             ? `<div class="sm-hint">Set an Upper-Body Root in Skeleton mode, or this montage plays full-body.</div>`
@@ -1279,12 +1265,6 @@ export class SkeletalMeshEditor {
       input.addEventListener("change", () => {
         this.setMontageBlend(input.dataset.skelMontageBlend as "in" | "out", input.value);
       });
-    });
-    this.detailsHost.querySelector<HTMLInputElement>("[data-skel-montage-trigger-action]")?.addEventListener("change", (event) => {
-      this.setMontageTriggerAction((event.target as HTMLInputElement).value);
-    });
-    this.detailsHost.querySelector<HTMLSelectElement>("[data-skel-montage-trigger-mode]")?.addEventListener("change", (event) => {
-      this.setMontageTriggerMode((event.target as HTMLSelectElement).value as MontageTriggerMode);
     });
   }
 
@@ -1963,28 +1943,6 @@ export class SkeletalMeshEditor {
         ? { ...montage, blendInSeconds: clamped }
         : { ...montage, blendOutSeconds: clamped };
     this.replaceSelectedMontage(next);
-    this.renderDetails();
-  }
-
-  private setMontageTriggerAction(rawAction: string): void {
-    const montage = this.getSelectedMontage();
-    if (!montage) return;
-    const action = rawAction.trim();
-    let next: AssetSkeletonMontageDef;
-    if (action) {
-      next = { ...montage, trigger: { action, mode: montage.trigger?.mode ?? "press" } };
-    } else {
-      next = { ...montage };
-      delete next.trigger;
-    }
-    this.replaceSelectedMontage(next);
-    this.renderDetails();
-  }
-
-  private setMontageTriggerMode(mode: MontageTriggerMode): void {
-    const montage = this.getSelectedMontage();
-    if (!montage || !montage.trigger || !MONTAGE_TRIGGER_MODES.includes(mode)) return;
-    this.replaceSelectedMontage({ ...montage, trigger: { ...montage.trigger, mode } });
     this.renderDetails();
   }
 

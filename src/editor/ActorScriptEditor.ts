@@ -44,6 +44,9 @@ import { isModelAssetType, type AssetType } from "@engine/assets/manifest";
 import { loadActorScript, saveActorScript } from "@/editor/actorScriptStore";
 import { createBehaviorStub } from "@/editor/behaviorStubStore";
 import { ActorScriptViewport } from "@/editor/ActorScriptViewport";
+import { loadAssetSkeleton, type AssetSkeletonMontageDef } from "@/scene/assetSkeletonLoader";
+import { resolveMontageBindings } from "@/game/montageInputBindings";
+import { formatInputCode, keysForAction } from "@/game/defaultInputBindings";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
@@ -144,6 +147,10 @@ export class ActorScriptEditor {
   private lastBuildSignature = "";
   private viewportSyncTimer: number | undefined;
   private modelPathById: Map<string, string> | null = null;
+  /** Cached montages per skeletalMesh asset id, for the read-only montage-input panel. */
+  private readonly montagesByAssetId = new Map<string, readonly AssetSkeletonMontageDef[]>();
+  /** Asset ids whose skeleton sidecar load was already kicked off (avoid refetch). */
+  private readonly skeletonLoadStarted = new Set<string>();
 
   private constructor(private readonly options: ActorScriptEditorOptions) {
     this.def = defaultActorScriptDef(options.label);
@@ -740,6 +747,8 @@ export class ActorScriptEditor {
     ].join("");
     const colliderField = node.component === "Collider" ? colliderFields(node) : "";
     const meshField = node.component === "MeshRenderer" ? this.meshPickerField(node) : "";
+    const montageInputField =
+      node.component === "MeshRenderer" ? this.montageInputField(node) : "";
     const lightField = node.component === "Light" ? lightFields(node) : "";
     const particleField = node.component === "ParticleEmitter" ? this.particleFields(node) : "";
     const characterMovementField =
@@ -771,6 +780,7 @@ export class ActorScriptEditor {
       </label>
       ${colliderField}
       ${meshField}
+      ${montageInputField}
       ${lightField}
       ${particleField}
       ${characterMovementField}
@@ -808,6 +818,89 @@ export class ActorScriptEditor {
         <select data-as-node-mesh>${options}</select>
       </label>
     `;
+  }
+
+  private assetTypeById(assetId: string): string | undefined {
+    return (this.options.assets ?? []).find((asset) => asset.id === assetId)?.assetType;
+  }
+
+  /**
+   * Read-only montage → action → key panel under a `skeletalMesh` MeshRenderer.
+   * Input is code-owned (`montageInputBindings.ts` + `DEFAULT_INPUT_BINDINGS`),
+   * not asset data, so this only *shows* what a possessed character would fire —
+   * it never edits the binding. Montages load lazily from the `*.skeleton.json`
+   * sidecar (fills a cache, then re-renders once).
+   */
+  private montageInputField(node: ComponentTemplateNode): string {
+    const assetId = typeof node.props.assetId === "string" ? node.props.assetId : "";
+    if (!assetId || this.assetTypeById(assetId) !== "skeletalMesh") return "";
+    const montages = this.montagesByAssetId.get(assetId);
+    if (!montages) {
+      void this.ensureSkeletonLoaded(assetId, node.id);
+      return `
+        <div class="as-section-label">Montage Inputs <small>read-only</small></div>
+        <div class="as-inspect"><div class="as-empty">Loading montage inputs…</div></div>
+      `;
+    }
+    return `
+      <div class="as-section-label">Montage Inputs <small>read-only · code-bound</small></div>
+      <div class="as-inspect">
+        <ul>${this.montageInputRows(montages)}</ul>
+        <div class="as-empty">Bound in code (montageInputBindings.ts); the mesh only defines clips.</div>
+      </div>
+    `;
+  }
+
+  private montageInputRows(montages: readonly AssetSkeletonMontageDef[]): string {
+    if (montages.length === 0) return `<li class="as-inspect-empty">no montages</li>`;
+    const bindingByMontage = new Map(
+      resolveMontageBindings(montages).map((binding) => [binding.montage, binding] as const),
+    );
+    return montages
+      .map((montage) => {
+        const binding = bindingByMontage.get(montage.name);
+        let detail: string;
+        if (binding) {
+          const keys = keysForAction(binding.action).map(formatInputCode);
+          const keyText = keys.length ? keys.join(" / ") : "unbound key";
+          detail = `${escapeHtml(binding.action)} → ${escapeHtml(keyText)} <small>(${binding.mode})</small>`;
+        } else if (montage.slot === "fullBody") {
+          detail = "full body · not input-bound";
+        } else {
+          detail = "no input binding";
+        }
+        return `<li><code>${escapeHtml(montage.name)}</code><span>${detail}</span></li>`;
+      })
+      .join("");
+  }
+
+  /**
+   * Loads a skeletalMesh asset's montages once and re-renders the Details panel
+   * if it is still showing this component+asset. The panel renders synchronously,
+   * so the async sidecar fetch fills a cache and triggers a single re-render.
+   */
+  private async ensureSkeletonLoaded(assetId: string, componentId: string): Promise<void> {
+    if (this.skeletonLoadStarted.has(assetId)) return;
+    this.skeletonLoadStarted.add(assetId);
+    const modelPath = this.resolveModelPath(assetId);
+    let montages: readonly AssetSkeletonMontageDef[] = [];
+    if (modelPath) {
+      try {
+        montages = (await loadAssetSkeleton(modelPath)).montages;
+      } catch {
+        montages = [];
+      }
+    }
+    if (this.disposed) return;
+    this.montagesByAssetId.set(assetId, montages);
+    const node = this.def.components.find((component) => component.id === componentId);
+    if (
+      this.selection.kind === "component" &&
+      this.selection.id === componentId &&
+      node?.props.assetId === assetId
+    ) {
+      this.renderDetails();
+    }
   }
 
   /**
