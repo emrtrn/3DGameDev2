@@ -12,6 +12,7 @@ export {
   ANIMATION_SET_ROLES,
   BLEND_SPACE_TYPES,
   MONTAGE_SLOTS,
+  PHYSICS_BODY_SHAPES,
   defaultAssetSkeleton,
   defaultBlendSpaceAxis,
   loadAssetSkeleton,
@@ -25,6 +26,7 @@ export type {
   AssetSkeletonDef,
   AssetSkeletonMontageDef,
   AssetSkeletonNotifyDef,
+  AssetSkeletonPhysicsBodyDef,
   AssetSkeletonPreviewPrefs,
   AssetSkeletonSocketDef,
   BlendSampleWeight,
@@ -32,6 +34,7 @@ export type {
   BlendSpaceSampleDef,
   BlendSpaceType,
   MontageSlot,
+  PhysicsBodyShape,
 } from "@/scene/assetSkeletonLoader";
 
 export async function saveAssetSkeleton(

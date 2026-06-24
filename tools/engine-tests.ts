@@ -7092,6 +7092,65 @@ check("AnimationNotifyTracker fires across ticks, re-arms on clip switch and sto
   assert.deepEqual(tracker.sample({ clip: "idle", time: 0.5, duration: 1 }, byClip), []);
 });
 
+check("asset skeleton physics bodies normalize: drop invalid, default shape, clamp size", () => {
+  const skeleton = normalizeAssetSkeleton({
+    schema: 1,
+    physicsBodies: [
+      { name: "pelvis", bone: "hips", shape: "box", position: [0, 0.1, 0], rotation: [0, 0, 0], size: [0.3, 0.2, 0.25] },
+      { name: "head", bone: "neck", shape: "weird", size: [0.15, 0.15, 0.15] },
+      { name: "", bone: "hips", size: [1, 1, 1] },
+      { name: "noBone", bone: "", size: [1, 1, 1] },
+      { name: "pelvis", bone: "dup", size: [1, 1, 1] },
+      { name: "badSize", bone: "x", size: [0, -1, 2] },
+    ],
+  });
+  assert.deepEqual(skeleton.physicsBodies, [
+    { name: "pelvis", bone: "hips", shape: "box", position: [0, 0.1, 0], rotation: [0, 0, 0], size: [0.3, 0.2, 0.25] },
+    // Unknown shape falls back to capsule; missing position/rotation default.
+    { name: "head", bone: "neck", shape: "capsule", position: [0, 0, 0], rotation: [0, 0, 0], size: [0.15, 0.15, 0.15] },
+    // Non-positive size axes clamp to a small positive minimum.
+    { name: "badSize", bone: "x", shape: "capsule", position: [0, 0, 0], rotation: [0, 0, 0], size: [0.01, 0.01, 2] },
+  ]);
+});
+
+check("asset skeleton physics bodies round-trip through the save validator; bad fields rejected", () => {
+  const validated = validateSaveSkeletonPayload({
+    path: "assets/characters/Hero.skeleton.json",
+    skeleton: {
+      physicsBodies: [
+        { name: "pelvis", bone: "hips", shape: "capsule", position: [0, 0, 0], rotation: [0, 0, 0], size: [0.2, 0.5, 0.2] },
+      ],
+    },
+  });
+  assert.deepEqual(validated.skeleton.physicsBodies, [
+    { name: "pelvis", bone: "hips", shape: "capsule", position: [0, 0, 0], rotation: [0, 0, 0], size: [0.2, 0.5, 0.2] },
+  ]);
+  // Empty name, non-positive size, and duplicate name are rejected.
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: { physicsBodies: [{ name: "", bone: "hips", size: [1, 1, 1] }] },
+    }),
+  );
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: { physicsBodies: [{ name: "b", bone: "hips", size: [1, 0, 1] }] },
+    }),
+  );
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: {
+        physicsBodies: [
+          { name: "b", bone: "hips", size: [1, 1, 1] },
+          { name: "b", bone: "spine", size: [1, 1, 1] },
+        ],
+      },
+    }),
+  );
+});
+
 check("asset skeleton sidecar normalizes animation metadata", () => {
   assert.equal(
     skeletonSidecarPath("assets/characters/Hero.glb"),

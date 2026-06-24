@@ -7,6 +7,8 @@ import {
   AnimationClip,
   Bone,
   Box3,
+  BoxGeometry,
+  CapsuleGeometry,
   Clock,
   Group,
   LoopOnce,
@@ -25,6 +27,7 @@ import {
   Vector3,
   WebGLRenderer,
   type AnimationMixer,
+  type BufferGeometry,
   type Material,
 } from "three";
 import { MeshoptDecoder } from "meshoptimizer";
@@ -39,6 +42,7 @@ import {
   ANIMATION_SET_ROLES,
   BLEND_SPACE_TYPES,
   MONTAGE_SLOTS,
+  PHYSICS_BODY_SHAPES,
   defaultAssetSkeleton,
   defaultBlendSpaceAxis,
   loadAssetSkeleton,
@@ -49,11 +53,13 @@ import {
   type AssetSkeletonDef,
   type AssetSkeletonMontageDef,
   type AssetSkeletonNotifyDef,
+  type AssetSkeletonPhysicsBodyDef,
   type AssetSkeletonSocketDef,
   type BlendSpaceAxisDef,
   type BlendSpaceSampleDef,
   type BlendSpaceType,
   type MontageSlot,
+  type PhysicsBodyShape,
 } from "@/editor/assetSkeletonStore";
 
 export interface SkeletalMeshEditorOptions {
@@ -69,7 +75,7 @@ export interface SkeletalMeshEditorOptions {
   onStatus?: (message: string, tone?: "info" | "warning" | "error") => void;
 }
 
-type PersonaMode = "skeleton" | "animation";
+type PersonaMode = "skeleton" | "animation" | "physics";
 type SocketGizmoMode = "translate" | "rotate" | "scale";
 
 interface AssetPickerItem {
@@ -121,6 +127,12 @@ interface SocketOverlay {
   previewAssetId: string | null;
 }
 
+interface PhysicsOverlay {
+  root: Group;
+  mesh: Mesh;
+  body: AssetSkeletonPhysicsBodyDef;
+}
+
 export class SkeletalMeshEditor {
   private static active: SkeletalMeshEditor | null = null;
 
@@ -164,6 +176,8 @@ export class SkeletalMeshEditor {
   private socketGizmoMode: SocketGizmoMode = "translate";
   private socketGizmoDragging = false;
   private selectedSocketName: string | null = null;
+  private readonly physicsOverlays: PhysicsOverlay[] = [];
+  private selectedBodyName: string | null = null;
   private selectedBone: Bone | null = null;
   private readonly boneMarker = new Mesh(
     new SphereGeometry(0.045, 16, 10),
@@ -271,10 +285,10 @@ export class SkeletalMeshEditor {
     controls.addEventListener("dragging-changed", (event) => {
       this.socketGizmoDragging = event.value === true;
       if (!this.socketGizmoDragging) {
-        this.commitSelectedSocketFromGizmo();
+        this.commitSelectedGizmo();
       }
     });
-    controls.addEventListener("objectChange", () => this.commitSelectedSocketFromGizmo({ quiet: true }));
+    controls.addEventListener("objectChange", () => this.commitSelectedGizmo({ quiet: true }));
     this.scene.add(controls.getHelper());
     this.transformControls = controls;
 
@@ -526,7 +540,7 @@ export class SkeletalMeshEditor {
       <div class="sm-tool-group sm-tool-modes" aria-label="Persona mode">
         <button type="button" class="sm-tool-btn ${this.mode === "skeleton" ? "is-active" : ""}" data-skel-mode="skeleton">Skeleton</button>
         <button type="button" class="sm-tool-btn ${this.mode === "animation" ? "is-active" : ""}" data-skel-mode="animation">Animation</button>
-        <button type="button" class="sm-tool-btn" disabled title="Physics mode is planned for PhAT-lite">Physics</button>
+        <button type="button" class="sm-tool-btn ${this.mode === "physics" ? "is-active" : ""}" data-skel-mode="physics" title="PhAT-lite: bone collision bodies">Physics</button>
       </div>
       <div class="sm-tool-sep"></div>
       <div class="sm-tool-group sm-tool-visibility">
@@ -548,19 +562,24 @@ export class SkeletalMeshEditor {
         <button type="button" class="sm-tool-btn" data-skel-bind-pose>Bind Pose</button>
       </div>
       <div class="sm-tool-sep"></div>
-      <div class="sm-tool-group sm-tool-modes" aria-label="Socket transform mode">
-        <button type="button" class="sm-tool-btn sm-mode-btn ${this.socketGizmoMode === "translate" ? "is-active" : ""}" data-skel-socket-mode="translate" title="Move Socket">✥</button>
-        <button type="button" class="sm-tool-btn sm-mode-btn ${this.socketGizmoMode === "rotate" ? "is-active" : ""}" data-skel-socket-mode="rotate" title="Rotate Socket">⟳</button>
-        <button type="button" class="sm-tool-btn sm-mode-btn ${this.socketGizmoMode === "scale" ? "is-active" : ""}" data-skel-socket-mode="scale" title="Scale Socket">⤢</button>
+      <div class="sm-tool-group sm-tool-modes" aria-label="Gizmo transform mode">
+        <button type="button" class="sm-tool-btn sm-mode-btn ${this.socketGizmoMode === "translate" ? "is-active" : ""}" data-skel-socket-mode="translate" title="Move">✥</button>
+        <button type="button" class="sm-tool-btn sm-mode-btn ${this.socketGizmoMode === "rotate" ? "is-active" : ""}" data-skel-socket-mode="rotate" title="Rotate">⟳</button>
+        ${
+          this.mode === "physics"
+            ? ""
+            : `<button type="button" class="sm-tool-btn sm-mode-btn ${this.socketGizmoMode === "scale" ? "is-active" : ""}" data-skel-socket-mode="scale" title="Scale">⤢</button>`
+        }
       </div>
     `;
     this.toolbarHost.querySelectorAll<HTMLButtonElement>("[data-skel-mode]").forEach((button) => {
       button.addEventListener("click", () => {
-        const nextMode = button.dataset.skelMode === "animation" ? "animation" : "skeleton";
-        if (nextMode !== this.mode && this.blendPreviewActive) this.stopBlendPreview();
-        this.mode = nextMode;
-        this.renderToolbar();
-        this.renderDetails();
+        const raw = button.dataset.skelMode;
+        const nextMode: PersonaMode =
+          raw === "animation" ? "animation" : raw === "physics" ? "physics" : "skeleton";
+        if (nextMode === this.mode) return;
+        if (this.blendPreviewActive) this.stopBlendPreview();
+        this.setPersonaMode(nextMode);
       });
     });
     this.toolbarHost
@@ -591,8 +610,31 @@ export class SkeletalMeshEditor {
     });
   }
 
+  /** Switches Persona mode, swapping the active viewport overlays + gizmo target. */
+  private setPersonaMode(next: PersonaMode): void {
+    const prev = this.mode;
+    this.mode = next;
+    if (prev === "physics" && next !== "physics") {
+      this.disposePhysicsOverlays();
+      this.transformControls?.detach();
+      this.attachSelectedSocketGizmo();
+    }
+    if (next === "physics") {
+      if (this.socketGizmoMode === "scale") this.socketGizmoMode = "translate";
+      this.transformControls?.detach();
+      this.rebuildPhysicsOverlays();
+    }
+    this.renderToolbar();
+    this.renderDetails();
+  }
+
   private renderDetails(): void {
-    const modeBody = this.mode === "animation" ? this.renderAnimationDetails() : this.renderSkeletonDetails();
+    const modeBody =
+      this.mode === "animation"
+        ? this.renderAnimationDetails()
+        : this.mode === "physics"
+          ? this.renderPhysicsDetails()
+          : this.renderSkeletonDetails();
     this.detailsHost.innerHTML = `
       <div class="sm-details-heading">Details</div>
       ${modeBody}
@@ -1153,6 +1195,7 @@ export class SkeletalMeshEditor {
     });
     this.bindBlendSpaceControls();
     this.bindMontageControls();
+    this.bindPhysicsControls();
   }
 
   private bindBlendSpaceControls(): void {
@@ -1403,6 +1446,305 @@ export class SkeletalMeshEditor {
     } else {
       this.markDirty();
     }
+  }
+
+  /** Routes a gizmo drag/commit to the overlay kind active in the current mode. */
+  private commitSelectedGizmo(options: { quiet?: boolean } = {}): void {
+    if (this.mode === "physics") this.commitSelectedBodyFromGizmo(options);
+    else this.commitSelectedSocketFromGizmo(options);
+  }
+
+  // --- Physics mode (PhAT-lite bodies) ----------------------------------
+
+  private renderPhysicsDetails(): string {
+    const selected = this.getSelectedBody();
+    return `
+      <div class="sm-section">
+        <div class="sm-section-title">Physics Bodies <span class="sm-count">${this.skeleton.physicsBodies.length}</span></div>
+        <div class="sm-prim-list">
+          ${
+            this.nodeNames.length
+              ? `<button type="button" class="sm-menu-item" data-skel-body-add>Add Body</button>`
+              : `<div class="sm-empty">Load a rigged model to add bodies.</div>`
+          }
+          ${
+            this.skeleton.physicsBodies.length
+              ? this.skeleton.physicsBodies.map((body) => this.renderBodyRow(body)).join("")
+              : `<div class="sm-empty">No collision bodies yet.</div>`
+          }
+        </div>
+        ${selected ? this.renderBodyEditor(selected) : ""}
+        <div class="sm-hint">PhAT-lite: capsule/sphere/box bodies attached to bones for a future ragdoll. Move/Rotate with the gizmo; set size below.</div>
+      </div>
+    `;
+  }
+
+  private renderBodyRow(body: AssetSkeletonPhysicsBodyDef): string {
+    const isSelected = body.name === this.selectedBodyName;
+    const boneKnown = this.nodeNames.includes(body.bone);
+    return `
+      <div class="sm-prim-row ${isSelected ? "is-selected" : ""}">
+        <button type="button" class="sm-socket-main" data-skel-body-select="${escapeHtml(body.name)}">
+          <strong>${escapeHtml(body.name)}</strong>
+          <small>${escapeHtml(body.bone)}${boneKnown ? "" : " (missing)"} · ${body.shape}</small>
+        </button>
+        <button type="button" class="sm-prim-del" data-skel-body-delete="${escapeHtml(body.name)}" title="Delete">✕</button>
+      </div>
+    `;
+  }
+
+  private renderBodyEditor(body: AssetSkeletonPhysicsBodyDef): string {
+    const nodeOptions = this.nodeNames.length
+      ? this.nodeNames
+          .map(
+            (name) =>
+              `<option value="${escapeHtml(name)}" ${name === body.bone ? "selected" : ""}>${escapeHtml(name)}</option>`,
+          )
+          .join("")
+      : `<option value="${escapeHtml(body.bone)}" selected>${escapeHtml(body.bone)}</option>`;
+    return `
+      <div class="sm-section sm-blend-editor">
+        <div class="sm-section-title">Edit “${escapeHtml(body.name)}”</div>
+        <label class="sm-row"><span>Name</span><input type="text" data-skel-body-name value="${escapeHtml(body.name)}" /></label>
+        <label class="sm-row"><span>Bone/Node</span><select data-skel-body-bone>${nodeOptions}</select></label>
+        <label class="sm-row">
+          <span>Shape</span>
+          <select data-skel-body-shape>
+            ${PHYSICS_BODY_SHAPES.map((shape) => `<option value="${shape}" ${shape === body.shape ? "selected" : ""}>${shape}</option>`).join("")}
+          </select>
+        </label>
+        <label class="sm-row"><span>Size X</span><input type="text" data-skel-body-size="0" value="${body.size[0]}" /></label>
+        <label class="sm-row"><span>Size Y</span><input type="text" data-skel-body-size="1" value="${body.size[1]}" /></label>
+        <label class="sm-row"><span>Size Z</span><input type="text" data-skel-body-size="2" value="${body.size[2]}" /></label>
+      </div>
+    `;
+  }
+
+  private getSelectedBody(): AssetSkeletonPhysicsBodyDef | null {
+    if (!this.selectedBodyName) return null;
+    return this.skeleton.physicsBodies.find((body) => body.name === this.selectedBodyName) ?? null;
+  }
+
+  private rebuildPhysicsOverlays(): void {
+    this.transformControls?.detach();
+    this.disposePhysicsOverlays();
+    for (const body of this.skeleton.physicsBodies) {
+      const node = this.modelGroup.getObjectByName(body.bone);
+      if (!node) continue;
+      const root = new Group();
+      root.name = `Body:${body.name}`;
+      this.applyBodyTransform(root, body);
+      const mesh = new Mesh(
+        this.bodyGeometry(body.shape, body.size),
+        new MeshBasicMaterial({
+          color: body.name === this.selectedBodyName ? 0xffb648 : 0x66d9a0,
+          wireframe: true,
+          depthTest: false,
+        }),
+      );
+      mesh.renderOrder = 5;
+      root.add(mesh);
+      node.add(root);
+      this.physicsOverlays.push({ root, mesh, body });
+    }
+    this.attachSelectedBodyGizmo();
+  }
+
+  private disposePhysicsOverlays(): void {
+    for (const overlay of this.physicsOverlays) {
+      overlay.root.removeFromParent();
+      overlay.mesh.geometry.dispose();
+      if (Array.isArray(overlay.mesh.material)) {
+        for (const material of overlay.mesh.material) material.dispose();
+      } else {
+        overlay.mesh.material.dispose();
+      }
+    }
+    this.physicsOverlays.length = 0;
+  }
+
+  private bodyGeometry(shape: PhysicsBodyShape, size: Vec3): BufferGeometry {
+    if (shape === "box") return new BoxGeometry(size[0], size[1], size[2]);
+    if (shape === "sphere") return new SphereGeometry(Math.max(size[0], size[1], size[2]) / 2, 16, 10);
+    const radius = Math.max(size[0], size[2]) / 2;
+    const length = Math.max(size[1] - radius * 2, 0.001);
+    return new CapsuleGeometry(radius, length, 6, 12);
+  }
+
+  private applyBodyTransform(root: Object3D, body: AssetSkeletonPhysicsBodyDef): void {
+    root.position.set(body.position[0], body.position[1], body.position[2]);
+    root.rotation.set(
+      MathUtils.degToRad(body.rotation[0]),
+      MathUtils.degToRad(body.rotation[1]),
+      MathUtils.degToRad(body.rotation[2]),
+      "XYZ",
+    );
+  }
+
+  private bodyFromObject(root: Object3D, body: AssetSkeletonPhysicsBodyDef): AssetSkeletonPhysicsBodyDef {
+    return {
+      ...body,
+      position: [round(root.position.x), round(root.position.y), round(root.position.z)] as Vec3,
+      rotation: [
+        round(MathUtils.radToDeg(root.rotation.x)),
+        round(MathUtils.radToDeg(root.rotation.y)),
+        round(MathUtils.radToDeg(root.rotation.z)),
+      ] as Vec3,
+    };
+  }
+
+  private attachSelectedBodyGizmo(): void {
+    const overlay = this.physicsOverlays.find((item) => item.body.name === this.selectedBodyName);
+    if (!overlay) {
+      this.transformControls?.detach();
+      return;
+    }
+    this.transformControls?.attach(overlay.root);
+    this.transformControls?.setMode(this.socketGizmoMode === "scale" ? "translate" : this.socketGizmoMode);
+    this.updateBodySelectionVisuals();
+  }
+
+  private updateBodySelectionVisuals(): void {
+    for (const overlay of this.physicsOverlays) {
+      const selected = overlay.body.name === this.selectedBodyName;
+      if (overlay.mesh.material instanceof MeshBasicMaterial) {
+        overlay.mesh.material.color.setHex(selected ? 0xffb648 : 0x66d9a0);
+      }
+    }
+  }
+
+  private commitSelectedBodyFromGizmo(options: { quiet?: boolean } = {}): void {
+    const overlay = this.physicsOverlays.find((item) => item.body.name === this.selectedBodyName);
+    if (!overlay) return;
+    const physicsBodies = this.skeleton.physicsBodies.map((body) =>
+      body.name === overlay.body.name ? this.bodyFromObject(overlay.root, body) : body,
+    );
+    this.skeleton = { ...this.skeleton, physicsBodies };
+    overlay.body = physicsBodies.find((body) => body.name === overlay.body.name) ?? overlay.body;
+    this.markDirty();
+    if (!options.quiet) this.renderDetails();
+  }
+
+  private addBody(): void {
+    const bone = this.nodeNames[0];
+    if (!bone) return;
+    const taken = new Set(this.skeleton.physicsBodies.map((body) => body.name));
+    let name = "body";
+    for (let index = 2; taken.has(name); index += 1) name = `body_${index}`;
+    const body: AssetSkeletonPhysicsBodyDef = {
+      name,
+      bone,
+      shape: "capsule",
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      size: [0.2, 0.5, 0.2],
+    };
+    this.skeleton = { ...this.skeleton, physicsBodies: [...this.skeleton.physicsBodies, body] };
+    this.selectedBodyName = name;
+    this.rebuildPhysicsOverlays();
+    this.markDirty();
+    this.renderToolbar();
+    this.renderDetails();
+    this.setStatus(`Added body ${name}.`);
+  }
+
+  private selectBody(name: string | null): void {
+    this.selectedBodyName = name;
+    this.updateBodySelectionVisuals();
+    this.attachSelectedBodyGizmo();
+    this.renderDetails();
+  }
+
+  private deleteBody(name: string): void {
+    if (!name) return;
+    this.skeleton = {
+      ...this.skeleton,
+      physicsBodies: this.skeleton.physicsBodies.filter((body) => body.name !== name),
+    };
+    if (this.selectedBodyName === name) this.selectedBodyName = null;
+    this.rebuildPhysicsOverlays();
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus(`Deleted body ${name}.`);
+  }
+
+  private replaceBody(prevName: string, next: AssetSkeletonPhysicsBodyDef): void {
+    this.skeleton = {
+      ...this.skeleton,
+      physicsBodies: this.skeleton.physicsBodies.map((body) => (body.name === prevName ? next : body)),
+    };
+    if (this.selectedBodyName === prevName) this.selectedBodyName = next.name;
+    this.markDirty();
+  }
+
+  private setBodyName(rawName: string): void {
+    const body = this.getSelectedBody();
+    if (!body) return;
+    const name = rawName.trim();
+    if (!name || (name !== body.name && this.skeleton.physicsBodies.some((other) => other.name === name))) {
+      this.renderDetails();
+      return;
+    }
+    this.replaceBody(body.name, { ...body, name });
+    this.rebuildPhysicsOverlays();
+    this.renderDetails();
+  }
+
+  private setBodyBone(bone: string): void {
+    const body = this.getSelectedBody();
+    if (!body || !bone) return;
+    this.replaceBody(body.name, { ...body, bone });
+    this.rebuildPhysicsOverlays();
+    this.renderDetails();
+  }
+
+  private setBodyShape(shape: PhysicsBodyShape): void {
+    const body = this.getSelectedBody();
+    if (!body || !PHYSICS_BODY_SHAPES.includes(shape)) return;
+    this.replaceBody(body.name, { ...body, shape });
+    this.rebuildPhysicsOverlays();
+    this.renderDetails();
+  }
+
+  private setBodySize(axis: number, raw: string): void {
+    const body = this.getSelectedBody();
+    if (!body || axis < 0 || axis > 2) return;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      this.renderDetails();
+      return;
+    }
+    const size = [...body.size] as Vec3;
+    size[axis] = Number(parsed.toFixed(4));
+    this.replaceBody(body.name, { ...body, size });
+    this.rebuildPhysicsOverlays();
+    this.renderDetails();
+  }
+
+  private bindPhysicsControls(): void {
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-body-add]")?.addEventListener("click", () => {
+      this.addBody();
+    });
+    this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-body-select]").forEach((button) => {
+      button.addEventListener("click", () => this.selectBody(button.dataset.skelBodySelect ?? null));
+    });
+    this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-body-delete]").forEach((button) => {
+      button.addEventListener("click", () => this.deleteBody(button.dataset.skelBodyDelete ?? ""));
+    });
+    this.detailsHost.querySelector<HTMLInputElement>("[data-skel-body-name]")?.addEventListener("change", (event) => {
+      this.setBodyName((event.target as HTMLInputElement).value);
+    });
+    this.detailsHost.querySelector<HTMLSelectElement>("[data-skel-body-bone]")?.addEventListener("change", (event) => {
+      this.setBodyBone((event.target as HTMLSelectElement).value);
+    });
+    this.detailsHost.querySelector<HTMLSelectElement>("[data-skel-body-shape]")?.addEventListener("change", (event) => {
+      this.setBodyShape((event.target as HTMLSelectElement).value as PhysicsBodyShape);
+    });
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-skel-body-size]").forEach((input) => {
+      input.addEventListener("change", () =>
+        this.setBodySize(Number(input.dataset.skelBodySize), input.value),
+      );
+    });
   }
 
   private updateSocketSelectionVisuals(): void {
@@ -2166,6 +2508,7 @@ export class SkeletalMeshEditor {
     this.transformControls?.dispose();
     this.disposeNormalHelpers();
     this.disposeSocketOverlays();
+    this.disposePhysicsOverlays();
     this.boneMarker.geometry.dispose();
     if (Array.isArray(this.boneMarker.material)) {
       for (const material of this.boneMarker.material) material.dispose();

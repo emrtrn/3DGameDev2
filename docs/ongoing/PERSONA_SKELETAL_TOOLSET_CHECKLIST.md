@@ -402,13 +402,30 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 **Gotcha:** Montage `clip` dropdown'ı **None içermemeli** (boş clip save'de reddedilir);
 Blend Space sample'larında çözdüğüm gibi `blendSampleClipOptions` desenini kullan.
 
-### Faz 4 — Physics Mode / PhAT-lite (ertelenmiş, opsiyonel)
+### Faz 4 — Physics Mode / PhAT-lite (Aşama 1 yapıldı)
 
-- [ ] Mod anahtarında `Physics` modunu aktifleştir
-- [ ] Kemiklere **bodies** (kapsül/küre/kutu) ata + viewport gizmo
-- [ ] **Constraints** (eklem limitleri) kur
-- [ ] Rapier ragdoll önizleme/simülasyon; collision profili
-- [ ] `physicsAsset` sidecar formatı
+- [x] Mod anahtarında `Physics` modunu aktifleştir (2026-06-24). `PersonaMode += "physics"`,
+      toolbar Physics butonu etkin, `setPersonaMode` overlay/gizmo yaşam döngüsünü yönetir
+      (physics'e girişte socket gizmo'yu bırak + body overlay'leri kur; çıkışta tersi).
+      Gizmo mod toolbar'ı physics'te sadece Move/Rotate (Scale gizli).
+- [x] Kemiklere/node'lara **bodies** (kapsül/küre/kutu) ata + viewport gizmo (2026-06-24).
+      `renderPhysicsDetails` ([`SkeletalMeshEditor.ts`](../../src/editor/SkeletalMeshEditor.ts)):
+      Add Body, body listesi (ad/bone/shape), seç → düzenle (ad, bone/node dropdown — **skinned
+      VEYA rigid rig**, `getObjectByName` ile çözülür; shape select; Size X/Y/Z), sil. Viewport'ta
+      her body **wireframe** mesh (box→BoxGeometry, sphere→çap=maks eksen, capsule→radius=X/Z,
+      yükseklik=Y) node'a offset'le bağlı; seçili sarı; paylaşılan `TransformControls` ile
+      Move/Rotate → `commitSelectedBodyFromGizmo` sidecar'a yazar (`commitSelectedGizmo` mode'a
+      göre socket/body'e yönlendirir).
+- [x] `physicsAsset` sidecar formatı (2026-06-24). `AssetSkeletonPhysicsBodyDef {name, bone,
+      shape, position, rotation, size}` `*.skeleton.json` `physicsBodies[]` içinde
+      ([`assetSkeletonLoader.ts`](../../src/scene/assetSkeletonLoader.ts) normalize: geçersiz/yinelenen
+      düşürür, shape default capsule, size pozitif-kırpar; [`saveValidator.ts`](../../tools/saveValidator.ts)
+      `validatePhysicsBodies`: boş ad/bone, non-pozitif size, yinelenen ad reddi; store re-export).
+      engine-tests: normalize + validate round-trip.
+- [ ] **Constraints** (iki body arası eklem + swing/twist limitleri) authoring — **Aşama 2.**
+- [ ] Rapier ragdoll önizleme/simülasyon; collision profili — **Aşama 3 (asıl oyun değeri;
+      physics subsystem'e joint/articulation eklemek + karakteri kinematikten dinamiğe geçirmek
+      gerekir).** Rapier rigid body + collider var; **joint henüz yok** (`physicsSubsystem.ts`).
 
 ### Faz 5 — Persistans & Save Validator
 

@@ -19,6 +19,32 @@ export interface AssetSkeletonSocketDef {
   previewAssetId?: string;
 }
 
+export const PHYSICS_BODY_SHAPES = ["capsule", "sphere", "box"] as const;
+export type PhysicsBodyShape = (typeof PHYSICS_BODY_SHAPES)[number];
+
+/**
+ * A collision body rigidly attached to a bone/node — the data form of an Unreal
+ * Physics Asset body. A primitive shape (`shape` + `size`) at a bone-local
+ * offset; sized like {@link AssetSkeletonSocketDef} via a full-extent `size`
+ * Vec3 (box: extents; sphere: diameter from the max axis; capsule: radius from
+ * X/Z, total height from Y — matching the runtime collider builder). Authored in
+ * the editor's Physics mode and consumed by a future Rapier ragdoll. Generic: no
+ * game rules.
+ */
+export interface AssetSkeletonPhysicsBodyDef {
+  /** Unique name within the asset. */
+  name: string;
+  /** Bone/node name this body is rigidly attached to. */
+  bone: string;
+  shape: PhysicsBodyShape;
+  /** Bone-local offset. */
+  position: Vec3;
+  /** Bone-local rotation (XYZ degrees). */
+  rotation: Vec3;
+  /** Full local size (box: extents; sphere/capsule: see the interface doc). */
+  size: Vec3;
+}
+
 export const BLEND_SPACE_TYPES = ["1d", "2d"] as const;
 export type BlendSpaceType = (typeof BLEND_SPACE_TYPES)[number];
 
@@ -114,6 +140,8 @@ export interface AssetSkeletonDef {
   blendSpaces: AssetSkeletonBlendSpaceDef[];
   notifies: AssetSkeletonNotifyDef[];
   montages: AssetSkeletonMontageDef[];
+  /** Bone-attached collision bodies (PhAT-lite); consumed by a future ragdoll. */
+  physicsBodies: AssetSkeletonPhysicsBodyDef[];
   /**
    * Bone/node name that roots the upper-body mask for `upperBody` montages.
    * Everything in its subtree blends to the montage; the rest keeps locomotion.
@@ -141,6 +169,7 @@ export function defaultAssetSkeleton(): AssetSkeletonDef {
     blendSpaces: [],
     notifies: [],
     montages: [],
+    physicsBodies: [],
     preview: { selectedClip: null },
   };
 }
@@ -166,6 +195,7 @@ export function normalizeAssetSkeleton(value: unknown): AssetSkeletonDef {
     blendSpaces: normalizeBlendSpaces(input.blendSpaces),
     notifies: normalizeNotifies(input.notifies),
     montages: normalizeMontages(input.montages),
+    physicsBodies: normalizePhysicsBodies(input.physicsBodies),
     preview: normalizePreview(input.preview),
   };
   if (typeof input.upperBodyBone === "string" && input.upperBodyBone.length > 0) {
@@ -196,6 +226,38 @@ function normalizeMontages(value: unknown): AssetSkeletonMontageDef[] {
     result.push(montage);
   }
   return result;
+}
+
+function normalizePhysicsBodies(value: unknown): AssetSkeletonPhysicsBodyDef[] {
+  if (!Array.isArray(value)) return [];
+  const result: AssetSkeletonPhysicsBodyDef[] = [];
+  const names = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const input = item as Record<string, unknown>;
+    if (typeof input.name !== "string" || input.name.length === 0) continue;
+    if (typeof input.bone !== "string" || input.bone.length === 0) continue;
+    if (names.has(input.name)) continue;
+    names.add(input.name);
+    result.push({
+      name: input.name,
+      bone: input.bone,
+      shape: PHYSICS_BODY_SHAPES.includes(input.shape as PhysicsBodyShape)
+        ? (input.shape as PhysicsBodyShape)
+        : "capsule",
+      position: normalizeVec3(input.position, [0, 0, 0]),
+      rotation: normalizeVec3(input.rotation, [0, 0, 0]),
+      size: normalizePhysicsSize(input.size),
+    });
+  }
+  return result;
+}
+
+function normalizePhysicsSize(value: unknown): Vec3 {
+  if (!Array.isArray(value) || value.length !== 3 || !value.every((axis) => Number.isFinite(axis))) {
+    return [0.2, 0.5, 0.2];
+  }
+  return value.map((axis) => Number(Math.max(Number(axis), 0.01).toFixed(4))) as Vec3;
 }
 
 function normalizeNotifies(value: unknown): AssetSkeletonNotifyDef[] {

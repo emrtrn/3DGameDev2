@@ -1715,6 +1715,54 @@ function validateNotifies(value: unknown): Record<string, unknown>[] {
   return value.map((notify, index) => validateNotify(notify, `skeleton.notifies[${index}]`));
 }
 
+const PHYSICS_BODY_SHAPES = ["capsule", "sphere", "box"] as const;
+
+function validatePhysicsBody(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.name !== "string" || input.name.length === 0) {
+    throw new Error(`${label}.name must be a non-empty string`);
+  }
+  if (typeof input.bone !== "string" || input.bone.length === 0) {
+    throw new Error(`${label}.bone must be a non-empty string`);
+  }
+  if (
+    input.shape !== undefined &&
+    !PHYSICS_BODY_SHAPES.includes(input.shape as (typeof PHYSICS_BODY_SHAPES)[number])
+  ) {
+    throw new Error(`${label}.shape must be one of ${PHYSICS_BODY_SHAPES.join(", ")}`);
+  }
+  const size = validateVec3(input.size, `${label}.size`).map((axis) => {
+    if (axis <= 0) throw new Error(`${label}.size values must be positive`);
+    return Number(axis.toFixed(4));
+  });
+  return {
+    name: input.name,
+    bone: input.bone,
+    shape: input.shape === "sphere" ? "sphere" : input.shape === "box" ? "box" : "capsule",
+    position: validateVec3(input.position, `${label}.position`),
+    rotation: validateVec3(input.rotation, `${label}.rotation`).map((axis) => Number(axis.toFixed(3))),
+    size,
+  };
+}
+
+function validatePhysicsBodies(value: unknown): Record<string, unknown>[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error("skeleton.physicsBodies must be an array");
+  const names = new Set<string>();
+  return value.map((body, index) => {
+    const validated = validatePhysicsBody(body, `skeleton.physicsBodies[${index}]`);
+    const name = validated.name as string;
+    if (names.has(name)) {
+      throw new Error(`skeleton.physicsBodies[${index}].name "${name}" is duplicated`);
+    }
+    names.add(name);
+    return validated;
+  });
+}
+
 export function validateAssetSkeletonDef(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("skeleton def must be an object");
@@ -1745,6 +1793,7 @@ export function validateAssetSkeletonDef(value: unknown): Record<string, unknown
     blendSpaces: validateBlendSpaces(input.blendSpaces),
     notifies: validateNotifies(input.notifies),
     montages: validateMontages(input.montages),
+    physicsBodies: validatePhysicsBodies(input.physicsBodies),
     preview: {
       selectedClip: typeof selectedClip === "string" && selectedClip.length > 0 ? selectedClip : null,
     },
