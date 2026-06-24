@@ -416,8 +416,21 @@ Blend Space sample'larında çözdüğüm gibi `blendSampleClipOptions` desenini
       (`sockets`, `animationSet`, `blendSpaces`, `notifies`, `montages`, preview prefs)
 - [x] Dev endpoint `/__save-skeleton` (yazma) + `loadAssetSkeleton` (okuma,
       eksik/bozuk → güvenli default)
-- [ ] `LayoutCharacter` yeni alanlarını `tools/saveValidator.ts` allowlist'ine ekle
-- [ ] CLAUDE.md "save-validator allowlist gotcha" notunu güncelle
+- [x] `LayoutCharacter` allowlist — **doğrulandı, eklenecek yeni alan yok (2026-06-24).**
+      Persona araç seti hiçbir **placement-seviyesi** `LayoutCharacter` alanı eklemedi; tüm
+      iskeletsel metadata **asset-seviyesi** `*.skeleton.json` sidecar'ında yaşıyor. `LayoutCharacter`
+      zaten tam kapsanıyor: `validateLayout` içinde explicit `assetId`/`position`/`animation` +
+      kalan her alan `applyTransformFields` üzerinden (name/hidden/locked/transform/collision
+      override'ları/sensor/simulatePhysics/physics/metadata/behavior/audio/particle/interaction).
+      Alan-alan kontrol edildi, düşen yok.
+- [x] CLAUDE.md "save-validator allowlist gotcha" notu güncellendi (2026-06-24). İki ek:
+      (1) `LayoutCharacter`'ın `applyTransformFields` + explicit `assetId`/`position`/`animation`
+      ile tam kapsandığı, metadata'nın placement değil asset-seviyesi olduğu notu;
+      (2) **ikinci allowlist yüzeyi:** `*.skeleton.json` sidecar — `/__save-skeleton` →
+      `validateSaveSkeletonPayload` → `validateAssetSkeletonDef` (+ `validateSkeletonSocket`/
+      `validateAnimationSet`/`validateBlendSpaces`/`validateNotify(ies)`/`validateMontage(s)` +
+      `upperBodyBone`/`preview`); yeni sidecar alanı ilgili `validate*`'a eklenmezse (loader
+      `normalizeAssetSkeleton`'ı yansıtarak) kayıtta sessizce düşer.
 
 ### Faz 6 — Test & Doküman
 

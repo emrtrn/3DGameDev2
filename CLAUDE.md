@@ -62,7 +62,19 @@ engine/editor.
   is silently dropped on save. Current placement collision overrides
   (`collisionPreset`, `collisionEnabled`, `objectType`, `responses`,
   `physicalMaterialId`, `generateOverlapEvents`, `simulationGeneratesHitEvents`)
-  live in `applyTransformFields`.
+  live in `applyTransformFields`. (`LayoutCharacter` shares `applyTransformFields`
+  plus explicit `assetId`/`position`/`animation`; all current fields are covered —
+  character skeletal metadata is asset-level, not on the placement.)
+- **Second allowlist surface — `*.skeleton.json` sidecar:** `/__save-skeleton`
+  validates through `validateSaveSkeletonPayload` → `validateAssetSkeletonDef`
+  (also in `tools/saveValidator.ts`, imported by `vite.config.ts`). Any new
+  `AssetSkeletonDef` field — socket (`validateSkeletonSocket`), `animationSet`
+  (`validateAnimationSet`), blend space (`validateBlendSpaces`), notify
+  (`validateNotify` / `validateNotifies`), montage (`validateMontage` /
+  `validateMontages`), or a top-level one (`upperBodyBone`, `preview`) — must be
+  added to the matching `validate*` there, mirroring the loader's
+  `normalizeAssetSkeleton` (`src/scene/assetSkeletonLoader.ts`), or it is silently
+  dropped on save.
 
 ## Authoring Data Flow
 
