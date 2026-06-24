@@ -2,5 +2,38 @@
   "schema": 1,
   "type": "ui",
   "name": "Menu",
-  "root": {}
+  "preview": { "width": 1280, "height": 720 },
+  "root": {
+    "id": "root",
+    "widget": "Canvas",
+    "props": { "align": "center", "justify": "center" },
+    "children": [
+      {
+        "id": "panel",
+        "widget": "Stack",
+        "props": {
+          "direction": "column",
+          "gap": 16,
+          "align": "center",
+          "padding": 28,
+          "background": "rgba(16, 19, 26, 0.88)",
+          "radius": 12
+        },
+        "children": [
+          { "id": "title", "widget": "Text", "props": { "text": "Paused", "fontSize": 40, "fontWeight": 700 } },
+          { "id": "subtitle", "widget": "Text", "props": { "text": "Forge — UMG Lite", "fontSize": 16, "color": "#9aa4b2" } },
+          {
+            "id": "resume",
+            "widget": "Button",
+            "props": { "text": "Resume", "onClick": { "type": "back" } }
+          },
+          {
+            "id": "options",
+            "widget": "Button",
+            "props": { "text": "Options", "onClick": { "type": "message", "message": "Menu.OpenOptions" } }
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -43,6 +43,7 @@ import {
   normalizeActorScriptDef,
   type ParentClass,
 } from "../engine/scene/actorScript";
+import { defaultUiWidgetDef } from "../engine/ui/uiWidget";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -505,6 +506,18 @@ function validateWorldSettings(value: unknown): Record<string, unknown> | null {
       throw new Error("worldSettings.gameMode must be a non-empty string");
     }
     worldSettings.gameMode = input.gameMode;
+  }
+  if (input.hudWidget !== undefined) {
+    if (typeof input.hudWidget !== "string" || input.hudWidget.length === 0) {
+      throw new Error("worldSettings.hudWidget must be a non-empty string");
+    }
+    worldSettings.hudWidget = input.hudWidget;
+  }
+  if (input.pauseMenuWidget !== undefined) {
+    if (typeof input.pauseMenuWidget !== "string" || input.pauseMenuWidget.length === 0) {
+      throw new Error("worldSettings.pauseMenuWidget must be a non-empty string");
+    }
+    worldSettings.pauseMenuWidget = input.pauseMenuWidget;
   }
 
   return Object.keys(worldSettings).length > 0 ? worldSettings : null;
@@ -2195,7 +2208,8 @@ function contentStubJson(payload: ContentNewPayload): string {
   } else if (kind === "sound") {
     body = { schema: 1, type: "sound", name, clip: "" };
   } else if (kind === "ui") {
-    body = { schema: 1, type: "ui", name, root: {} };
+    // UI Widget (UMG Lite) class-asset: a minimal empty Canvas root.
+    body = defaultUiWidgetDef(name) as unknown as Record<string, unknown>;
   } else if (kind === "material") {
     body = { ...defaultForgeMaterialDef(name, payload.materialPreset ?? "standard") };
   } else {
@@ -2346,6 +2360,7 @@ const ASSET_TYPE_CATEGORY: Record<AssetType, string> = {
   sound: "sound",
   animation: "animation",
   prefab: "prefab",
+  ui: "UI",
   level: "level",
 };
 

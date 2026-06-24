@@ -191,6 +191,8 @@ import {
   type AssetSkeletonDef,
 } from "@/scene/assetSkeletonLoader";
 import { assetPath, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
+import { normalizeUiWidgetDef, type UiWidgetDef } from "@engine/ui/uiWidget";
+import { RuntimeUiSubsystem } from "@/ui/RuntimeUiSubsystem";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   assetCollisionDefHasCollider,
@@ -350,6 +352,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private activeGameMode: GameModeDefinition | null = null;
   private gravityY = DEFAULT_SCENE_GRAVITY[1];
   private inputMode: InputMode = "ui";
+  /** UMG Lite runtime UI host; null when the layout authors no HUD/pause widget. */
+  private uiSubsystem: RuntimeUiSubsystem | null = null;
+  /** Pause-menu widget pushed on the `menu` action; null when none is configured. */
+  private pauseMenuDef: UiWidgetDef | null = null;
 
   onFrame: ((deltaMs: number) => void) | null = null;
 
@@ -405,7 +411,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.camera = runtimeCore.camera;
     this.pointerLook = new PointerLookSource(canvas, {
       onInputModeChange: (mode) => {
+        const wasGame = this.inputMode === "game";
         this.inputMode = mode;
+        // Losing pointer lock during play (Escape / alt-tab) opens the pause menu.
+        // This covers browsers that swallow the Escape keydown under pointer lock,
+        // where the `menu` action edge would otherwise never fire.
+        if (mode === "ui" && wasGame) this.openPauseMenu();
       },
     });
     this.pointerButtons = new PointerButtonSource(this.inputActions, canvas);
@@ -498,6 +509,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.lastTime = now;
       this.gameModeSession?.beforeEngineUpdate?.(deltaMs / 1000);
       this.engineApp.update(deltaMs / 1000);
+      // Consume the `menu` edge after input advances, before the Game Mode reads
+      // input, so opening a screen suppresses this frame's camera/movement.
+      this.updateUiInput();
       this.gameModeSession?.update(deltaMs / 1000);
       this.updateParticleEffects(deltaMs / 1000);
       if (this.skyObject) followCameraWithSky(this.skyObject, this.camera);
@@ -515,6 +529,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   dispose(): void {
     cancelAnimationFrame(this.frameHandle);
     window.removeEventListener("resize", this.handleResize);
+    this.uiSubsystem?.dispose();
+    this.uiSubsystem = null;
     this.keyboardInput.detach();
     this.pointerLook.detach();
     this.pointerButtons.detach();
@@ -736,6 +752,89 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // locomotion animator, so attach it to the refs before the session possesses.
     await this.loadCharacterSkeletons();
     await this.startGameMode();
+    await this.setupRuntimeUi();
+  }
+
+  /**
+   * Mounts the UMG Lite runtime UI host when the layout authors a HUD and/or a
+   * pause-menu widget (`worldSettings.hudWidget` / `pauseMenuWidget`). No-op when
+   * neither is set, so a scene with no UI pays nothing. Widget `message` actions
+   * are emitted as `ui-action` script messages (UI → gameplay); the screen stack
+   * routes input through {@link handleUiScreenStackChange}.
+   */
+  private async setupRuntimeUi(): Promise<void> {
+    if (!this.layout) return;
+    const host = document.getElementById("ui-overlay");
+    if (!host) return;
+    const hudId = this.layout.worldSettings?.hudWidget;
+    const pauseId = this.layout.worldSettings?.pauseMenuWidget;
+    if (!hudId && !pauseId) return;
+
+    const wanted = new Set([hudId, pauseId].filter((id): id is string => Boolean(id)));
+    const defs = await this.loadUiWidgetDefs(wanted);
+    this.uiSubsystem = new RuntimeUiSubsystem(host, {
+      onMessageAction: (action) => {
+        this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
+      },
+      onScreenStackChange: (depth) => this.handleUiScreenStackChange(depth),
+    });
+
+    if (hudId) {
+      const hud = defs.get(hudId);
+      if (hud) this.uiSubsystem.setHud(hud);
+    }
+    if (pauseId) this.pauseMenuDef = defs.get(pauseId) ?? null;
+  }
+
+  /** Fetches + normalizes the requested manifest `ui` assets, keyed by asset id. */
+  private async loadUiWidgetDefs(ids: Set<string>): Promise<Map<string, UiWidgetDef>> {
+    const out = new Map<string, UiWidgetDef>();
+    if (!this.assetLoader || ids.size === 0) return out;
+    const manifest = await this.assetLoader.loadManifest();
+    await Promise.all(
+      [...ids].map(async (id) => {
+        const asset = manifest.assets.find((entry) => entry.id === id);
+        if (!asset || assetType(asset) !== "ui") return;
+        try {
+          const response = await fetch(projectFileUrl(assetPath(asset)), { cache: "no-cache" });
+          if (!response.ok) return;
+          out.set(id, normalizeUiWidgetDef(await response.json(), asset.name));
+        } catch {
+          // Missing/malformed UI asset: skip it (the scene still plays).
+        }
+      }),
+    );
+    return out;
+  }
+
+  /**
+   * Routes input as the UI screen stack opens/closes. A screen forces `ui` input
+   * (suppressing gameplay) and frees the cursor; closing the last screen re-grabs
+   * pointer lock when the active camera uses it (a no-op for right-drag).
+   */
+  private handleUiScreenStackChange(depth: number): void {
+    if (depth > 0) {
+      this.inputMode = "ui";
+      this.pointerLook.release();
+      this.pointerLook.setMouseCursorVisible(true);
+    } else {
+      this.pointerLook.reengage();
+    }
+  }
+
+  /** Toggles the pause menu on the `menu` action edge (Escape). */
+  private updateUiInput(): void {
+    if (!this.uiSubsystem) return;
+    if (!this.inputActions.pressed("menu")) return;
+    if (this.uiSubsystem.screenDepth > 0) this.uiSubsystem.back();
+    else this.openPauseMenu();
+  }
+
+  /** Pushes the configured pause menu when one exists and no screen is open. */
+  private openPauseMenu(): void {
+    if (!this.uiSubsystem || !this.pauseMenuDef) return;
+    if (this.uiSubsystem.screenDepth > 0) return;
+    this.uiSubsystem.pushScreen(this.pauseMenuDef);
   }
 
   /**

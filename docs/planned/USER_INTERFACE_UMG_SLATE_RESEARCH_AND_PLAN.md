@@ -284,18 +284,85 @@ Bu, Forge'un mevcut `?editor` / runtime ayrimina uyumludur.
 
 - [x] Unreal UI dokumantasyonundaki ana araclar incelendi: UMG, Widget Blueprint, Slate, Common UI, MVVM, Widget Component.
 - [x] Forge mevcut UI tabani incelendi: `#ui-overlay`, runtime/editor split, `.ui.json` stub, input mode.
-- [ ] `uiWidget` asset schema'si tanimla ve `Menu.ui.json` stub'ini yeni modele tasimak icin migration plani yaz.
-- [ ] Manifest/save validator tarafinda UI'yi birinci sinif asset tipi yap.
-- [ ] `RuntimeUiSubsystem` v1 ekle: `Canvas`, `Panel`, `Stack`, `Text`, `Button`, `ProgressBar`.
-- [ ] Runtime screen stack ekle: `push`, `replace`, `pop`, `back`.
-- [ ] `RuntimeSceneApp` input mode entegrasyonu ile UI/game input gecisini netlestir.
-- [ ] MVVM-lite store ekle: field update, subscribe, batched render.
-- [ ] UI Editor v1 ekle: palette, hierarchy, designer canvas, details, save/validate.
-- [ ] Content Browser'da `.ui.json` cift tiklama ile UI Editor ac.
-- [ ] Tema/token sistemi ekle: `.theme.json` ve CSS variable uretimi.
-- [ ] UI icin headless schema/render testleri ekle.
-- [ ] `npm run build:verify` ile runtime paketinde editor UI import'u olmadigini dogrula.
-- [ ] Sonraki faz icin animation, localization, accessibility ve world-space UI gereksinimlerini ayri planla.
+- [x] `uiWidget` asset schema'si tanimla ve `Menu.ui.json` stub'ini yeni modele tasimak icin migration plani yaz. → `engine/ui/uiWidget.ts` (savunmaci `normalizeUiWidgetDef` + `defaultUiWidgetDef`); `Menu.ui.json` gercek menuye tasindi.
+- [x] Manifest/save validator tarafinda UI'yi birinci sinif asset tipi yap. → `AssetType` artik `"ui"` iceriyor, `.ui.json` inference `"ui"`ya gidiyor, `/__content-new` stub'i `defaultUiWidgetDef` uretiyor, `menu` manifest girdisi `assetType: "ui"`.
+- [x] `RuntimeUiSubsystem` v1 ekle: `Canvas`, `Panel`, `Stack`, `Text`, `Button`, `ProgressBar`. → `engine/ui/uiRenderer.ts` (7 widget: + `Image`) + `src/ui/RuntimeUiSubsystem.ts` (tek-ekran mount/unmount + action dispatch).
+- [x] Runtime screen stack ekle: `push`, `replace`, `pop`, `back`. → `RuntimeUiSubsystem` v2 (HUD katmani + screen stack scrim'leri, `onScreenStackChange`).
+- [x] `RuntimeSceneApp` input mode entegrasyonu ile UI/game input gecisini netlestir. → `Escape` -> `menu` action toggle + pointer-lock birakilinca pause menu; screen acikken `inputMode = "ui"`, kapaninca `reengage()`.
+- [ ] MVVM-lite store ekle: field update, subscribe, batched render. (U5; schema bind'leri `{ "bind": "path" }` olarak tolere ediyor)
+- [ ] UI Editor v1 ekle: palette, hierarchy, designer canvas, details, save/validate. (U4)
+- [ ] Content Browser'da `.ui.json` cift tiklama ile UI Editor ac. (U4)
+- [ ] Tema/token sistemi ekle: `.theme.json` ve CSS variable uretimi. (U6; `#ui-overlay` altinda `--forge-ui-*` token seam'i hazir, `.theme.json` yok)
+- [x] UI icin headless schema/render testleri ekle. → `tools/engine-tests.ts` icinde 11 check (normalizer + render-tree + style allowlist).
+- [x] `npm run build:verify` ile runtime paketinde editor UI import'u olmadigini dogrula. → U3 sonrasi yesil: 330 test + `verify:dist --strict` "runtime-only" (UI artik runtime bundle'da, editor degil).
+- [ ] Sonraki faz icin animation, localization, accessibility ve world-space UI gereksinimlerini ayri planla. (U7)
+
+## Uygulama durumu
+
+### U1 — Asset + runtime render cekirdegi (TAMAMLANDI)
+
+Eklenenler:
+
+- `engine/ui/uiWidget.ts`: saf veri modeli. `UiWidgetDef`/`UiNode`, 7 widget kind
+  (`Canvas`, `Panel`, `Stack`, `Text`, `Image`, `Button`, `ProgressBar`), typed
+  `UiAction` (`{ type: "message", message }`) ve `UiBinding` (`{ bind: path }`).
+  `normalizeUiWidgetDef` savunmaci: bozuk/legacy `root: {}` stub'i bos `Canvas`
+  koke yukseltir, bilinmeyen kind -> `Panel`, leaf cocuklarini atar, id'leri
+  benzersizlestirir. Three/DOM bagimsiz; editor + runtime + saveValidator ortak okur.
+- `engine/ui/uiRenderer.ts`: iki katman. `buildUiRenderTree` (saf, DOM'suz,
+  node ortaminda test edilebilir) authored agaci `UiRenderNode` IR'ine cevirir;
+  `renderUiWidget`/`mountUiRenderNode` ince DOM katmani, action listener'lari +
+  id->element haritasi kurar. `resolveInlineStyle` allowlistli stil token'lari
+  (px/flex-alias/passthrough) — `style` keyfi CSS olamaz.
+- `src/ui/RuntimeUiSubsystem.ts`: `#ui-overlay` host'una tek widget mount/unmount,
+  action'lari `onAction(message)` olarak disari verir. Ekran stack'i U3'te buyur.
+- `src/style.css`: 7 widget icin runtime CSS sinifi (`.forge-ui-*`) + `--forge-ui-*`
+  tema token seam'i. Sadece `Button` `.ui-interactive` (pointer-events) alir.
+- Manifest: `"ui"` birinci sinif `AssetType`; `.ui.json` -> `"ui"` inference.
+- `Menu.ui.json`: stub yerine calisir bir ornek menu (Canvas > Stack > Text+Button).
+- 11 engine testi; `tsc --noEmit`, `npm run test:engine`, `npm run build`,
+  `check:assets` hepsi yesil.
+
+### U2/U3 — HUD/menu ornegi + input routing (TAMAMLANDI)
+
+Eklenenler:
+
+- `RuntimeUiSubsystem` v2: **HUD katmani** (`setHud`, click-through) + **screen stack**
+  (`pushScreen`/`replaceScreen`/`popScreen`/`back`/`clearScreens`). Her ekran tam-cerceve
+  bir *scrim* (`.forge-ui-screen-layer`, `pointer-events: auto`) — acik menu canvas'a
+  tiklama gecisini engeller (kazara kamera yeniden-kilitlenmesi yok). `onScreenStackChange`
+  derinlik degisince app'e haber verir.
+- Action ayrimi: `{ type: "back" }` ekrani host icinde pop'lar (Common UI cancel);
+  `{ type: "message" }` disari `onMessageAction` ile cikar.
+- `RuntimeSceneApp` entegrasyonu: layout `worldSettings.hudWidget` / `pauseMenuWidget`
+  asset id'lerini okur, manifest'ten `ui` asset'lerini cekip normalize eder. HUD boot'ta
+  mount edilir; `Escape` (`menu` action) pause menuyu toggle eder. Ekran acilinca
+  `inputMode = "ui"` + pointer-lock birakilir + cursor gosterilir; kapaninca
+  `pointerLook.reengage()` (yalniz pointer-lock kamerada) yeniden kilitler. Pointer-lock
+  birakilinca (Escape/alt-tab) pause menu otomatik acilir — Escape keydown'i yutan
+  tarayicilarda da calisir.
+- `message` widget action'lari `behaviorSubsystem.emitScriptMessage("ui-action", ...)`
+  ile yayinlanir (UI -> gameplay, generic).
+- UiAction `back` varyanti (engine/ui/uiWidget.ts) + renderer gecirgen.
+- `PointerLookSource.release()` / `reengage()`; `Escape -> "menu"` binding.
+- Demo data: `Menu.ui.json` artik pause menu (title "Paused", Resume=`back`,
+  Options=`message`); yeni `Hud.ui.json` (health label + ProgressBar, statik deger —
+  canli binding U5); `playground.json` worldSettings `hudWidget:"hud"` +
+  `pauseMenuWidget:"menu"`.
+
+Dogrulama: `tsc`, `npm run build:verify` (330 test + `verify:dist --strict` runtime-only),
+`check:assets` PASS. Tarayicida elle dogrulanmasi gereken kisim: `/` ac, sol-ust HUD'u gor,
+`Escape` ile pause menuyu ac/kapa, Resume ile oyuna don.
+
+Acik nokta: HUD degerleri statik (ProgressBar `value: 72`). Canli `{ "bind": ... }`
+cozumlemesi U5 (MVVM-lite store) isi; schema bind'leri simdiden tolere ediyor.
+
+### Sonraki adim (U4/U5)
+
+- U4: UI Editor v1 (palette/hierarchy/designer/details) + Content Browser `.ui.json`
+  cift-tiklama ile acma + `/__save-ui` endpoint (`normalizeUiWidgetDef` save validator'a baglanir).
+- U5: MVVM-lite store (`setField`/`getField`/`subscribe`, batched) + `{ "bind": "path" }`
+  cozumleme; HUD ProgressBar/Text canli baglanir.
 
 ## Onerilen uygulama sirasi
 

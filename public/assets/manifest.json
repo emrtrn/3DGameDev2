@@ -6397,9 +6397,32 @@
     {
       "id": "menu",
       "name": "Menu",
-      "assetType": "prefab",
+      "assetType": "ui",
       "category": "UI",
       "path": "assets/starter-content/UI/Menu.ui.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 66
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "hud",
+      "name": "HUD",
+      "assetType": "ui",
+      "category": "UI",
+      "path": "assets/starter-content/UI/Hud.ui.json",
       "tags": [],
       "placeable": false,
       "placement": {

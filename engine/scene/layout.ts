@@ -267,6 +267,16 @@ export interface LayoutWorldSettings {
    * a running session.
    */
   gameMode?: string;
+  /**
+   * UI Widget asset id (a manifest `ui` asset) shown as the persistent HUD on
+   * boot. Absent means no HUD. The runtime mounts it click-through over the scene.
+   */
+  hudWidget?: string;
+  /**
+   * UI Widget asset id pushed as a modal pause screen when the player presses the
+   * `menu` action (Escape). Absent means Escape only releases pointer lock.
+   */
+  pauseMenuWidget?: string;
 }
 
 /**

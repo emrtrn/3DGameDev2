@@ -26,6 +26,9 @@ export const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   Space: "jump",
   ShiftLeft: "sprint",
   ShiftRight: "sprint",
+  // Toggles the pause menu (worldSettings.pauseMenuWidget). Escape also releases
+  // browser pointer lock; the runtime UI host reconciles the two.
+  Escape: "menu",
   Mouse0: "fire",
   Mouse2: "aim",
   // Debug/demo toggle: drop the possessed character into a physics ragdoll, then

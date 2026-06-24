@@ -6,6 +6,7 @@ export type AssetType =
   | "sound"
   | "animation"
   | "prefab"
+  | "ui"
   | "level";
 export type LegacyAssetType = "model";
 
@@ -119,6 +120,7 @@ const THUMBNAIL_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
 const SOUND_EXTENSIONS = new Set(["mp3", "ogg", "wav"]);
 const MATERIAL_EXTENSIONS = new Set(["material.json", "mat.json"]);
 const LEVEL_EXTENSIONS = new Set(["level.json", "layout.json"]);
+const UI_EXTENSIONS = new Set(["ui.json", "theme.json"]);
 const PREFAB_EXTENSIONS = new Set([
   "actor.json",
   "effect.json",
@@ -126,7 +128,6 @@ const PREFAB_EXTENSIONS = new Set([
   "prefab.json",
   "script.json",
   "sound.json",
-  "ui.json",
 ]);
 const ASSET_FILE_EXTENSIONS = new Set([
   ...MODEL_EXTENSIONS,
@@ -143,6 +144,7 @@ export const ASSET_TYPES: readonly AssetType[] = [
   "sound",
   "animation",
   "prefab",
+  "ui",
   "level",
 ];
 
@@ -169,6 +171,7 @@ export function inferAssetTypeFromPath(path: string): AssetType | null {
   if (SOUND_EXTENSIONS.has(ext)) return "sound";
   if (MATERIAL_EXTENSIONS.has(compoundExtensionOf(lower))) return "material";
   if (LEVEL_EXTENSIONS.has(compoundExtensionOf(lower))) return "level";
+  if (UI_EXTENSIONS.has(compoundExtensionOf(lower))) return "ui";
   if (PREFAB_EXTENSIONS.has(compoundExtensionOf(lower))) return "prefab";
   return null;
 }
@@ -359,7 +362,7 @@ export function validateAssetManifest(
         code: "asset-type",
         assetId,
         message:
-          "`assetType` must be one of staticMesh, skeletalMesh, texture, material, sound, animation, prefab, or level.",
+          "`assetType` must be one of staticMesh, skeletalMesh, texture, material, sound, animation, prefab, ui, or level.",
       });
     }
 

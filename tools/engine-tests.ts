@@ -394,6 +394,19 @@ import {
   VectorKeyframeTrack,
 } from "three";
 import type { AnimationMixer } from "three";
+import {
+  defaultUiWidgetDef,
+  normalizeUiWidgetDef,
+  readUiAction,
+  readUiBindingPath,
+  UI_WIDGET_KINDS,
+  type UiNode,
+} from "../engine/ui/uiWidget";
+import {
+  buildUiRenderTree,
+  buildUiRenderNode,
+  resolveInlineStyle,
+} from "../engine/ui/uiRenderer";
 
 let checks = 0;
 const check = (label: string, fn: () => void): void => {
@@ -5675,6 +5688,29 @@ check("save validator preserves worldSettings.gameMode and drops runtime state",
   assert.equal((out.worldSettings as Record<string, unknown>).pawnEntityId, undefined);
 });
 
+check("save validator preserves worldSettings.hudWidget + pauseMenuWidget", () => {
+  const out = validateLayout({
+    schema: 1,
+    name: "ui",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    worldSettings: { hudWidget: "hud", pauseMenuWidget: "menu" },
+  }) as RoomLayout;
+  assert.equal(out.worldSettings?.hudWidget, "hud");
+  assert.equal(out.worldSettings?.pauseMenuWidget, "menu");
+  assert.throws(() =>
+    validateLayout({
+      schema: 1,
+      name: "ui",
+      loadGroups: [],
+      instances: [],
+      characters: [],
+      worldSettings: { hudWidget: "" },
+    }),
+  );
+});
+
 check("save validator rejects a non-string gameMode", () => {
   assert.throws(() =>
     validateLayout({
@@ -10279,6 +10315,184 @@ check("imported GLTF content with skins or animations registers as skeletal mesh
     inferImportedAssetTypeFromContent("assets/models/Crate.gltf", staticGltf),
     "staticMesh",
   );
+});
+
+// --- UI Widget (UMG Lite): schema normalization + render-tree builder ---
+
+check("normalizeUiWidgetDef upgrades the legacy empty-root stub to a Canvas", () => {
+  const def = normalizeUiWidgetDef({ schema: 1, type: "ui", name: "Menu", root: {} });
+  assert.equal(def.type, "ui");
+  assert.equal(def.name, "Menu");
+  assert.equal(def.root.widget, "Canvas");
+  assert.deepEqual(def.root.children, []);
+  assert.deepEqual(def.preview, { width: 1280, height: 720 });
+});
+
+check("normalizeUiWidgetDef coerces garbage into a valid Canvas-rooted def", () => {
+  const def = normalizeUiWidgetDef(null, "Fallback");
+  assert.equal(def.name, "Fallback");
+  assert.equal(def.root.widget, "Canvas");
+});
+
+check("normalizeUiWidgetDef maps unknown kinds to Panel and drops leaf children", () => {
+  const def = normalizeUiWidgetDef({
+    name: "X",
+    root: {
+      id: "root",
+      widget: "Canvas",
+      children: [
+        { id: "weird", widget: "Hologram", children: [{ widget: "Text" }] },
+        { id: "label", widget: "Text", props: { text: "hi" }, children: [{ widget: "Text" }] },
+      ],
+    },
+  });
+  const weird = def.root.children[0]!;
+  const label = def.root.children[1]!;
+  assert.equal(weird.widget, "Panel"); // unknown -> safe container, keeps its child
+  assert.equal(weird.children.length, 1);
+  assert.equal(label.widget, "Text"); // leaf drops authored children
+  assert.equal(label.children.length, 0);
+});
+
+check("normalizeUiWidgetDef mints unique ids and dedupes collisions", () => {
+  const def = normalizeUiWidgetDef({
+    name: "X",
+    root: {
+      id: "dup",
+      widget: "Stack",
+      children: [{ id: "dup", widget: "Text" }, { widget: "Text" }],
+    },
+  });
+  const ids: string[] = [];
+  const walk = (node: UiNode): void => {
+    ids.push(node.id);
+    node.children.forEach(walk);
+  };
+  walk(def.root);
+  assert.equal(ids.length, 3);
+  assert.equal(new Set(ids).size, 3);
+});
+
+check("defaultUiWidgetDef is a minimal empty Canvas asset", () => {
+  const def = defaultUiWidgetDef("HUD");
+  assert.equal(def.schema, 1);
+  assert.equal(def.type, "ui");
+  assert.equal(def.name, "HUD");
+  assert.equal(def.root.id, "root");
+  assert.equal(def.root.widget, "Canvas");
+  assert.equal(UI_WIDGET_KINDS.includes(def.root.widget), true);
+});
+
+check("readUiAction parses message + back actions and rejects malformed ones", () => {
+  const def = normalizeUiWidgetDef({
+    name: "X",
+    root: {
+      widget: "Canvas",
+      children: [
+        { id: "ok", widget: "Button", props: { onClick: { type: "message", message: "Go" } } },
+        { id: "back", widget: "Button", props: { onClick: { type: "back" } } },
+        { id: "bad", widget: "Button", props: { onClick: { type: "nope" } } },
+      ],
+    },
+  });
+  assert.deepEqual(readUiAction(def.root.children[0]!), { type: "message", message: "Go" });
+  assert.deepEqual(readUiAction(def.root.children[1]!), { type: "back" });
+  assert.equal(readUiAction(def.root.children[2]!), null);
+});
+
+check("readUiBindingPath extracts a binding path but not a literal", () => {
+  const def = normalizeUiWidgetDef({
+    name: "X",
+    root: {
+      widget: "Canvas",
+      children: [
+        { id: "hp", widget: "ProgressBar", props: { value: { bind: "player.health" }, max: 100 } },
+      ],
+    },
+  });
+  const bar = def.root.children[0]!;
+  assert.equal(readUiBindingPath(bar, "value"), "player.health");
+  assert.equal(readUiBindingPath(bar, "max"), undefined); // literal, not a binding
+});
+
+check("buildUiRenderTree maps the menu widget set to tags/classes/actions", () => {
+  const def = normalizeUiWidgetDef({
+    name: "Menu",
+    root: {
+      id: "root",
+      widget: "Canvas",
+      props: { align: "center", justify: "center" },
+      children: [
+        { id: "title", widget: "Text", props: { text: "Forge" } },
+        {
+          id: "start",
+          widget: "Button",
+          props: { text: "Start", onClick: { type: "message", message: "Go" } },
+        },
+      ],
+    },
+  });
+  const tree = buildUiRenderTree(def);
+  assert.equal(tree.tag, "div");
+  assert.match(tree.className, /forge-ui-canvas/);
+  assert.equal(tree.style["align-items"], "center");
+  assert.equal(tree.style["justify-content"], "center");
+  const title = tree.children[0]!;
+  const start = tree.children[1]!;
+  assert.equal(title.tag, "div");
+  assert.match(title.className, /forge-ui-text/);
+  assert.equal(title.text, "Forge");
+  assert.equal(start.tag, "button");
+  assert.match(start.className, /ui-interactive/);
+  assert.equal(start.text, "Start");
+  assert.deepEqual(start.action, { type: "message", message: "Go" });
+});
+
+check("resolveInlineStyle allowlists tokens (px, flex aliases, passthrough)", () => {
+  const def = normalizeUiWidgetDef({
+    name: "X",
+    root: {
+      widget: "Stack",
+      props: { gap: 16, padding: 8, align: "between", background: "#101010", grow: 1 },
+    },
+  });
+  const style = resolveInlineStyle(def.root);
+  assert.equal(style["gap"], "16px");
+  assert.equal(style["padding"], "8px");
+  assert.equal(style["align-items"], "space-between");
+  assert.equal(style["background"], "#101010");
+  assert.equal(style["flex-grow"], "1");
+});
+
+check("ProgressBar renders a clamped inline-width fill child", () => {
+  const def = normalizeUiWidgetDef({
+    name: "X",
+    root: {
+      widget: "Canvas",
+      children: [
+        { id: "a", widget: "ProgressBar", props: { value: 30, max: 100 } },
+        { id: "b", widget: "ProgressBar", props: { value: 999, max: 100 } },
+      ],
+    },
+  });
+  const tree = buildUiRenderTree(def);
+  const a = tree.children[0]!;
+  const b = tree.children[1]!;
+  assert.equal(a.children.length, 1);
+  assert.equal(a.children[0]!.synthetic, true);
+  assert.equal(a.children[0]!.style["width"], "30.00%");
+  assert.equal(b.children[0]!.style["width"], "100.00%"); // clamped to max
+});
+
+check("Stack direction sets the modifier class; default is column", () => {
+  const row = buildUiRenderNode(
+    normalizeUiWidgetDef({ name: "X", root: { widget: "Stack", props: { direction: "row" } } }).root,
+  );
+  const col = buildUiRenderNode(
+    normalizeUiWidgetDef({ name: "X", root: { widget: "Stack" } }).root,
+  );
+  assert.match(row.className, /forge-ui-stack--row/);
+  assert.match(col.className, /forge-ui-stack--column/);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

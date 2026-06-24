@@ -75,6 +75,26 @@ export class PointerLookSource {
     this.applyCursor();
   }
 
+  /**
+   * Releases pointer lock without changing the look mode (e.g. a UI screen
+   * opened over a pointer-lock game). No-op when not locked; the cursor returns
+   * via the resulting `pointerlockchange`.
+   */
+  release(): void {
+    if (document.pointerLockElement === this.canvas) document.exitPointerLock();
+  }
+
+  /**
+   * Re-acquires pointer lock after a UI screen closes, but only when the look
+   * mode is pointer-lock — a no-op for right-drag. Must be called from a user
+   * gesture to succeed; otherwise the next canvas press re-locks.
+   */
+  reengage(): void {
+    if (this.mode === "pointer-lock" && document.pointerLockElement !== this.canvas) {
+      this.requestPointerLock();
+    }
+  }
+
   /** Returns the look delta (pixels) accumulated since the last call and resets it. */
   consume(): { dx: number; dy: number } {
     const delta = { dx: this.dx, dy: this.dy };

@@ -188,7 +188,9 @@
   "worldSettings": {
     "staticObjectsCastShadow": true,
     "backgroundColor": "#ffffff",
-    "gameMode": "assets/starter-content/Script/MyGameMode.actor.json"
+    "gameMode": "assets/starter-content/Script/MyGameMode.actor.json",
+    "hudWidget": "hud",
+    "pauseMenuWidget": "menu"
   },
   "skyAtmosphere": {
     "rayleigh": 1,

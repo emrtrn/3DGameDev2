@@ -55,6 +55,116 @@ body {
   pointer-events: auto;
 }
 
+/*
+ * UI Widget (UMG Lite) runtime styles. Rendered by engine/ui/uiRenderer.ts into
+ * #ui-overlay. Containers inherit the overlay's click-through; only .ui-interactive
+ * widgets (Button) take pointer events. Theme tokens are CSS variables so a later
+ * .theme.json layer (plan U6) can override them per screen without touching markup.
+ */
+#ui-overlay {
+  --forge-ui-color: #f5f7fb;
+  --forge-ui-accent: #4f8cff;
+  --forge-ui-surface: rgba(16, 19, 26, 0.82);
+  --forge-ui-radius: 6px;
+  --forge-ui-gap: 12px;
+}
+
+.forge-ui-node {
+  color: var(--forge-ui-color);
+  font-family: inherit;
+}
+
+/*
+ * Overlay regions. The HUD layer + an empty screen stack are click-through; a
+ * pushed screen is a full-frame scrim that takes pointer events, so an open
+ * menu blocks click-through to the canvas (no accidental camera re-capture).
+ */
+.forge-ui-hud-layer,
+.forge-ui-screen-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.forge-ui-screen-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+
+/* Canvas: the widget root, fills the overlay frame. */
+.forge-ui-canvas {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Panel: a generic container box. */
+.forge-ui-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Stack: directional flex layout (column by default). */
+.forge-ui-stack {
+  display: flex;
+  gap: var(--forge-ui-gap);
+}
+.forge-ui-stack--column {
+  flex-direction: column;
+}
+.forge-ui-stack--row {
+  flex-direction: row;
+}
+
+.forge-ui-text {
+  line-height: 1.35;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+/* Image: rendered as a background so a missing src degrades to an empty box. */
+.forge-ui-image {
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.forge-ui-button {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  padding: 10px 18px;
+  border-radius: var(--forge-ui-radius);
+  background: var(--forge-ui-accent);
+  color: #ffffff;
+  font: inherit;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.24);
+  transition: filter 0.12s ease, transform 0.12s ease;
+}
+.forge-ui-button:hover {
+  filter: brightness(1.08);
+}
+.forge-ui-button:active {
+  transform: translateY(1px);
+}
+
+/* ProgressBar: a track with an inline-width fill. */
+.forge-ui-progress {
+  position: relative;
+  width: 200px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--forge-ui-surface);
+  overflow: hidden;
+}
+.forge-ui-progress__fill {
+  height: 100%;
+  background: var(--forge-ui-accent);
+  border-radius: inherit;
+  transition: width 0.15s ease;
+}
+
 /* Lightweight perf readout (qa-poki measurement standard). Debug-only. */
 #debug-stats {
   position: absolute;
