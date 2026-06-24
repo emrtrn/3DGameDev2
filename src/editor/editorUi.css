@@ -2515,6 +2515,20 @@ body.editor-mode #debug-stats {
 }
 .uie-action-field { grid-template-columns: 92px 1fr; }
 .uie-action-field input[hidden] { display: none; }
+.uie-bindable-controls { display: flex; gap: 4px; min-width: 0; }
+.uie-bindable-controls input { min-width: 0; }
+.uie-bind-toggle {
+  flex: 0 0 auto;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #14171a;
+  color: #8a949a;
+  font-size: 11px;
+  cursor: pointer;
+}
+.uie-bind-toggle:hover { color: #cfd6db; }
+.uie-bind-toggle.is-active { border-color: #5b9bd6; color: #bcd8ff; background: #1d2a3a; }
 .uie-node-actions { display: flex; gap: 6px; margin-top: 12px; }
 .uie-btn {
   padding: 5px 10px;

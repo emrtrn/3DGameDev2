@@ -17,6 +17,7 @@ import {
   createUiNode,
   findUiNode,
   findUiNodeParent,
+  isUiBinding,
   isUiContainerKind,
   normalizeUiWidgetDef,
   readUiAction,
@@ -26,6 +27,7 @@ import {
   type UiWidgetKind,
 } from "@engine/ui/uiWidget";
 import { renderUiWidget, type RenderedUiWidget } from "@engine/ui/uiRenderer";
+import { BINDABLE_UI_PROPS } from "@engine/ui/uiBinding";
 import { loadUiWidgetAsset, saveUiWidgetAsset } from "@/editor/uiWidgetStore";
 
 type StatusTone = "info" | "success" | "error";
@@ -331,8 +333,11 @@ export class UiWidgetEditor {
     header.innerHTML = `<strong>${escapeHtml(node.widget)}</strong><span class="uie-tree-id">${escapeHtml(node.id)}</span>`;
     this.detailsHost.append(header);
 
+    const bindable = new Set<string>(BINDABLE_UI_PROPS);
     for (const field of fieldsForWidget(node.widget)) {
-      this.detailsHost.append(this.makeField(node, field));
+      this.detailsHost.append(
+        bindable.has(field.key) ? this.makeBindableField(node, field) : this.makeField(node, field),
+      );
     }
     if (node.widget === "Button") this.detailsHost.append(this.makeActionField(node));
 
@@ -382,6 +387,66 @@ export class UiWidgetEditor {
       });
       row.append(input);
     }
+    return row;
+  }
+
+  /**
+   * A bindable property field (text/value/max/src): a literal input plus a "bind"
+   * toggle that switches the prop to a `{ "bind": "path" }` ViewModel binding.
+   */
+  private makeBindableField(node: UiNode, field: FieldDesc): HTMLElement {
+    const current = node.props[field.key];
+    const bindPath = isUiBinding(current) ? current.bind : null;
+    const bound = bindPath !== null;
+
+    const row = document.createElement("label");
+    row.className = "uie-field";
+    const labelEl = document.createElement("span");
+    labelEl.textContent = field.label;
+    row.append(labelEl);
+
+    const controls = document.createElement("div");
+    controls.className = "uie-bindable-controls";
+
+    const input = document.createElement("input");
+    if (bindPath !== null) {
+      input.type = "text";
+      input.placeholder = "field path, e.g. player.health";
+      input.value = bindPath;
+      input.addEventListener("change", () =>
+        this.setProp(node, field.key, { bind: input.value.trim() || "value" }),
+      );
+    } else {
+      input.type = field.kind === "number" ? "number" : "text";
+      input.value = current === undefined || current === null ? "" : String(current);
+      input.addEventListener("change", () => {
+        if (field.kind === "number") {
+          const num = input.value.trim() === "" ? null : Number(input.value);
+          this.setProp(node, field.key, num !== null && Number.isFinite(num) ? num : null);
+        } else {
+          this.setProp(node, field.key, input.value.trim() === "" ? null : input.value);
+        }
+      });
+    }
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = bound ? "uie-bind-toggle is-active" : "uie-bind-toggle";
+    toggle.textContent = "bind";
+    toggle.title = bound ? "Unbind (use a literal value)" : "Bind to a ViewModel field";
+    toggle.addEventListener("click", () => {
+      if (bound) {
+        this.setProp(node, field.key, null);
+      } else {
+        node.props[field.key] = { bind: typeof current === "string" ? current : "" };
+        this.markDirty();
+        this.renderPreview();
+      }
+      this.renderDetails();
+    });
+
+    controls.append(input, toggle);
+    row.append(controls);
     return row;
   }
 

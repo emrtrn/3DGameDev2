@@ -31,7 +31,7 @@
             "id": "hpLabel",
             "widget": "Text",
             "props": {
-              "text": "Health",
+              "text": { "bind": "player.speedLabel" },
               "fontSize": 13,
               "color": "#cfd6e2"
             },
@@ -41,8 +41,8 @@
             "id": "hpBar",
             "widget": "ProgressBar",
             "props": {
-              "value": 72,
-              "max": 100
+              "value": { "bind": "player.speed" },
+              "max": 6
             },
             "children": []
           }

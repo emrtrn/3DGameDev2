@@ -22,6 +22,7 @@ import {
   type UiWidgetDef,
   type UiWidgetKind,
 } from "./uiWidget";
+import { tokenToCssVar } from "./uiTheme";
 
 /** Stable CSS suffix per widget kind (`Forge-ui-<suffix>`), decoupled from the enum casing. */
 const WIDGET_CSS_NAME: Record<UiWidgetKind, string> = {
@@ -90,22 +91,50 @@ function flexValue(token: string): string {
   return FLEX_ALIGN[token] ?? token;
 }
 
-/** Resolves a node's allowlisted style props into a CSS-named inline-style map. */
+/** A `$token` theme reference (e.g. `"$color.surface"`). */
+function isTokenRef(value: unknown): value is string {
+  return typeof value === "string" && value.length > 1 && value.startsWith("$");
+}
+
+/** `"$color.surface"` → `var(--forge-ui-color-surface)` (resolved by the theme). */
+function cssVarForTokenRef(ref: string): string {
+  return `var(${tokenToCssVar(ref.slice(1))})`;
+}
+
+/**
+ * Resolves a node's allowlisted style props into a CSS-named inline-style map. A
+ * prop may be a literal (number → px, flex alias, passthrough) or a `$token`
+ * theme reference, which becomes `var(--forge-ui-<token>)` regardless of prop.
+ */
 export function resolveInlineStyle(node: UiNode): Record<string, string> {
   const style: Record<string, string> = {};
-  const align = readUiStaticString(node, "align");
-  if (align) style["align-items"] = flexValue(align);
-  const justify = readUiStaticString(node, "justify");
-  if (justify) style["justify-content"] = flexValue(justify);
+  const tokenInto = (css: string, key: string): boolean => {
+    const raw = node.props[key];
+    if (!isTokenRef(raw)) return false;
+    style[css] = cssVarForTokenRef(raw);
+    return true;
+  };
+
+  if (!tokenInto("align-items", "align")) {
+    const align = readUiStaticString(node, "align");
+    if (align) style["align-items"] = flexValue(align);
+  }
+  if (!tokenInto("justify-content", "justify")) {
+    const justify = readUiStaticString(node, "justify");
+    if (justify) style["justify-content"] = flexValue(justify);
+  }
   for (const [key, css] of Object.entries(STYLE_NUMBER_PX)) {
+    if (tokenInto(css, key)) continue;
     const value = readUiStaticNumber(node, key);
     if (value !== undefined) style[css] = `${value}px`;
   }
   for (const [key, css] of Object.entries(STYLE_NUMBER_RAW)) {
+    if (tokenInto(css, key)) continue;
     const value = readUiStaticNumber(node, key);
     if (value !== undefined) style[css] = String(value);
   }
   for (const [key, css] of Object.entries(STYLE_STRING_RAW)) {
+    if (tokenInto(css, key)) continue;
     const value = readUiStaticString(node, key);
     if (value !== undefined) style[css] = value;
   }

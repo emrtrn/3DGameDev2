@@ -289,10 +289,10 @@ Bu, Forge'un mevcut `?editor` / runtime ayrimina uyumludur.
 - [x] `RuntimeUiSubsystem` v1 ekle: `Canvas`, `Panel`, `Stack`, `Text`, `Button`, `ProgressBar`. → `engine/ui/uiRenderer.ts` (7 widget: + `Image`) + `src/ui/RuntimeUiSubsystem.ts` (tek-ekran mount/unmount + action dispatch).
 - [x] Runtime screen stack ekle: `push`, `replace`, `pop`, `back`. → `RuntimeUiSubsystem` v2 (HUD katmani + screen stack scrim'leri, `onScreenStackChange`).
 - [x] `RuntimeSceneApp` input mode entegrasyonu ile UI/game input gecisini netlestir. → `Escape` -> `menu` action toggle + pointer-lock birakilinca pause menu; screen acikken `inputMode = "ui"`, kapaninca `reengage()`.
-- [ ] MVVM-lite store ekle: field update, subscribe, batched render. (U5; schema bind'leri `{ "bind": "path" }` olarak tolere ediyor)
+- [x] MVVM-lite store ekle: field update, subscribe, batched render. → `engine/ui/uiViewModel.ts` (`UiViewModelStore`) + `engine/ui/uiBinding.ts` (collect/resolve/apply/bind); HUD canli bagli; UI editorde literal↔bind toggle.
 - [x] UI Editor v1 ekle: palette, hierarchy, designer canvas, details, save/validate. → `src/editor/UiWidgetEditor.ts` (overlay; palette/hierarchy/canli onizleme/details) + `/__save-ui` endpoint (`validateSaveUiPayload`).
 - [x] Content Browser'da `.ui.json` cift tiklama ile UI Editor ac. → `EditorUi.openUiWidgetEditor` (`assetEditorOpener` + dblclick + "UI Widget" badge).
-- [ ] Tema/token sistemi ekle: `.theme.json` ve CSS variable uretimi. (U6; `#ui-overlay` altinda `--forge-ui-*` token seam'i hazir, `.theme.json` yok)
+- [x] Tema/token sistemi ekle: `.theme.json` ve CSS variable uretimi. → `engine/ui/uiTheme.ts` (`UiThemeDef`, `themeToCssVariables`, `applyUiTheme`); widget prop'larinda `$token` ref → `var(--forge-ui-*)`; runtime widget'in `theme` ref'ini yukler + koke uygular.
 - [x] UI icin headless schema/render testleri ekle. → `tools/engine-tests.ts` icinde 11 check (normalizer + render-tree + style allowlist).
 - [x] `npm run build:verify` ile runtime paketinde editor UI import'u olmadigini dogrula. → U3 sonrasi yesil: 330 test + `verify:dist --strict` "runtime-only" (UI artik runtime bundle'da, editor degil).
 - [ ] Sonraki faz icin animation, localization, accessibility ve world-space UI gereksinimlerini ayri planla. (U7)
@@ -379,10 +379,63 @@ Eklenenler:
 Bilinen v1 sinirlari (sonraki polish): drag-and-drop yerlestirme yok (palette ekle +
 hierarchy reorder var); binding alanlari editlenmez (U5); animasyon/tema timeline yok.
 
-### Sonraki adim (U5)
+### U5 — Binding / ViewModel-lite (TAMAMLANDI)
 
-- U5: MVVM-lite store (`setField`/`getField`/`subscribe`, batched) + `{ "bind": "path" }`
-  cozumleme; HUD ProgressBar/Text canli baglanir; Details'e binding alani editoru.
+Eklenenler:
+
+- `engine/ui/uiViewModel.ts`: `UiViewModelStore` — `setField`/`getField`/`setFields`/
+  `subscribe`/`flush`/`clear`. Sadece gercekten degisen path dirty olur; `flush`
+  her dinleyiciyi flush basina **bir kez** cagirir (cok-pathli bir node tek sefer
+  re-render olur = batched). Saf, DOM'suz.
+- `engine/ui/uiBinding.ts`: `collectUiBindings` (saf — bind tasiyan node'lar),
+  `resolveUiBoundValue` (bound→store / static→literal), `applyBoundNode` (DOM:
+  Text/Button→textContent, Image→backgroundImage, ProgressBar→fill width),
+  `bindUiWidget` (initial apply + path abonelikleri, unmount'ta unsubscribe).
+  v1 bindable prop seti: `text`, `value`, `max`, `src`.
+- `RuntimeUiSubsystem`: opsiyonel `store`; HUD + her ekran mount'unda binding
+  wire'lanir, unmount'ta cozulur.
+- `RuntimeSceneApp`: `UiViewModelStore` olusturur, subsystem'e verir, frame basina
+  possessed pawn'un `planarSpeed`'ini `player.speed` + `player.speedLabel` olarak
+  besleyip `flush` eder (yalniz degisince re-render).
+- `Hud.ui.json`: artik canli bagli — `Text` → `{ bind: "player.speedLabel" }`,
+  `ProgressBar.value` → `{ bind: "player.speed" }` (max 6). Karakter hareket edince
+  etiket + bar guncellenir.
+- UI editor: bindable alanlar (text/value/max/src) icin **literal ↔ bind toggle**
+  ("bind" dugmesi; aktifken alan bir field-path girer, prop `{ bind }` olur).
+- 4 yeni engine testi (store notify/batched/unsubscribe + collect/resolve).
+  `build:verify` 337 test + `verify:dist --strict` runtime-only.
+
+### U6 — Tema/token sistemi (TAMAMLANDI)
+
+Eklenenler:
+
+- `engine/ui/uiTheme.ts`: `UiThemeDef` (`schema/type:"uiTheme"/name/tokens`),
+  `normalizeUiThemeDef` (yalniz scalar token), `tokenToCssVar` (`color.surface` →
+  `--forge-ui-color-surface`), `themeToCssVariables` (sayi→px, string→aynen),
+  `applyUiTheme` (token'lari elemana CSS degiskeni olarak yazar; subtree miras alir).
+- `uiRenderer.ts`: `resolveInlineStyle` artik `$token` ref'lerini taniyor —
+  `"$color.surface"` → `var(--forge-ui-color-surface)` (prop turunden bagimsiz,
+  literal px/string mantigini gecersiz kilar).
+- `RuntimeUiSubsystem`: `resolveTheme(ref)` option; mount sonrasi widget'in
+  `theme` ref'i cozulup koke uygulanir. `RuntimeSceneApp`: widget'larin `theme`
+  ref'lerini (asset id veya path) yukler, `resolveTheme` verir.
+- `EditorUi`: widget editoru artik yalniz `.ui.json`'a acilir (`isUiWidgetItem`);
+  `.theme.json` (ayni `ui` asset tipi) widget olarak acilip uzerine yazilmaz.
+- Demo: `Default.theme.json` (+ manifest `default-theme`); `Menu.ui.json`'a
+  `theme: "default-theme"` + panel `background/padding/radius` ve baslik renkleri
+  `$token`. Tema `accent` token'i built-in `--forge-ui-accent`'i de override eder
+  (buton rengi temadan gelir).
+- 3 yeni engine testi (normalize/themeToCssVariables/$token resolve). `build:verify`
+  340 test + runtime-only.
+
+Kapsam disi (U6b'ye not): reusable widget/template (named slot) ve debug inspector
+bu fazda yapilmadi — ayri, daha buyuk parcalar.
+
+### Sonraki adim (U6b/U7)
+
+- U6b: reusable widget/template (named slot/`include`), UI debug inspector
+  (aktif ekranlar + store alanlari), editor tema onizleme.
+- U7: animation, localization, accessibility, world-space widget/component.
 
 ## Onerilen uygulama sirasi
 

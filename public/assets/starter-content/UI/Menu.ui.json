@@ -2,11 +2,18 @@
   "schema": 1,
   "type": "ui",
   "name": "Menu",
-  "preview": { "width": 1280, "height": 720 },
+  "preview": {
+    "width": 1280,
+    "height": 720
+  },
+  "theme": "default-theme",
   "root": {
     "id": "root",
     "widget": "Canvas",
-    "props": { "align": "center", "justify": "center" },
+    "props": {
+      "align": "center",
+      "justify": "center"
+    },
     "children": [
       {
         "id": "panel",
@@ -15,22 +22,54 @@
           "direction": "column",
           "gap": 16,
           "align": "center",
-          "padding": 28,
-          "background": "rgba(16, 19, 26, 0.88)",
-          "radius": 12
+          "padding": "$space.lg",
+          "background": "$color.surface",
+          "radius": "$radius.lg"
         },
         "children": [
-          { "id": "title", "widget": "Text", "props": { "text": "Paused", "fontSize": 40, "fontWeight": 700 } },
-          { "id": "subtitle", "widget": "Text", "props": { "text": "Forge — UMG Lite", "fontSize": 16, "color": "#9aa4b2" } },
+          {
+            "id": "title",
+            "widget": "Text",
+            "props": {
+              "text": "Paused",
+              "fontSize": 40,
+              "fontWeight": 700,
+              "color": "$color.text"
+            },
+            "children": []
+          },
+          {
+            "id": "subtitle",
+            "widget": "Text",
+            "props": {
+              "text": "Forge — UMG Lite",
+              "fontSize": 16,
+              "color": "$color.muted"
+            },
+            "children": []
+          },
           {
             "id": "resume",
             "widget": "Button",
-            "props": { "text": "Resume", "onClick": { "type": "back" } }
+            "props": {
+              "text": "Resume",
+              "onClick": {
+                "type": "back"
+              }
+            },
+            "children": []
           },
           {
             "id": "options",
             "widget": "Button",
-            "props": { "text": "Options", "onClick": { "type": "message", "message": "Menu.OpenOptions" } }
+            "props": {
+              "text": "Options",
+              "onClick": {
+                "type": "message",
+                "message": "Menu.OpenOptions"
+              }
+            },
+            "children": []
           }
         ]
       }

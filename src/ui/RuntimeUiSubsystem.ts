@@ -26,23 +26,33 @@ import {
   type UiWidgetDef,
 } from "@engine/ui/uiWidget";
 import { renderUiWidget, type RenderedUiWidget } from "@engine/ui/uiRenderer";
+import { bindUiWidget } from "@engine/ui/uiBinding";
+import type { UiViewModelStore } from "@engine/ui/uiViewModel";
+import { applyUiTheme, type UiThemeDef } from "@engine/ui/uiTheme";
 
 export interface RuntimeUiSubsystemOptions {
   /** Invoked when a `message`-kind widget action fires (UI → gameplay). */
   onMessageAction?: (action: Extract<UiAction, { type: "message" }>, nodeId: string) => void;
   /** Invoked after the screen-stack depth changes (push/pop/clear). */
   onScreenStackChange?: (depth: number) => void;
+  /** ViewModel store driving `{ "bind": "path" }` props; omit for static UI. */
+  store?: UiViewModelStore;
+  /** Resolves a widget's `theme` reference to a loaded theme (for `$token` props). */
+  resolveTheme?: (ref: string) => UiThemeDef | null;
 }
 
 interface ScreenEntry {
   layer: HTMLElement;
   rendered: RenderedUiWidget;
+  /** Releases this screen's data bindings on pop/clear. */
+  disposeBinding: () => void;
 }
 
 export class RuntimeUiSubsystem {
   private readonly hudLayer: HTMLElement;
   private readonly screenRoot: HTMLElement;
   private hud: RenderedUiWidget | null = null;
+  private hudBinding: (() => void) | null = null;
   private readonly screens: ScreenEntry[] = [];
 
   constructor(
@@ -71,11 +81,15 @@ export class RuntimeUiSubsystem {
     this.clearHud();
     const rendered = renderUiWidget(widget, { onAction: this.handleAction });
     this.hudLayer.appendChild(rendered.element);
+    this.applyTheme(rendered, widget);
     this.hud = rendered;
+    this.hudBinding = this.bind(rendered, widget);
     return rendered;
   }
 
   clearHud(): void {
+    this.hudBinding?.();
+    this.hudBinding = null;
     this.hud?.dispose();
     this.hud = null;
   }
@@ -90,8 +104,9 @@ export class RuntimeUiSubsystem {
     layer.className = "forge-ui-screen-layer";
     const rendered = renderUiWidget(widget, { onAction: this.handleAction });
     layer.appendChild(rendered.element);
+    this.applyTheme(rendered, widget);
     this.screenRoot.appendChild(layer);
-    this.screens.push({ layer, rendered });
+    this.screens.push({ layer, rendered, disposeBinding: this.bind(rendered, widget) });
     this.fireStackChange(prevDepth);
     return rendered;
   }
@@ -101,10 +116,13 @@ export class RuntimeUiSubsystem {
     const top = this.screens.at(-1);
     if (!top) return this.pushScreen(def);
     const widget = isUiWidgetDef(def) ? def : normalizeUiWidgetDef(def);
+    top.disposeBinding();
     top.rendered.dispose();
     const rendered = renderUiWidget(widget, { onAction: this.handleAction });
     top.layer.appendChild(rendered.element);
+    this.applyTheme(rendered, widget);
     top.rendered = rendered;
+    top.disposeBinding = this.bind(rendered, widget);
     return rendered;
   }
 
@@ -112,6 +130,7 @@ export class RuntimeUiSubsystem {
   popScreen(): boolean {
     const entry = this.screens.pop();
     if (!entry) return false;
+    entry.disposeBinding();
     entry.rendered.dispose();
     entry.layer.remove();
     this.fireStackChange(this.screens.length + 1);
@@ -128,6 +147,7 @@ export class RuntimeUiSubsystem {
     if (this.screens.length === 0) return;
     const prevDepth = this.screens.length;
     for (const entry of this.screens) {
+      entry.disposeBinding();
       entry.rendered.dispose();
       entry.layer.remove();
     }
@@ -154,6 +174,18 @@ export class RuntimeUiSubsystem {
     }
     this.options.onMessageAction?.(action, nodeId);
   };
+
+  /** Wires a freshly rendered widget's `{ bind }` props to the store (no-op without one). */
+  private bind(rendered: RenderedUiWidget, widget: UiWidgetDef): () => void {
+    return this.options.store ? bindUiWidget(rendered, widget, this.options.store) : () => {};
+  }
+
+  /** Applies the widget's referenced theme's `$token` CSS variables to its root. */
+  private applyTheme(rendered: RenderedUiWidget, widget: UiWidgetDef): void {
+    if (!widget.theme || !this.options.resolveTheme) return;
+    const theme = this.options.resolveTheme(widget.theme);
+    if (theme) applyUiTheme(rendered.element, theme);
+  }
 
   private fireStackChange(prevDepth: number): void {
     if (this.screens.length !== prevDepth) {

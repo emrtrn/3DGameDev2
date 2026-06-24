@@ -6441,6 +6441,29 @@
       "license": "Unknown"
     },
     {
+      "id": "default-theme",
+      "name": "Default Theme",
+      "assetType": "ui",
+      "category": "UI",
+      "path": "assets/starter-content/UI/Default.theme.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 66
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "zz-smokebp",
       "name": "ZZ Smoke BP",
       "assetType": "prefab",
@@ -7591,6 +7614,29 @@
         "receiveShadow": true,
         "collision": true,
         "bytes": 10708420
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "sm-pano",
+      "name": "SM Pano",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/starter-content/StaticMeshes/SM_Pano.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 8656404
       },
       "license": "Unknown"
     }

@@ -411,6 +411,9 @@ import {
   buildUiRenderNode,
   resolveInlineStyle,
 } from "../engine/ui/uiRenderer";
+import { UiViewModelStore } from "../engine/ui/uiViewModel";
+import { collectUiBindings, resolveUiBoundValue } from "../engine/ui/uiBinding";
+import { normalizeUiThemeDef, themeToCssVariables, tokenToCssVar } from "../engine/ui/uiTheme";
 
 let checks = 0;
 const check = (label: string, fn: () => void): void => {
@@ -10534,6 +10537,104 @@ check("validateSaveUiPayload requires a .ui.json path and normalizes the body", 
   assert.equal((payload.ui as { root: { widget: string } }).root.widget, "Canvas");
   assert.throws(() => validateSaveUiPayload({ path: "assets/ui/Main.json", ui: {} }));
   assert.throws(() => validateSaveUiPayload({ path: "../secret.ui.json", ui: {} }));
+});
+
+check("UiViewModelStore notifies only changed fields and dedups unchanged writes", () => {
+  const store = new UiViewModelStore();
+  let health = 0;
+  let gold = 0;
+  store.subscribe("player.health", () => { health += 1; });
+  store.subscribe("player.gold", () => { gold += 1; });
+  store.setField("player.health", 100);
+  store.setField("player.gold", 5);
+  store.flush();
+  assert.equal(health, 1);
+  assert.equal(gold, 1);
+  assert.equal(store.getField("player.health"), 100);
+  store.setField("player.health", 100); // unchanged -> not dirty
+  store.flush();
+  assert.equal(health, 1);
+});
+
+check("UiViewModelStore fires a multi-path listener once per flush (batched)", () => {
+  const store = new UiViewModelStore();
+  let calls = 0;
+  const apply = (): void => { calls += 1; };
+  store.subscribe("a", apply);
+  store.subscribe("b", apply);
+  store.setField("a", 1);
+  store.setField("b", 2);
+  store.flush();
+  assert.equal(calls, 1);
+});
+
+check("UiViewModelStore unsubscribe stops notifications", () => {
+  const store = new UiViewModelStore();
+  let calls = 0;
+  const off = store.subscribe("x", () => { calls += 1; });
+  store.setField("x", 1);
+  store.flush();
+  off();
+  store.setField("x", 2);
+  store.flush();
+  assert.equal(calls, 1);
+});
+
+check("collectUiBindings + resolveUiBoundValue resolve bound vs static props", () => {
+  const def = normalizeUiWidgetDef({
+    name: "HUD",
+    root: {
+      widget: "Canvas",
+      children: [
+        { id: "bar", widget: "ProgressBar", props: { value: { bind: "player.hp" }, max: 100 } },
+        { id: "label", widget: "Text", props: { text: { bind: "player.hpLabel" } } },
+        { id: "plain", widget: "Text", props: { text: "Static" } },
+      ],
+    },
+  });
+  const bindings = collectUiBindings(def);
+  assert.equal(bindings.length, 2); // bar + label (plain has no binding)
+  const bar = findUiNode(def.root, "bar")!;
+  const store = new UiViewModelStore();
+  store.setField("player.hp", 42);
+  assert.equal(resolveUiBoundValue(bar, "value", store), 42); // bound -> store field
+  assert.equal(resolveUiBoundValue(bar, "max", store), 100); // static literal kept
+  assert.equal(resolveUiBoundValue(bar, "value", new UiViewModelStore()), undefined);
+});
+
+check("normalizeUiThemeDef keeps scalar tokens and drops the rest", () => {
+  const theme = normalizeUiThemeDef({
+    name: "T",
+    tokens: { "color.text": "#fff", "radius.lg": 12, bad: { x: 1 }, nan: Number.NaN },
+  });
+  assert.equal(theme.type, "uiTheme");
+  assert.equal(theme.tokens["color.text"], "#fff");
+  assert.equal(theme.tokens["radius.lg"], 12);
+  assert.equal("bad" in theme.tokens, false);
+  assert.equal("nan" in theme.tokens, false);
+});
+
+check("themeToCssVariables maps tokens to --forge-ui vars (px for numbers)", () => {
+  const vars = themeToCssVariables(
+    normalizeUiThemeDef({ name: "T", tokens: { "color.surface": "#101010", "space.md": 12 } }),
+  );
+  assert.equal(vars["--forge-ui-color-surface"], "#101010");
+  assert.equal(vars["--forge-ui-space-md"], "12px");
+  assert.equal(tokenToCssVar("radius.lg"), "--forge-ui-radius-lg");
+});
+
+check("resolveInlineStyle resolves $token refs to CSS variables", () => {
+  const def = normalizeUiWidgetDef({
+    name: "X",
+    root: {
+      widget: "Stack",
+      props: { background: "$color.surface", padding: "$space.lg", gap: 8 },
+    },
+  });
+  const style = resolveInlineStyle(def.root);
+  assert.equal(style["background"], "var(--forge-ui-color-surface)");
+  assert.equal(style["padding"], "var(--forge-ui-space-lg)"); // token wins over px
+  assert.equal(style["gap"], "8px"); // literal still px
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "type": "uiTheme",
+  "name": "Default",
+  "tokens": {
+    "color.surface": "rgba(20, 24, 40, 0.92)",
+    "color.text": "#eaf0ff",
+    "color.muted": "#9aa4c2",
+    "accent": "#6f7ad6",
+    "radius.lg": 14,
+    "space.lg": 30
+  }
+}

@@ -1347,7 +1347,7 @@ export class EditorUi {
         void this.openMaterialEditor(item);
       });
     }
-    if (item.type === "ui") {
+    if (isUiWidgetItem(item)) {
       card.addEventListener("dblclick", (event) => {
         event.preventDefault();
         void this.openUiWidgetEditor(item);
@@ -1400,7 +1400,7 @@ export class EditorUi {
   /** Returns an action opening the editor that matches `item`, or null. */
   private assetEditorOpener(item: BrowserAssetItem): (() => void) | null {
     if (item.type === "material") return () => void this.openMaterialEditor(item);
-    if (item.type === "ui") return () => void this.openUiWidgetEditor(item);
+    if (isUiWidgetItem(item)) return () => void this.openUiWidgetEditor(item);
     if (isActorScriptItem(item)) return () => void this.openActorScriptEditor(item);
     if (item.type !== "file" && isModelAssetType(item.type)) {
       return () => void this.openMeshEditor(item);
@@ -5009,6 +5009,15 @@ function formatContentTypeLabel(value: string): string {
 /** True when a Content Browser item is an Actor Script class-asset (`*.actor.json`). */
 function isActorScriptItem(item: BrowserAssetItem): boolean {
   return item.path.toLowerCase().endsWith(".actor.json");
+}
+
+/**
+ * True for a UI Widget asset (`*.ui.json`). The `ui` asset type also covers
+ * `*.theme.json` token files, which must NOT open in the widget editor (saving
+ * would overwrite the theme with a widget tree).
+ */
+function isUiWidgetItem(item: BrowserAssetItem): boolean {
+  return item.type === "ui" && item.path.toLowerCase().endsWith(".ui.json");
 }
 
 function formatContentTypeBadge(value: BrowserAssetItem["type"]): string {

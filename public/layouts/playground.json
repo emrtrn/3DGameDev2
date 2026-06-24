@@ -182,6 +182,22 @@
     {
       "assetId": "wallcorner",
       "placements": []
+    },
+    {
+      "assetId": "base-basic-pbr",
+      "placements": []
+    },
+    {
+      "assetId": "sm-001",
+      "placements": []
+    },
+    {
+      "assetId": "sm-002",
+      "placements": []
+    },
+    {
+      "assetId": "sm-pano",
+      "placements": []
     }
   ],
   "characters": [],

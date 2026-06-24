@@ -192,6 +192,8 @@ import {
 } from "@/scene/assetSkeletonLoader";
 import { assetPath, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
 import { normalizeUiWidgetDef, type UiWidgetDef } from "@engine/ui/uiWidget";
+import { normalizeUiThemeDef, type UiThemeDef } from "@engine/ui/uiTheme";
+import { UiViewModelStore } from "@engine/ui/uiViewModel";
 import { RuntimeUiSubsystem } from "@/ui/RuntimeUiSubsystem";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
@@ -354,8 +356,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private inputMode: InputMode = "ui";
   /** UMG Lite runtime UI host; null when the layout authors no HUD/pause widget. */
   private uiSubsystem: RuntimeUiSubsystem | null = null;
+  /** ViewModel-lite store backing UI `{ "bind": "path" }` props (e.g. `player.speed`). */
+  private readonly uiStore = new UiViewModelStore();
   /** Pause-menu widget pushed on the `menu` action; null when none is configured. */
   private pauseMenuDef: UiWidgetDef | null = null;
+  /** Loaded UI theme defs keyed by their `theme` reference (asset id or path). */
+  private readonly uiThemes = new Map<string, UiThemeDef>();
 
   onFrame: ((deltaMs: number) => void) | null = null;
 
@@ -513,6 +519,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // input, so opening a screen suppresses this frame's camera/movement.
       this.updateUiInput();
       this.gameModeSession?.update(deltaMs / 1000);
+      this.updateUiStore();
       this.updateParticleEffects(deltaMs / 1000);
       if (this.skyObject) followCameraWithSky(this.skyObject, this.camera);
       if (this.cloudObject) {
@@ -772,12 +779,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
     const wanted = new Set([hudId, pauseId].filter((id): id is string => Boolean(id)));
     const defs = await this.loadUiWidgetDefs(wanted);
+    await this.loadUiThemeDefs(defs.values());
     this.uiSubsystem = new RuntimeUiSubsystem(host, {
+      store: this.uiStore,
+      resolveTheme: (ref) => this.uiThemes.get(ref) ?? null,
       onMessageAction: (action) => {
         this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
       },
       onScreenStackChange: (depth) => this.handleUiScreenStackChange(depth),
     });
+
+    // Seed bound fields so the initial render shows values (not blanks/zeroes).
+    this.uiStore.setField("player.speed", 0);
+    this.uiStore.setField("player.speedLabel", "Speed 0.0 m/s");
 
     if (hudId) {
       const hud = defs.get(hudId);
@@ -808,6 +822,33 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
+   * Loads the theme defs referenced by the given widgets (`def.theme`) into
+   * {@link uiThemes}, keyed by the reference. A reference resolves as a manifest
+   * `ui` asset id first, else as a direct public-relative path (matching the
+   * plan's `assets/ui/default.theme.json` form). Missing/malformed themes are
+   * skipped — a themeless widget falls back to the built-in CSS variables.
+   */
+  private async loadUiThemeDefs(widgets: Iterable<UiWidgetDef>): Promise<void> {
+    const refs = new Set<string>();
+    for (const widget of widgets) if (widget.theme) refs.add(widget.theme);
+    if (refs.size === 0) return;
+    const manifest = this.assetLoader ? await this.assetLoader.loadManifest() : null;
+    await Promise.all(
+      [...refs].map(async (ref) => {
+        const asset = manifest?.assets.find((entry) => entry.id === ref);
+        const path = asset ? assetPath(asset) : ref;
+        try {
+          const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
+          if (!response.ok) return;
+          this.uiThemes.set(ref, normalizeUiThemeDef(await response.json(), ref));
+        } catch {
+          // Missing/malformed theme: skip it (widget uses default CSS variables).
+        }
+      }),
+    );
+  }
+
+  /**
    * Routes input as the UI screen stack opens/closes. A screen forces `ui` input
    * (suppressing gameplay) and frees the cursor; closing the last screen re-grabs
    * pointer lock when the active camera uses it (a no-op for right-drag).
@@ -835,6 +876,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!this.uiSubsystem || !this.pauseMenuDef) return;
     if (this.uiSubsystem.screenDepth > 0) return;
     this.uiSubsystem.pushScreen(this.pauseMenuDef);
+  }
+
+  /**
+   * Feeds the ViewModel store the possessed pawn's live state, then flushes so
+   * only widgets bound to a changed field re-render. v1 surfaces the player's
+   * planar speed (`player.speed` / `player.speedLabel`); the HUD binds to these.
+   */
+  private updateUiStore(): void {
+    if (!this.uiSubsystem) return;
+    const possessed = this.gameModeSession?.playerState.pawnEntityId ?? null;
+    const speed = (possessed ? this.locomotionReports.get(possessed)?.planarSpeed : 0) ?? 0;
+    this.uiStore.setField("player.speed", speed);
+    this.uiStore.setField("player.speedLabel", `Speed ${speed.toFixed(1)} m/s`);
+    this.uiStore.flush();
   }
 
   /**
