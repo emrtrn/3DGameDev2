@@ -43,7 +43,7 @@ import {
   normalizeActorScriptDef,
   type ParentClass,
 } from "../engine/scene/actorScript";
-import { defaultUiWidgetDef } from "../engine/ui/uiWidget";
+import { defaultUiWidgetDef, normalizeUiWidgetDef } from "../engine/ui/uiWidget";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -1359,6 +1359,24 @@ export function validateSaveActorPayload(value: unknown): {
   return {
     path: input.path,
     actor: normalizeActorScriptDef(input.actor) as unknown as Record<string, unknown>,
+  };
+}
+
+/** Validates the `/__save-ui` payload (`{ path, ui }`) for a UI Widget asset. */
+export function validateSaveUiPayload(value: unknown): {
+  path: string;
+  ui: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") throw new Error("ui payload must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".ui.json")) {
+    throw new Error("ui payload path must end with .ui.json");
+  }
+  if (input.path.includes("..")) throw new Error("ui payload path must not contain ..");
+  // Normalize defensively so malformed authoring data never lands on disk.
+  return {
+    path: input.path,
+    ui: normalizeUiWidgetDef(input.ui) as unknown as Record<string, unknown>,
   };
 }
 

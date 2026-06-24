@@ -165,6 +165,43 @@ export function readUiAction(node: UiNode, key = "onClick"): UiAction | null {
 }
 
 // ---------------------------------------------------------------------------
+// Tree helpers (pure) — used by the UI editor to build/find/mutate the tree.
+// ---------------------------------------------------------------------------
+
+/** Sensible default props for a freshly added widget (palette → designer). */
+const NEW_NODE_PROPS: Partial<Record<UiWidgetKind, Record<string, SceneJsonValue>>> = {
+  Text: { text: "Text" },
+  Button: { text: "Button" },
+  ProgressBar: { value: 50, max: 100 },
+  Stack: { direction: "column", gap: 8 },
+};
+
+/** Builds a new node of the given kind with default props and the supplied id. */
+export function createUiNode(widget: UiWidgetKind, id: string): UiNode {
+  return { id, widget, props: { ...(NEW_NODE_PROPS[widget] ?? {}) }, children: [] };
+}
+
+/** Depth-first search for a node by id (returns the node, or null). */
+export function findUiNode(root: UiNode, id: string): UiNode | null {
+  if (root.id === id) return root;
+  for (const child of root.children) {
+    const found = findUiNode(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Finds the parent of the node with `id` (null for the root or when absent). */
+export function findUiNodeParent(root: UiNode, id: string): UiNode | null {
+  for (const child of root.children) {
+    if (child.id === id) return root;
+    const found = findUiNodeParent(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Normalization (defensive: never throws, always returns a usable asset).
 // ---------------------------------------------------------------------------
 

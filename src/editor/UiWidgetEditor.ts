@@ -1,0 +1,509 @@
+/**
+ * UI Widget editor (UMG Lite, dev-only).
+ *
+ * A modal authoring shell for `*.ui.json` assets, opened from the Content
+ * Browser. Four regions mirror UMG's Widget Blueprint Designer:
+ *   - **Palette** — add a child widget to the selected container.
+ *   - **Hierarchy** — the widget tree; click to select, reorder/delete.
+ *   - **Designer** — a live WYSIWYG preview rendered by the *runtime* renderer
+ *     (`engine/ui/uiRenderer.ts`), so the editor shows exactly what plays.
+ *   - **Details** — typed property fields for the selected node.
+ *
+ * No node graph (plan U4): behaviour is the typed `back`/`message` action edited
+ * in Details. Save round-trips through `/__save-ui`, which re-normalizes server
+ * side, so the editor can never write a malformed asset.
+ */
+import {
+  createUiNode,
+  findUiNode,
+  findUiNodeParent,
+  isUiContainerKind,
+  normalizeUiWidgetDef,
+  readUiAction,
+  UI_WIDGET_KINDS,
+  type UiNode,
+  type UiWidgetDef,
+  type UiWidgetKind,
+} from "@engine/ui/uiWidget";
+import { renderUiWidget, type RenderedUiWidget } from "@engine/ui/uiRenderer";
+import { loadUiWidgetAsset, saveUiWidgetAsset } from "@/editor/uiWidgetStore";
+
+type StatusTone = "info" | "success" | "error";
+
+export interface UiWidgetEditorOptions {
+  path: string;
+  label: string;
+  onStatus?: (message: string, tone?: StatusTone) => void;
+  onSaved?: () => void;
+}
+
+interface FieldDesc {
+  key: string;
+  label: string;
+  kind: "text" | "number" | "select";
+  options?: readonly string[];
+}
+
+const ALIGN_OPTIONS = ["", "start", "center", "end", "stretch", "between"] as const;
+
+/** Editable property fields per widget kind (Details panel). */
+function fieldsForWidget(kind: UiWidgetKind): FieldDesc[] {
+  const layout: FieldDesc[] = [
+    { key: "align", label: "Align", kind: "select", options: ALIGN_OPTIONS },
+    { key: "justify", label: "Justify", kind: "select", options: ALIGN_OPTIONS },
+    { key: "padding", label: "Padding", kind: "number" },
+    { key: "background", label: "Background", kind: "text" },
+    { key: "radius", label: "Corner Radius", kind: "number" },
+  ];
+  switch (kind) {
+    case "Text":
+      return [
+        { key: "text", label: "Text", kind: "text" },
+        { key: "fontSize", label: "Font Size", kind: "number" },
+        { key: "fontWeight", label: "Font Weight", kind: "number" },
+        { key: "color", label: "Color", kind: "text" },
+      ];
+    case "Image":
+      return [
+        { key: "src", label: "Image Path", kind: "text" },
+        { key: "width", label: "Width", kind: "number" },
+        { key: "height", label: "Height", kind: "number" },
+      ];
+    case "ProgressBar":
+      return [
+        { key: "value", label: "Value", kind: "number" },
+        { key: "max", label: "Max", kind: "number" },
+      ];
+    case "Stack":
+      return [
+        { key: "direction", label: "Direction", kind: "select", options: ["column", "row"] },
+        { key: "gap", label: "Gap", kind: "number" },
+        ...layout,
+      ];
+    case "Button":
+      // Button text + action are rendered specially (see renderDetails).
+      return [{ key: "text", label: "Label", kind: "text" }];
+    default:
+      return layout; // Canvas / Panel
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export class UiWidgetEditor {
+  private static activeInstance: UiWidgetEditor | null = null;
+
+  static async open(options: UiWidgetEditorOptions): Promise<UiWidgetEditor> {
+    UiWidgetEditor.activeInstance?.close();
+    const editor = new UiWidgetEditor(options);
+    UiWidgetEditor.activeInstance = editor;
+    await editor.load();
+    return editor;
+  }
+
+  private readonly overlay: HTMLDivElement;
+  private readonly titleEl: HTMLElement;
+  private readonly paletteHost: HTMLElement;
+  private readonly hierarchyHost: HTMLElement;
+  private readonly stageHost: HTMLElement;
+  private readonly stageInner: HTMLElement;
+  private readonly detailsHost: HTMLElement;
+  private readonly statusEl: HTMLElement;
+  private readonly resizeObserver: ResizeObserver;
+
+  private def: UiWidgetDef;
+  private selectedId: string;
+  private rendered: RenderedUiWidget | null = null;
+  private idCounter = 0;
+  private dirty = false;
+  private disposed = false;
+
+  private constructor(private readonly options: UiWidgetEditorOptions) {
+    this.def = normalizeUiWidgetDef({ name: options.label }, options.label);
+    this.selectedId = this.def.root.id;
+    this.overlay = document.createElement("div");
+    this.overlay.className = "uie-overlay";
+    this.overlay.innerHTML = `
+      <div class="uie-window">
+        <header class="uie-header">
+          <span class="uie-tab">
+            <span class="uie-tab-icon">UI</span>
+            <strong data-uie-title></strong>
+            <span class="uie-badge">UI Widget</span>
+          </span>
+          <div class="uie-header-actions">
+            <button type="button" class="uie-save" data-uie-save title="Save (Ctrl+S)">Save</button>
+            <button type="button" class="uie-close" data-uie-close title="Close (Esc)">x</button>
+          </div>
+        </header>
+        <div class="uie-body">
+          <aside class="uie-left">
+            <div class="uie-section-title">Palette</div>
+            <div class="uie-palette" data-uie-palette></div>
+            <div class="uie-section-title">Hierarchy</div>
+            <div class="uie-hierarchy" data-uie-hierarchy></div>
+          </aside>
+          <main class="uie-stage" data-uie-stage>
+            <div class="uie-stage-inner" data-uie-stage-inner></div>
+          </main>
+          <aside class="uie-details" data-uie-details></aside>
+        </div>
+        <footer class="uie-status" data-uie-status>Loading...</footer>
+      </div>
+    `;
+    document.body.append(this.overlay);
+
+    this.titleEl = this.requireEl("[data-uie-title]");
+    this.paletteHost = this.requireEl("[data-uie-palette]");
+    this.hierarchyHost = this.requireEl("[data-uie-hierarchy]");
+    this.stageHost = this.requireEl("[data-uie-stage]");
+    this.stageInner = this.requireEl("[data-uie-stage-inner]");
+    this.detailsHost = this.requireEl("[data-uie-details]");
+    this.statusEl = this.requireEl("[data-uie-status]");
+
+    this.requireEl<HTMLButtonElement>("[data-uie-close]").addEventListener("click", () =>
+      this.close(),
+    );
+    this.requireEl<HTMLButtonElement>("[data-uie-save]").addEventListener("click", () =>
+      void this.save(),
+    );
+    this.stageHost.addEventListener("click", (event) => this.onStageClick(event));
+
+    this.overlay.tabIndex = -1;
+    this.overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.close();
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void this.save();
+      }
+    });
+    this.overlay.focus();
+
+    this.resizeObserver = new ResizeObserver(() => this.fitStage());
+    this.resizeObserver.observe(this.stageHost);
+
+    this.renderPalette();
+  }
+
+  private requireEl<T extends HTMLElement>(selector: string): T {
+    const el = this.overlay.querySelector<T>(selector);
+    if (!el) throw new Error(`UiWidgetEditor missing element: ${selector}`);
+    return el;
+  }
+
+  private async load(): Promise<void> {
+    try {
+      this.def = await loadUiWidgetAsset(this.options.path, this.options.label);
+      this.selectedId = this.def.root.id;
+      this.dirty = false;
+      this.renderAll();
+      this.setStatus("Ready.");
+    } catch (error) {
+      this.renderAll();
+      this.setStatus(`Failed to load: ${describeError(error)}`, "error");
+    }
+  }
+
+  private renderAll(): void {
+    if (this.disposed) return;
+    this.titleEl.textContent = this.def.name;
+    this.renderHierarchy();
+    this.renderPreview();
+    this.renderDetails();
+  }
+
+  // --- Palette -------------------------------------------------------------
+
+  private renderPalette(): void {
+    this.paletteHost.replaceChildren();
+    for (const kind of UI_WIDGET_KINDS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "uie-palette-item";
+      button.textContent = kind;
+      button.title = isUiContainerKind(kind) ? `Add ${kind} (container)` : `Add ${kind}`;
+      button.addEventListener("click", () => this.addWidget(kind));
+      this.paletteHost.append(button);
+    }
+  }
+
+  /** Adds a new widget under the selected container (or the selected node's parent). */
+  private addWidget(kind: UiWidgetKind): void {
+    const selected = findUiNode(this.def.root, this.selectedId) ?? this.def.root;
+    const target = isUiContainerKind(selected.widget)
+      ? selected
+      : (findUiNodeParent(this.def.root, selected.id) ?? this.def.root);
+    const node = createUiNode(kind, `${kind.toLowerCase()}-${++this.idCounter}`);
+    target.children.push(node);
+    this.selectedId = node.id;
+    this.markDirty();
+    this.renderAll();
+  }
+
+  // --- Hierarchy -----------------------------------------------------------
+
+  private renderHierarchy(): void {
+    this.hierarchyHost.replaceChildren();
+    const walk = (node: UiNode, depth: number): void => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "uie-tree-row";
+      row.classList.toggle("is-selected", node.id === this.selectedId);
+      row.style.paddingLeft = `${8 + depth * 14}px`;
+      row.innerHTML = `<span class="uie-tree-kind">${escapeHtml(node.widget)}</span><span class="uie-tree-id">${escapeHtml(node.id)}</span>`;
+      row.addEventListener("click", () => {
+        this.selectedId = node.id;
+        this.renderHierarchy();
+        this.renderDetails();
+        this.highlightSelected();
+      });
+      this.hierarchyHost.append(row);
+      for (const child of node.children) walk(child, depth + 1);
+    };
+    walk(this.def.root, 0);
+  }
+
+  // --- Designer preview ----------------------------------------------------
+
+  private renderPreview(): void {
+    this.rendered?.dispose();
+    // No onAction: in the editor a click selects the node, it does not navigate.
+    this.rendered = renderUiWidget(this.def, {});
+    this.stageInner.replaceChildren(this.rendered.element);
+    this.fitStage();
+    this.highlightSelected();
+  }
+
+  /** Scales + centers the design-resolution preview inside the stage viewport. */
+  private fitStage(): void {
+    const { width, height } = this.def.preview;
+    const stageW = this.stageHost.clientWidth;
+    const stageH = this.stageHost.clientHeight;
+    const scale = Math.min(stageW / width, stageH / height, 1) || 1;
+    this.stageInner.style.width = `${width}px`;
+    this.stageInner.style.height = `${height}px`;
+    this.stageInner.style.transform = `scale(${scale})`;
+    this.stageInner.style.left = `${Math.max(0, (stageW - width * scale) / 2)}px`;
+    this.stageInner.style.top = `${Math.max(0, (stageH - height * scale) / 2)}px`;
+  }
+
+  private onStageClick(event: MouseEvent): void {
+    const target = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-ui-id]");
+    const id = target?.dataset.uiId;
+    if (!id) return;
+    this.selectedId = id;
+    this.renderHierarchy();
+    this.renderDetails();
+    this.highlightSelected();
+  }
+
+  private highlightSelected(): void {
+    for (const el of this.stageInner.querySelectorAll(".is-uie-selected")) {
+      el.classList.remove("is-uie-selected");
+    }
+    this.rendered?.byId.get(this.selectedId)?.classList.add("is-uie-selected");
+  }
+
+  // --- Details -------------------------------------------------------------
+
+  private renderDetails(): void {
+    this.detailsHost.replaceChildren();
+    const node = findUiNode(this.def.root, this.selectedId);
+    if (!node) {
+      this.detailsHost.append(this.makeHint("Select a widget to edit its properties."));
+      return;
+    }
+
+    const header = document.createElement("div");
+    header.className = "uie-details-header";
+    header.innerHTML = `<strong>${escapeHtml(node.widget)}</strong><span class="uie-tree-id">${escapeHtml(node.id)}</span>`;
+    this.detailsHost.append(header);
+
+    for (const field of fieldsForWidget(node.widget)) {
+      this.detailsHost.append(this.makeField(node, field));
+    }
+    if (node.widget === "Button") this.detailsHost.append(this.makeActionField(node));
+
+    // Node actions (reorder / delete) — never delete the root.
+    const actions = document.createElement("div");
+    actions.className = "uie-node-actions";
+    actions.append(
+      this.makeButton("↑", "Move up", () => this.moveSelected(-1)),
+      this.makeButton("↓", "Move down", () => this.moveSelected(1)),
+    );
+    if (node.id !== this.def.root.id) {
+      actions.append(this.makeButton("Delete", "Delete widget", () => this.deleteSelected(), true));
+    }
+    this.detailsHost.append(actions);
+  }
+
+  private makeField(node: UiNode, field: FieldDesc): HTMLElement {
+    const row = document.createElement("label");
+    row.className = "uie-field";
+    const labelEl = document.createElement("span");
+    labelEl.textContent = field.label;
+    row.append(labelEl);
+
+    const current = node.props[field.key];
+    if (field.kind === "select") {
+      const select = document.createElement("select");
+      for (const option of field.options ?? []) {
+        const opt = document.createElement("option");
+        opt.value = option;
+        opt.textContent = option === "" ? "(default)" : option;
+        select.append(opt);
+      }
+      select.value = typeof current === "string" ? current : "";
+      select.addEventListener("change", () => this.setProp(node, field.key, select.value || null));
+      row.append(select);
+    } else {
+      const input = document.createElement("input");
+      input.type = field.kind === "number" ? "number" : "text";
+      input.value = current === undefined || current === null ? "" : String(current);
+      input.addEventListener("change", () => {
+        if (field.kind === "number") {
+          const num = input.value.trim() === "" ? null : Number(input.value);
+          this.setProp(node, field.key, num !== null && Number.isFinite(num) ? num : null);
+        } else {
+          this.setProp(node, field.key, input.value.trim() === "" ? null : input.value);
+        }
+      });
+      row.append(input);
+    }
+    return row;
+  }
+
+  /** Button `onClick` editor: none / back / message(+text). */
+  private makeActionField(node: UiNode): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "uie-field uie-action-field";
+    const labelEl = document.createElement("span");
+    labelEl.textContent = "On Click";
+    wrap.append(labelEl);
+
+    const action = readUiAction(node);
+    const select = document.createElement("select");
+    for (const value of ["none", "back", "message"]) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = value;
+      select.append(opt);
+    }
+    select.value = action?.type ?? "none";
+
+    const message = document.createElement("input");
+    message.type = "text";
+    message.placeholder = "Message name";
+    message.value = action?.type === "message" ? action.message : "";
+    message.hidden = select.value !== "message";
+
+    const apply = (): void => {
+      if (select.value === "back") this.setProp(node, "onClick", { type: "back" });
+      else if (select.value === "message") {
+        this.setProp(node, "onClick", { type: "message", message: message.value || "Message" });
+      } else this.setProp(node, "onClick", null);
+      message.hidden = select.value !== "message";
+    };
+    select.addEventListener("change", apply);
+    message.addEventListener("change", apply);
+    wrap.append(select, message);
+    return wrap;
+  }
+
+  private makeButton(
+    text: string,
+    title: string,
+    onClick: () => void,
+    danger = false,
+  ): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = danger ? "uie-btn uie-btn-danger" : "uie-btn";
+    button.textContent = text;
+    button.title = title;
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  private makeHint(text: string): HTMLElement {
+    const hint = document.createElement("p");
+    hint.className = "uie-hint";
+    hint.textContent = text;
+    return hint;
+  }
+
+  private setProp(node: UiNode, key: string, value: unknown): void {
+    if (value === null || value === undefined) delete node.props[key];
+    else node.props[key] = value as UiNode["props"][string];
+    this.markDirty();
+    this.renderPreview();
+  }
+
+  private moveSelected(direction: -1 | 1): void {
+    const parent = findUiNodeParent(this.def.root, this.selectedId);
+    if (!parent) return;
+    const index = parent.children.findIndex((child) => child.id === this.selectedId);
+    const next = index + direction;
+    if (index < 0 || next < 0 || next >= parent.children.length) return;
+    const [moved] = parent.children.splice(index, 1);
+    parent.children.splice(next, 0, moved!);
+    this.markDirty();
+    this.renderAll();
+  }
+
+  private deleteSelected(): void {
+    const parent = findUiNodeParent(this.def.root, this.selectedId);
+    if (!parent) return; // root is not deletable
+    parent.children = parent.children.filter((child) => child.id !== this.selectedId);
+    this.selectedId = parent.id;
+    this.markDirty();
+    this.renderAll();
+  }
+
+  // --- Save / lifecycle ----------------------------------------------------
+
+  private async save(): Promise<void> {
+    try {
+      const result = await saveUiWidgetAsset(this.options.path, normalizeUiWidgetDef(this.def));
+      this.dirty = false;
+      this.requireEl<HTMLButtonElement>("[data-uie-save]").classList.remove("is-dirty");
+      this.setStatus(result.changed ? `Saved ${result.path}` : "No changes to save.", "success");
+      this.options.onSaved?.();
+    } catch (error) {
+      this.setStatus(`Save failed: ${describeError(error)}`, "error");
+    }
+  }
+
+  private markDirty(): void {
+    this.dirty = true;
+    this.overlay.querySelector<HTMLButtonElement>("[data-uie-save]")?.classList.add("is-dirty");
+  }
+
+  private setStatus(message: string, tone: StatusTone = "info"): void {
+    this.statusEl.textContent = message;
+    this.statusEl.dataset.tone = tone;
+    this.options.onStatus?.(message, tone);
+  }
+
+  close(): void {
+    if (this.disposed) return;
+    if (this.dirty && !window.confirm("Close UI Widget editor without saving?")) return;
+    this.disposed = true;
+    this.resizeObserver.disconnect();
+    this.rendered?.dispose();
+    this.overlay.remove();
+    if (UiWidgetEditor.activeInstance === this) UiWidgetEditor.activeInstance = null;
+  }
+}

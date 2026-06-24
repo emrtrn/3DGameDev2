@@ -2,11 +2,18 @@
   "schema": 1,
   "type": "ui",
   "name": "HUD",
-  "preview": { "width": 1280, "height": 720 },
+  "preview": {
+    "width": 1280,
+    "height": 720
+  },
   "root": {
     "id": "root",
     "widget": "Canvas",
-    "props": { "align": "start", "justify": "start", "padding": 16 },
+    "props": {
+      "align": "start",
+      "justify": "start",
+      "padding": 16
+    },
     "children": [
       {
         "id": "hud",
@@ -16,12 +23,29 @@
           "gap": 6,
           "align": "start",
           "padding": 12,
-          "background": "rgba(16, 19, 26, 0.55)",
+          "background": "rgba(100, 109, 206, 0.55)",
           "radius": 8
         },
         "children": [
-          { "id": "hpLabel", "widget": "Text", "props": { "text": "Health", "fontSize": 13, "color": "#cfd6e2" } },
-          { "id": "hpBar", "widget": "ProgressBar", "props": { "value": 72, "max": 100 } }
+          {
+            "id": "hpLabel",
+            "widget": "Text",
+            "props": {
+              "text": "Health",
+              "fontSize": 13,
+              "color": "#cfd6e2"
+            },
+            "children": []
+          },
+          {
+            "id": "hpBar",
+            "widget": "ProgressBar",
+            "props": {
+              "value": 72,
+              "max": 100
+            },
+            "children": []
+          }
         ]
       }
     ]

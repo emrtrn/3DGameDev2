@@ -228,6 +228,7 @@ import {
   validateSphereReflectionCapture,
   validatePostProcess,
   validateSaveActorPayload,
+  validateSaveUiPayload,
   validateNewBehaviorPayload,
   resolveBehaviorStub,
   validateSaveCollisionPayload,
@@ -395,7 +396,10 @@ import {
 } from "three";
 import type { AnimationMixer } from "three";
 import {
+  createUiNode,
   defaultUiWidgetDef,
+  findUiNode,
+  findUiNodeParent,
   normalizeUiWidgetDef,
   readUiAction,
   readUiBindingPath,
@@ -10493,6 +10497,43 @@ check("Stack direction sets the modifier class; default is column", () => {
   );
   assert.match(row.className, /forge-ui-stack--row/);
   assert.match(col.className, /forge-ui-stack--column/);
+});
+
+check("createUiNode seeds default props per kind; containers start empty", () => {
+  assert.deepEqual(createUiNode("Text", "t1"), { id: "t1", widget: "Text", props: { text: "Text" }, children: [] });
+  assert.deepEqual(createUiNode("ProgressBar", "p1").props, { value: 50, max: 100 });
+  assert.deepEqual(createUiNode("Stack", "s1").props, { direction: "column", gap: 8 });
+  assert.deepEqual(createUiNode("Panel", "c1").props, {});
+});
+
+check("findUiNode + findUiNodeParent walk the widget tree", () => {
+  const def = normalizeUiWidgetDef({
+    name: "X",
+    root: {
+      id: "root",
+      widget: "Canvas",
+      children: [
+        { id: "stack", widget: "Stack", children: [{ id: "label", widget: "Text" }] },
+      ],
+    },
+  });
+  assert.equal(findUiNode(def.root, "label")?.widget, "Text");
+  assert.equal(findUiNode(def.root, "missing"), null);
+  assert.equal(findUiNodeParent(def.root, "label")?.id, "stack");
+  assert.equal(findUiNodeParent(def.root, "stack")?.id, "root");
+  assert.equal(findUiNodeParent(def.root, "root"), null);
+});
+
+check("validateSaveUiPayload requires a .ui.json path and normalizes the body", () => {
+  const payload = validateSaveUiPayload({
+    path: "assets/ui/Main.ui.json",
+    ui: { name: "Main", root: {} },
+  });
+  assert.equal(payload.path, "assets/ui/Main.ui.json");
+  assert.equal((payload.ui as { type: string }).type, "ui");
+  assert.equal((payload.ui as { root: { widget: string } }).root.widget, "Canvas");
+  assert.throws(() => validateSaveUiPayload({ path: "assets/ui/Main.json", ui: {} }));
+  assert.throws(() => validateSaveUiPayload({ path: "../secret.ui.json", ui: {} }));
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

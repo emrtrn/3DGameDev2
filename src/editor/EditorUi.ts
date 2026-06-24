@@ -1347,6 +1347,12 @@ export class EditorUi {
         void this.openMaterialEditor(item);
       });
     }
+    if (item.type === "ui") {
+      card.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        void this.openUiWidgetEditor(item);
+      });
+    }
     const thumb = card.querySelector<HTMLElement>("[data-asset-thumb]");
     if (thumb && isActorScriptItem(item)) thumb.textContent = "BP";
     if (thumb && item.type !== "file" && isModelAssetType(item.type)) {
@@ -1394,6 +1400,7 @@ export class EditorUi {
   /** Returns an action opening the editor that matches `item`, or null. */
   private assetEditorOpener(item: BrowserAssetItem): (() => void) | null {
     if (item.type === "material") return () => void this.openMaterialEditor(item);
+    if (item.type === "ui") return () => void this.openUiWidgetEditor(item);
     if (isActorScriptItem(item)) return () => void this.openActorScriptEditor(item);
     if (item.type !== "file" && isModelAssetType(item.type)) {
       return () => void this.openMeshEditor(item);
@@ -1718,6 +1725,27 @@ export class EditorUi {
     } catch (error) {
       this.setStatus(
         `Could not open Material Editor: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
+  }
+
+  /**
+   * Opens the UMG Lite UI Widget editor for a `*.ui.json` asset. Kept behind a
+   * dynamic import like the other asset editors.
+   */
+  private async openUiWidgetEditor(item: BrowserAssetItem): Promise<void> {
+    try {
+      const { UiWidgetEditor } = await import("@/editor/UiWidgetEditor");
+      await UiWidgetEditor.open({
+        path: item.path,
+        label: item.label.replace(/\.ui\.json$/i, ""),
+        onStatus: (message, tone) => this.setStatus(message, tone),
+        onSaved: () => this.renderContentAssets(),
+      });
+    } catch (error) {
+      this.setStatus(
+        `Could not open UI Widget editor: ${error instanceof Error ? error.message : String(error)}`,
         "error",
       );
     }
@@ -4991,6 +5019,7 @@ function formatContentTypeBadge(value: BrowserAssetItem["type"]): string {
   if (value === "sound") return "Sound";
   if (value === "animation") return "Animation";
   if (value === "prefab") return "Prefab";
+  if (value === "ui") return "UI Widget";
   if (value === "level") return "Level";
   return "File";
 }

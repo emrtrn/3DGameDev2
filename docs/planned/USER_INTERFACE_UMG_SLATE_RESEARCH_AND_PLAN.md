@@ -290,8 +290,8 @@ Bu, Forge'un mevcut `?editor` / runtime ayrimina uyumludur.
 - [x] Runtime screen stack ekle: `push`, `replace`, `pop`, `back`. → `RuntimeUiSubsystem` v2 (HUD katmani + screen stack scrim'leri, `onScreenStackChange`).
 - [x] `RuntimeSceneApp` input mode entegrasyonu ile UI/game input gecisini netlestir. → `Escape` -> `menu` action toggle + pointer-lock birakilinca pause menu; screen acikken `inputMode = "ui"`, kapaninca `reengage()`.
 - [ ] MVVM-lite store ekle: field update, subscribe, batched render. (U5; schema bind'leri `{ "bind": "path" }` olarak tolere ediyor)
-- [ ] UI Editor v1 ekle: palette, hierarchy, designer canvas, details, save/validate. (U4)
-- [ ] Content Browser'da `.ui.json` cift tiklama ile UI Editor ac. (U4)
+- [x] UI Editor v1 ekle: palette, hierarchy, designer canvas, details, save/validate. → `src/editor/UiWidgetEditor.ts` (overlay; palette/hierarchy/canli onizleme/details) + `/__save-ui` endpoint (`validateSaveUiPayload`).
+- [x] Content Browser'da `.ui.json` cift tiklama ile UI Editor ac. → `EditorUi.openUiWidgetEditor` (`assetEditorOpener` + dblclick + "UI Widget" badge).
 - [ ] Tema/token sistemi ekle: `.theme.json` ve CSS variable uretimi. (U6; `#ui-overlay` altinda `--forge-ui-*` token seam'i hazir, `.theme.json` yok)
 - [x] UI icin headless schema/render testleri ekle. → `tools/engine-tests.ts` icinde 11 check (normalizer + render-tree + style allowlist).
 - [x] `npm run build:verify` ile runtime paketinde editor UI import'u olmadigini dogrula. → U3 sonrasi yesil: 330 test + `verify:dist --strict` "runtime-only" (UI artik runtime bundle'da, editor degil).
@@ -357,12 +357,32 @@ Dogrulama: `tsc`, `npm run build:verify` (330 test + `verify:dist --strict` runt
 Acik nokta: HUD degerleri statik (ProgressBar `value: 72`). Canli `{ "bind": ... }`
 cozumlemesi U5 (MVVM-lite store) isi; schema bind'leri simdiden tolere ediyor.
 
-### Sonraki adim (U4/U5)
+### U4 — UI Editor v1 (TAMAMLANDI)
 
-- U4: UI Editor v1 (palette/hierarchy/designer/details) + Content Browser `.ui.json`
-  cift-tiklama ile acma + `/__save-ui` endpoint (`normalizeUiWidgetDef` save validator'a baglanir).
+Eklenenler:
+
+- `src/editor/UiWidgetEditor.ts`: `*.ui.json` icin modal authoring shell (dev-only,
+  dinamik import). Dort bolge: **Palette** (secili container'a widget ekle), **Hierarchy**
+  (agac; sec/yeniden-sirala/sil), **Designer** (canli WYSIWYG — *runtime* renderer
+  `renderUiWidget` ile, oyunda gorunenle birebir; tasarim cozunurlugu stage'e olceklenir),
+  **Details** (secili node icin typed alanlar + Button `onClick` editoru none/back/message).
+- `engine/ui/uiWidget.ts`: `createUiNode` (kind basina default prop), `findUiNode`,
+  `findUiNodeParent` (saf, test edilebilir tree helper'lari).
+- Save: `/__save-ui` dev endpoint + `validateSaveUiPayload` (path `.ui.json` + sunucu
+  tarafi `normalizeUiWidgetDef`) — editor asla bozuk asset yazamaz. `src/editor/uiWidgetStore.ts`
+  client load/save (`materialStore` deseni). `vite.config.ts` PRIVILEGED_URLS'e eklendi.
+- `EditorUi.ts`: Content Browser `.ui.json` cift-tiklama -> editor; `assetEditorOpener` +
+  "UI Widget" rozeti. `editorUi.css` `.uie-*` stilleri (editor chunk'inda, oyun build'inde yok).
+- 3 yeni engine testi (createUiNode / find* / validateSaveUiPayload). `build:verify` 333 test
+  ve `verify:dist --strict` runtime-only (editor dist'e sizmaz).
+
+Bilinen v1 sinirlari (sonraki polish): drag-and-drop yerlestirme yok (palette ekle +
+hierarchy reorder var); binding alanlari editlenmez (U5); animasyon/tema timeline yok.
+
+### Sonraki adim (U5)
+
 - U5: MVVM-lite store (`setField`/`getField`/`subscribe`, batched) + `{ "bind": "path" }`
-  cozumleme; HUD ProgressBar/Text canli baglanir.
+  cozumleme; HUD ProgressBar/Text canli baglanir; Details'e binding alani editoru.
 
 ## Onerilen uygulama sirasi
 
