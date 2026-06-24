@@ -7151,6 +7151,66 @@ check("asset skeleton physics bodies round-trip through the save validator; bad 
   );
 });
 
+check("asset skeleton physics constraints normalize: drop invalid/self/dupes, clamp angles", () => {
+  const skeleton = normalizeAssetSkeleton({
+    schema: 1,
+    physicsConstraints: [
+      { name: "hip_l", bodyA: "pelvis", bodyB: "thigh_l", swingDeg: 60, twistDeg: 20 },
+      { name: "overswing", bodyA: "pelvis", bodyB: "thigh_r", swingDeg: 999, twistDeg: -5 },
+      { name: "self", bodyA: "pelvis", bodyB: "pelvis", swingDeg: 30, twistDeg: 30 },
+      { name: "", bodyA: "a", bodyB: "b" },
+      { name: "noB", bodyA: "a", bodyB: "" },
+      { name: "hip_l", bodyA: "x", bodyB: "y" },
+    ],
+  });
+  assert.deepEqual(skeleton.physicsConstraints, [
+    { name: "hip_l", bodyA: "pelvis", bodyB: "thigh_l", swingDeg: 60, twistDeg: 20 },
+    // Out-of-range angles clamp to [0,180]; missing twist would default.
+    { name: "overswing", bodyA: "pelvis", bodyB: "thigh_r", swingDeg: 180, twistDeg: 0 },
+  ]);
+});
+
+check("asset skeleton physics constraints round-trip through the save validator; bad fields rejected", () => {
+  const validated = validateSaveSkeletonPayload({
+    path: "assets/characters/Hero.skeleton.json",
+    skeleton: {
+      physicsConstraints: [
+        { name: "hip_l", bodyA: "pelvis", bodyB: "thigh_l", swingDeg: 60, twistDeg: 20 },
+        { name: "spine", bodyA: "pelvis", bodyB: "chest" },
+      ],
+    },
+  });
+  assert.deepEqual(validated.skeleton.physicsConstraints, [
+    { name: "hip_l", bodyA: "pelvis", bodyB: "thigh_l", swingDeg: 60, twistDeg: 20 },
+    // Missing angles default (swing 45 / twist 30).
+    { name: "spine", bodyA: "pelvis", bodyB: "chest", swingDeg: 45, twistDeg: 30 },
+  ]);
+  // Self-link, out-of-range angle, and duplicate name are rejected.
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: { physicsConstraints: [{ name: "c", bodyA: "a", bodyB: "a" }] },
+    }),
+  );
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: { physicsConstraints: [{ name: "c", bodyA: "a", bodyB: "b", swingDeg: 200 }] },
+    }),
+  );
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: {
+        physicsConstraints: [
+          { name: "c", bodyA: "a", bodyB: "b" },
+          { name: "c", bodyA: "a", bodyB: "d" },
+        ],
+      },
+    }),
+  );
+});
+
 check("asset skeleton sidecar normalizes animation metadata", () => {
   assert.equal(
     skeletonSidecarPath("assets/characters/Hero.glb"),

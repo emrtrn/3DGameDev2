@@ -422,7 +422,16 @@ Blend Space sample'larında çözdüğüm gibi `blendSampleClipOptions` desenini
       düşürür, shape default capsule, size pozitif-kırpar; [`saveValidator.ts`](../../tools/saveValidator.ts)
       `validatePhysicsBodies`: boş ad/bone, non-pozitif size, yinelenen ad reddi; store re-export).
       engine-tests: normalize + validate round-trip.
-- [ ] **Constraints** (iki body arası eklem + swing/twist limitleri) authoring — **Aşama 2.**
+- [x] **Constraints** (iki body arası eklem + swing/twist limitleri) authoring — **Aşama 2 (2026-06-24).**
+      Şema `AssetSkeletonPhysicsConstraintDef {name, bodyA, bodyB, swingDeg, twistDeg}` →
+      `*.skeleton.json` `physicsConstraints[]` ([`assetSkeletonLoader.ts`](../../src/scene/assetSkeletonLoader.ts)
+      normalize: boş/yinelenen/self-link düşürür, açıları [0,180]'e kırpar; [`saveValidator.ts`](../../tools/saveValidator.ts)
+      `validatePhysicsConstraints`: bodyA≠bodyB, açı aralığı, yinelenen ad reddi; store re-export).
+      Editör Physics modunda **Constraints** bölümü ([`SkeletalMeshEditor.ts`](../../src/editor/SkeletalMeshEditor.ts)):
+      Add Constraint (≥2 body gerekir), liste (ad/bodyA→bodyB, eksik body "(missing)"), seç → düzenle
+      (ad, Body A/B dropdown, Swing°, Twist°), sil. Viewport'ta her constraint iki body arasında **pembe
+      çizgi** (render loop'ta dünya pozisyonlarından canlı güncellenir; seçili sarı). Body referansları
+      esnek (yeniden adlandırılan body veri kaybetmez). engine-tests: normalize + validate round-trip.
 - [ ] Rapier ragdoll önizleme/simülasyon; collision profili — **Aşama 3 (asıl oyun değeri;
       physics subsystem'e joint/articulation eklemek + karakteri kinematikten dinamiğe geçirmek
       gerekir).** Rapier rigid body + collider var; **joint henüz yok** (`physicsSubsystem.ts`).

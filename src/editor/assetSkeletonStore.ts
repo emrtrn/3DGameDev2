@@ -27,6 +27,7 @@ export type {
   AssetSkeletonMontageDef,
   AssetSkeletonNotifyDef,
   AssetSkeletonPhysicsBodyDef,
+  AssetSkeletonPhysicsConstraintDef,
   AssetSkeletonPreviewPrefs,
   AssetSkeletonSocketDef,
   BlendSampleWeight,

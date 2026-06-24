@@ -45,6 +45,25 @@ export interface AssetSkeletonPhysicsBodyDef {
   size: Vec3;
 }
 
+/**
+ * A joint linking two physics bodies — the data form of an Unreal Physics
+ * Constraint, simplified to a cone-twist for ragdolls. The runtime anchors the
+ * joint at `bodyB`'s bone and limits angular motion to a `swingDeg` cone plus
+ * `twistDeg` of roll. Authored in the editor's Physics mode.
+ */
+export interface AssetSkeletonPhysicsConstraintDef {
+  /** Unique name within the asset. */
+  name: string;
+  /** Parent body name (the more-rooted limb). */
+  bodyA: string;
+  /** Child body name (swings/twists relative to A). */
+  bodyB: string;
+  /** Cone swing half-angle limit in degrees, clamped to [0, 180]. */
+  swingDeg: number;
+  /** Twist (roll) limit in degrees, clamped to [0, 180]. */
+  twistDeg: number;
+}
+
 export const BLEND_SPACE_TYPES = ["1d", "2d"] as const;
 export type BlendSpaceType = (typeof BLEND_SPACE_TYPES)[number];
 
@@ -142,6 +161,8 @@ export interface AssetSkeletonDef {
   montages: AssetSkeletonMontageDef[];
   /** Bone-attached collision bodies (PhAT-lite); consumed by a future ragdoll. */
   physicsBodies: AssetSkeletonPhysicsBodyDef[];
+  /** Joints linking physics bodies (ragdoll articulation). */
+  physicsConstraints: AssetSkeletonPhysicsConstraintDef[];
   /**
    * Bone/node name that roots the upper-body mask for `upperBody` montages.
    * Everything in its subtree blends to the montage; the rest keeps locomotion.
@@ -170,6 +191,7 @@ export function defaultAssetSkeleton(): AssetSkeletonDef {
     notifies: [],
     montages: [],
     physicsBodies: [],
+    physicsConstraints: [],
     preview: { selectedClip: null },
   };
 }
@@ -196,6 +218,7 @@ export function normalizeAssetSkeleton(value: unknown): AssetSkeletonDef {
     notifies: normalizeNotifies(input.notifies),
     montages: normalizeMontages(input.montages),
     physicsBodies: normalizePhysicsBodies(input.physicsBodies),
+    physicsConstraints: normalizePhysicsConstraints(input.physicsConstraints),
     preview: normalizePreview(input.preview),
   };
   if (typeof input.upperBodyBone === "string" && input.upperBodyBone.length > 0) {
@@ -251,6 +274,35 @@ function normalizePhysicsBodies(value: unknown): AssetSkeletonPhysicsBodyDef[] {
     });
   }
   return result;
+}
+
+function normalizePhysicsConstraints(value: unknown): AssetSkeletonPhysicsConstraintDef[] {
+  if (!Array.isArray(value)) return [];
+  const result: AssetSkeletonPhysicsConstraintDef[] = [];
+  const names = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const input = item as Record<string, unknown>;
+    if (typeof input.name !== "string" || input.name.length === 0) continue;
+    if (typeof input.bodyA !== "string" || input.bodyA.length === 0) continue;
+    if (typeof input.bodyB !== "string" || input.bodyB.length === 0) continue;
+    if (input.bodyA === input.bodyB) continue;
+    if (names.has(input.name)) continue;
+    names.add(input.name);
+    result.push({
+      name: input.name,
+      bodyA: input.bodyA,
+      bodyB: input.bodyB,
+      swingDeg: normalizeAngleDeg(input.swingDeg, 45),
+      twistDeg: normalizeAngleDeg(input.twistDeg, 30),
+    });
+  }
+  return result;
+}
+
+function normalizeAngleDeg(value: unknown, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Number(Math.min(Math.max(Number(value), 0), 180).toFixed(2));
 }
 
 function normalizePhysicsSize(value: unknown): Vec3 {

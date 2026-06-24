@@ -1763,6 +1763,55 @@ function validatePhysicsBodies(value: unknown): Record<string, unknown>[] {
   });
 }
 
+function validateAngleDeg(value: unknown, label: string, fallback: number): number {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 180) {
+    throw new Error(`${label} must be a number in [0, 180]`);
+  }
+  return Number(value.toFixed(2));
+}
+
+function validatePhysicsConstraint(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.name !== "string" || input.name.length === 0) {
+    throw new Error(`${label}.name must be a non-empty string`);
+  }
+  if (typeof input.bodyA !== "string" || input.bodyA.length === 0) {
+    throw new Error(`${label}.bodyA must be a non-empty string`);
+  }
+  if (typeof input.bodyB !== "string" || input.bodyB.length === 0) {
+    throw new Error(`${label}.bodyB must be a non-empty string`);
+  }
+  if (input.bodyA === input.bodyB) {
+    throw new Error(`${label}.bodyA and bodyB must differ`);
+  }
+  return {
+    name: input.name,
+    bodyA: input.bodyA,
+    bodyB: input.bodyB,
+    swingDeg: validateAngleDeg(input.swingDeg, `${label}.swingDeg`, 45),
+    twistDeg: validateAngleDeg(input.twistDeg, `${label}.twistDeg`, 30),
+  };
+}
+
+function validatePhysicsConstraints(value: unknown): Record<string, unknown>[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error("skeleton.physicsConstraints must be an array");
+  const names = new Set<string>();
+  return value.map((constraint, index) => {
+    const validated = validatePhysicsConstraint(constraint, `skeleton.physicsConstraints[${index}]`);
+    const name = validated.name as string;
+    if (names.has(name)) {
+      throw new Error(`skeleton.physicsConstraints[${index}].name "${name}" is duplicated`);
+    }
+    names.add(name);
+    return validated;
+  });
+}
+
 export function validateAssetSkeletonDef(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("skeleton def must be an object");
@@ -1794,6 +1843,7 @@ export function validateAssetSkeletonDef(value: unknown): Record<string, unknown
     notifies: validateNotifies(input.notifies),
     montages: validateMontages(input.montages),
     physicsBodies: validatePhysicsBodies(input.physicsBodies),
+    physicsConstraints: validatePhysicsConstraints(input.physicsConstraints),
     preview: {
       selectedClip: typeof selectedClip === "string" && selectedClip.length > 0 ? selectedClip : null,
     },

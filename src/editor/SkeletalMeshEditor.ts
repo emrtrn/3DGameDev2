@@ -8,9 +8,12 @@ import {
   Bone,
   Box3,
   BoxGeometry,
+  BufferGeometry,
   CapsuleGeometry,
   Clock,
   Group,
+  Line,
+  LineBasicMaterial,
   LoopOnce,
   LoopRepeat,
   MathUtils,
@@ -27,7 +30,6 @@ import {
   Vector3,
   WebGLRenderer,
   type AnimationMixer,
-  type BufferGeometry,
   type Material,
 } from "three";
 import { MeshoptDecoder } from "meshoptimizer";
@@ -54,6 +56,7 @@ import {
   type AssetSkeletonMontageDef,
   type AssetSkeletonNotifyDef,
   type AssetSkeletonPhysicsBodyDef,
+  type AssetSkeletonPhysicsConstraintDef,
   type AssetSkeletonSocketDef,
   type BlendSpaceAxisDef,
   type BlendSpaceSampleDef,
@@ -133,6 +136,11 @@ interface PhysicsOverlay {
   body: AssetSkeletonPhysicsBodyDef;
 }
 
+interface ConstraintOverlay {
+  line: Line;
+  constraint: AssetSkeletonPhysicsConstraintDef;
+}
+
 export class SkeletalMeshEditor {
   private static active: SkeletalMeshEditor | null = null;
 
@@ -178,6 +186,9 @@ export class SkeletalMeshEditor {
   private selectedSocketName: string | null = null;
   private readonly physicsOverlays: PhysicsOverlay[] = [];
   private selectedBodyName: string | null = null;
+  private readonly constraintOverlays: ConstraintOverlay[] = [];
+  private readonly physicsConstraintGroup = new Group();
+  private selectedConstraintName: string | null = null;
   private selectedBone: Bone | null = null;
   private readonly boneMarker = new Mesh(
     new SphereGeometry(0.045, 16, 10),
@@ -278,6 +289,7 @@ export class SkeletalMeshEditor {
     createAssetViewportRig(this.scene);
     this.scene.add(this.modelGroup);
     this.scene.add(this.helperGroup);
+    this.scene.add(this.physicsConstraintGroup);
     this.helperGroup.add(this.boneMarker);
 
     const controls = new TransformControls(this.camera, this.renderer.domElement);
@@ -485,6 +497,7 @@ export class SkeletalMeshEditor {
       }
       this.updateBoneMarker();
       this.updateNormalHelpers();
+      if (this.mode === "physics") this.updatePhysicsConstraintLines();
       this.renderer.render(this.scene, this.camera);
       this.rafId = requestAnimationFrame(tick);
     };
@@ -565,11 +578,7 @@ export class SkeletalMeshEditor {
       <div class="sm-tool-group sm-tool-modes" aria-label="Gizmo transform mode">
         <button type="button" class="sm-tool-btn sm-mode-btn ${this.socketGizmoMode === "translate" ? "is-active" : ""}" data-skel-socket-mode="translate" title="Move">✥</button>
         <button type="button" class="sm-tool-btn sm-mode-btn ${this.socketGizmoMode === "rotate" ? "is-active" : ""}" data-skel-socket-mode="rotate" title="Rotate">⟳</button>
-        ${
-          this.mode === "physics"
-            ? ""
-            : `<button type="button" class="sm-tool-btn sm-mode-btn ${this.socketGizmoMode === "scale" ? "is-active" : ""}" data-skel-socket-mode="scale" title="Scale">⤢</button>`
-        }
+        <button type="button" class="sm-tool-btn sm-mode-btn ${this.socketGizmoMode === "scale" ? "is-active" : ""}" data-skel-socket-mode="scale" title="${this.mode === "physics" ? "Scale (resizes body)" : "Scale"}">⤢</button>
       </div>
     `;
     this.toolbarHost.querySelectorAll<HTMLButtonElement>("[data-skel-mode]").forEach((button) => {
@@ -620,7 +629,6 @@ export class SkeletalMeshEditor {
       this.attachSelectedSocketGizmo();
     }
     if (next === "physics") {
-      if (this.socketGizmoMode === "scale") this.socketGizmoMode = "translate";
       this.transformControls?.detach();
       this.rebuildPhysicsOverlays();
     }
@@ -1474,9 +1482,182 @@ export class SkeletalMeshEditor {
           }
         </div>
         ${selected ? this.renderBodyEditor(selected) : ""}
-        <div class="sm-hint">PhAT-lite: capsule/sphere/box bodies attached to bones for a future ragdoll. Move/Rotate with the gizmo; set size below.</div>
+        <div class="sm-hint">PhAT-lite: capsule/sphere/box bodies attached to bones for a future ragdoll. Move/Rotate/Scale with the gizmo; or set size below.</div>
+      </div>
+      ${this.renderConstraintSection()}
+    `;
+  }
+
+  private renderConstraintSection(): string {
+    const bodies = this.skeleton.physicsBodies;
+    const selected = this.getSelectedConstraint();
+    return `
+      <div class="sm-section">
+        <div class="sm-section-title">Constraints <span class="sm-count">${this.skeleton.physicsConstraints.length}</span></div>
+        <div class="sm-prim-list">
+          ${
+            bodies.length >= 2
+              ? `<button type="button" class="sm-menu-item" data-skel-constraint-add>Add Constraint</button>`
+              : `<div class="sm-empty">Add at least two bodies to link them.</div>`
+          }
+          ${
+            this.skeleton.physicsConstraints.length
+              ? this.skeleton.physicsConstraints.map((constraint) => this.renderConstraintRow(constraint)).join("")
+              : `<div class="sm-empty">No constraints yet.</div>`
+          }
+        </div>
+        ${selected ? this.renderConstraintEditor(selected, bodies) : ""}
+        <div class="sm-hint">A cone-twist joint between two bodies (swing cone + twist limit) — the ragdoll articulation.</div>
       </div>
     `;
+  }
+
+  private renderConstraintRow(constraint: AssetSkeletonPhysicsConstraintDef): string {
+    const isSelected = constraint.name === this.selectedConstraintName;
+    const aKnown = this.skeleton.physicsBodies.some((body) => body.name === constraint.bodyA);
+    const bKnown = this.skeleton.physicsBodies.some((body) => body.name === constraint.bodyB);
+    return `
+      <div class="sm-prim-row ${isSelected ? "is-selected" : ""}">
+        <button type="button" class="sm-socket-main" data-skel-constraint-select="${escapeHtml(constraint.name)}">
+          <strong>${escapeHtml(constraint.name)}</strong>
+          <small>${escapeHtml(constraint.bodyA)}${aKnown ? "" : " (missing)"} → ${escapeHtml(constraint.bodyB)}${bKnown ? "" : " (missing)"}</small>
+        </button>
+        <button type="button" class="sm-prim-del" data-skel-constraint-delete="${escapeHtml(constraint.name)}" title="Delete">✕</button>
+      </div>
+    `;
+  }
+
+  private renderConstraintEditor(
+    constraint: AssetSkeletonPhysicsConstraintDef,
+    bodies: readonly AssetSkeletonPhysicsBodyDef[],
+  ): string {
+    const bodyOptions = (current: string): string =>
+      bodies.length
+        ? bodies
+            .map(
+              (body) =>
+                `<option value="${escapeHtml(body.name)}" ${body.name === current ? "selected" : ""}>${escapeHtml(body.name)}</option>`,
+            )
+            .join("")
+        : `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)}</option>`;
+    return `
+      <div class="sm-section sm-blend-editor">
+        <div class="sm-section-title">Edit “${escapeHtml(constraint.name)}”</div>
+        <label class="sm-row"><span>Name</span><input type="text" data-skel-constraint-name value="${escapeHtml(constraint.name)}" /></label>
+        <label class="sm-row"><span>Body A</span><select data-skel-constraint-body="a">${bodyOptions(constraint.bodyA)}</select></label>
+        <label class="sm-row"><span>Body B</span><select data-skel-constraint-body="b">${bodyOptions(constraint.bodyB)}</select></label>
+        <label class="sm-row"><span>Swing (°)</span><input type="text" data-skel-constraint-angle="swing" value="${constraint.swingDeg}" /></label>
+        <label class="sm-row"><span>Twist (°)</span><input type="text" data-skel-constraint-angle="twist" value="${constraint.twistDeg}" /></label>
+      </div>
+    `;
+  }
+
+  private getSelectedConstraint(): AssetSkeletonPhysicsConstraintDef | null {
+    if (!this.selectedConstraintName) return null;
+    return (
+      this.skeleton.physicsConstraints.find((constraint) => constraint.name === this.selectedConstraintName) ??
+      null
+    );
+  }
+
+  private addConstraint(): void {
+    const bodies = this.skeleton.physicsBodies;
+    if (bodies.length < 2) return;
+    const taken = new Set(this.skeleton.physicsConstraints.map((constraint) => constraint.name));
+    let name = "constraint";
+    for (let index = 2; taken.has(name); index += 1) name = `constraint_${index}`;
+    const constraint: AssetSkeletonPhysicsConstraintDef = {
+      name,
+      bodyA: bodies[0]!.name,
+      bodyB: bodies[1]!.name,
+      swingDeg: 45,
+      twistDeg: 30,
+    };
+    this.skeleton = {
+      ...this.skeleton,
+      physicsConstraints: [...this.skeleton.physicsConstraints, constraint],
+    };
+    this.selectedConstraintName = name;
+    this.rebuildConstraintOverlays();
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus(`Added constraint ${name}.`);
+  }
+
+  private selectConstraint(name: string | null): void {
+    this.selectedConstraintName = name;
+    this.updateConstraintSelectionVisuals();
+    this.renderDetails();
+  }
+
+  private deleteConstraint(name: string): void {
+    if (!name) return;
+    this.skeleton = {
+      ...this.skeleton,
+      physicsConstraints: this.skeleton.physicsConstraints.filter((constraint) => constraint.name !== name),
+    };
+    if (this.selectedConstraintName === name) this.selectedConstraintName = null;
+    this.rebuildConstraintOverlays();
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus(`Deleted constraint ${name}.`);
+  }
+
+  private replaceConstraint(prevName: string, next: AssetSkeletonPhysicsConstraintDef): void {
+    this.skeleton = {
+      ...this.skeleton,
+      physicsConstraints: this.skeleton.physicsConstraints.map((constraint) =>
+        constraint.name === prevName ? next : constraint,
+      ),
+    };
+    if (this.selectedConstraintName === prevName) this.selectedConstraintName = next.name;
+    this.markDirty();
+  }
+
+  private setConstraintName(rawName: string): void {
+    const constraint = this.getSelectedConstraint();
+    if (!constraint) return;
+    const name = rawName.trim();
+    if (
+      !name ||
+      (name !== constraint.name &&
+        this.skeleton.physicsConstraints.some((other) => other.name === name))
+    ) {
+      this.renderDetails();
+      return;
+    }
+    this.replaceConstraint(constraint.name, { ...constraint, name });
+    this.rebuildConstraintOverlays();
+    this.renderDetails();
+  }
+
+  private setConstraintBody(which: "a" | "b", bodyName: string): void {
+    const constraint = this.getSelectedConstraint();
+    if (!constraint || !bodyName) return;
+    const next =
+      which === "a" ? { ...constraint, bodyA: bodyName } : { ...constraint, bodyB: bodyName };
+    if (next.bodyA === next.bodyB) {
+      this.renderDetails();
+      return;
+    }
+    this.replaceConstraint(constraint.name, next);
+    this.rebuildConstraintOverlays();
+    this.renderDetails();
+  }
+
+  private setConstraintAngle(which: "swing" | "twist", raw: string): void {
+    const constraint = this.getSelectedConstraint();
+    if (!constraint) return;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+      this.renderDetails();
+      return;
+    }
+    const value = Number(Math.min(Math.max(parsed, 0), 180).toFixed(2));
+    const next =
+      which === "swing" ? { ...constraint, swingDeg: value } : { ...constraint, twistDeg: value };
+    this.replaceConstraint(constraint.name, next);
+    this.renderDetails();
   }
 
   private renderBodyRow(body: AssetSkeletonPhysicsBodyDef): string {
@@ -1548,6 +1729,7 @@ export class SkeletalMeshEditor {
       this.physicsOverlays.push({ root, mesh, body });
     }
     this.attachSelectedBodyGizmo();
+    this.rebuildConstraintOverlays();
   }
 
   private disposePhysicsOverlays(): void {
@@ -1561,6 +1743,59 @@ export class SkeletalMeshEditor {
       }
     }
     this.physicsOverlays.length = 0;
+    this.disposeConstraintOverlays();
+  }
+
+  private rebuildConstraintOverlays(): void {
+    this.disposeConstraintOverlays();
+    for (const constraint of this.skeleton.physicsConstraints) {
+      const hasBodies =
+        this.physicsOverlays.some((overlay) => overlay.body.name === constraint.bodyA) &&
+        this.physicsOverlays.some((overlay) => overlay.body.name === constraint.bodyB);
+      if (!hasBodies) continue;
+      const line = new Line(
+        new BufferGeometry().setFromPoints([new Vector3(), new Vector3()]),
+        new LineBasicMaterial({
+          color: constraint.name === this.selectedConstraintName ? 0xffb648 : 0xff7ad4,
+          depthTest: false,
+        }),
+      );
+      line.renderOrder = 6;
+      this.physicsConstraintGroup.add(line);
+      this.constraintOverlays.push({ line, constraint });
+    }
+    this.updatePhysicsConstraintLines();
+  }
+
+  private disposeConstraintOverlays(): void {
+    for (const overlay of this.constraintOverlays) {
+      overlay.line.removeFromParent();
+      overlay.line.geometry.dispose();
+      (overlay.line.material as LineBasicMaterial).dispose();
+    }
+    this.constraintOverlays.length = 0;
+  }
+
+  /** Re-points each constraint line at its two bodies' current world positions. */
+  private updatePhysicsConstraintLines(): void {
+    if (this.constraintOverlays.length === 0) return;
+    const a = new Vector3();
+    const b = new Vector3();
+    for (const overlay of this.constraintOverlays) {
+      const oa = this.physicsOverlays.find((item) => item.body.name === overlay.constraint.bodyA);
+      const ob = this.physicsOverlays.find((item) => item.body.name === overlay.constraint.bodyB);
+      if (!oa || !ob) continue;
+      oa.root.getWorldPosition(a);
+      ob.root.getWorldPosition(b);
+      overlay.line.geometry.setFromPoints([a.clone(), b.clone()]);
+    }
+  }
+
+  private updateConstraintSelectionVisuals(): void {
+    for (const overlay of this.constraintOverlays) {
+      const selected = overlay.constraint.name === this.selectedConstraintName;
+      (overlay.line.material as LineBasicMaterial).color.setHex(selected ? 0xffb648 : 0xff7ad4);
+    }
   }
 
   private bodyGeometry(shape: PhysicsBodyShape, size: Vec3): BufferGeometry {
@@ -1581,8 +1816,12 @@ export class SkeletalMeshEditor {
     );
   }
 
-  private bodyFromObject(root: Object3D, body: AssetSkeletonPhysicsBodyDef): AssetSkeletonPhysicsBodyDef {
-    return {
+  private bodyFromObject(
+    root: Object3D,
+    body: AssetSkeletonPhysicsBodyDef,
+    foldScale: boolean,
+  ): AssetSkeletonPhysicsBodyDef {
+    const next: AssetSkeletonPhysicsBodyDef = {
       ...body,
       position: [round(root.position.x), round(root.position.y), round(root.position.z)] as Vec3,
       rotation: [
@@ -1591,6 +1830,16 @@ export class SkeletalMeshEditor {
         round(MathUtils.radToDeg(root.rotation.z)),
       ] as Vec3,
     };
+    // Bodies carry no scale field — the scale gizmo resizes `size` instead. Fold
+    // the root's gizmo scale into size (only on drag end, see the commit).
+    if (foldScale) {
+      next.size = [
+        Math.max(Number((body.size[0] * root.scale.x).toFixed(4)), 0.01),
+        Math.max(Number((body.size[1] * root.scale.y).toFixed(4)), 0.01),
+        Math.max(Number((body.size[2] * root.scale.z).toFixed(4)), 0.01),
+      ] as Vec3;
+    }
+    return next;
   }
 
   private attachSelectedBodyGizmo(): void {
@@ -1600,7 +1849,7 @@ export class SkeletalMeshEditor {
       return;
     }
     this.transformControls?.attach(overlay.root);
-    this.transformControls?.setMode(this.socketGizmoMode === "scale" ? "translate" : this.socketGizmoMode);
+    this.transformControls?.setMode(this.socketGizmoMode);
     this.updateBodySelectionVisuals();
   }
 
@@ -1616,13 +1865,20 @@ export class SkeletalMeshEditor {
   private commitSelectedBodyFromGizmo(options: { quiet?: boolean } = {}): void {
     const overlay = this.physicsOverlays.find((item) => item.body.name === this.selectedBodyName);
     if (!overlay) return;
+    // Scale only commits on drag end: during the live drag the root stays scaled
+    // for visual feedback, then folds into `size` once and the mesh is rebuilt.
+    const foldScale = !options.quiet;
     const physicsBodies = this.skeleton.physicsBodies.map((body) =>
-      body.name === overlay.body.name ? this.bodyFromObject(overlay.root, body) : body,
+      body.name === overlay.body.name ? this.bodyFromObject(overlay.root, body, foldScale) : body,
     );
     this.skeleton = { ...this.skeleton, physicsBodies };
     overlay.body = physicsBodies.find((body) => body.name === overlay.body.name) ?? overlay.body;
     this.markDirty();
-    if (!options.quiet) this.renderDetails();
+    if (!options.quiet) {
+      overlay.root.scale.set(1, 1, 1);
+      this.rebuildPhysicsOverlays();
+      this.renderDetails();
+    }
   }
 
   private addBody(): void {
@@ -1743,6 +1999,28 @@ export class SkeletalMeshEditor {
     this.detailsHost.querySelectorAll<HTMLInputElement>("[data-skel-body-size]").forEach((input) => {
       input.addEventListener("change", () =>
         this.setBodySize(Number(input.dataset.skelBodySize), input.value),
+      );
+    });
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-constraint-add]")?.addEventListener("click", () => {
+      this.addConstraint();
+    });
+    this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-constraint-select]").forEach((button) => {
+      button.addEventListener("click", () => this.selectConstraint(button.dataset.skelConstraintSelect ?? null));
+    });
+    this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-constraint-delete]").forEach((button) => {
+      button.addEventListener("click", () => this.deleteConstraint(button.dataset.skelConstraintDelete ?? ""));
+    });
+    this.detailsHost.querySelector<HTMLInputElement>("[data-skel-constraint-name]")?.addEventListener("change", (event) => {
+      this.setConstraintName((event.target as HTMLInputElement).value);
+    });
+    this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-skel-constraint-body]").forEach((select) => {
+      select.addEventListener("change", () =>
+        this.setConstraintBody(select.dataset.skelConstraintBody as "a" | "b", select.value),
+      );
+    });
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-skel-constraint-angle]").forEach((input) => {
+      input.addEventListener("change", () =>
+        this.setConstraintAngle(input.dataset.skelConstraintAngle as "swing" | "twist", input.value),
       );
     });
   }
