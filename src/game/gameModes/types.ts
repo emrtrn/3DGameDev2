@@ -17,6 +17,7 @@ import type { Aabb3 } from "@/game/collision";
 import type { LocomotionInput } from "@/game/locomotionAnimation";
 import type { AssetSkeletonDef } from "@/scene/assetSkeletonLoader";
 import type { RagdollGroupDesc, RagdollPose } from "@engine/physics/ragdoll";
+import type { ScriptMessageEnvelope } from "@engine/behavior/scriptMessages";
 
 export type Vec3 = [number, number, number];
 export type InputMode = "game" | "ui" | "game-and-ui";
@@ -99,6 +100,13 @@ export interface PlayerState {
   pawnEntityId: string | null;
   /** True once the controller has possessed its pawn. */
   possessed: boolean;
+  /**
+   * True while the pawn's transform is owned by something other than the player
+   * controller (a physics ragdoll, then the get-up blend). The runtime shell's
+   * movement gates stop driving the pawn's capsule while this is set so input
+   * can't shove a ragdolled/recovering character around.
+   */
+  pawnControlSuspended: boolean;
 }
 
 /**
@@ -161,6 +169,18 @@ export interface GameModeContext {
   sampleRagdoll?(id: number): RagdollPose[];
   /** Removes a spawned ragdoll (bodies, colliders, joints). */
   despawnRagdoll?(id: number): void;
+  /**
+   * Subscribes the session to a runtime script message (e.g. `death`/`ragdoll`),
+   * optionally scoped to one target entity, returning an unsubscribe handle. This
+   * is the inbound counterpart to {@link emitAnimNotify}: it lets game logic or
+   * an actor script drive a session reaction (ragdoll on death) by event rather
+   * than a hardcoded debug key. Optional so headless/test contexts may omit it.
+   */
+  onScriptMessage?(
+    type: string,
+    handler: (envelope: ScriptMessageEnvelope) => void,
+    options?: { readonly target?: string },
+  ): () => void;
   /**
    * Marks the runtime camera as controlled by this session so the responsive
    * resize handler stops re-framing it.

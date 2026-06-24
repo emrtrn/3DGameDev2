@@ -28,9 +28,10 @@ export const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   ShiftRight: "sprint",
   Mouse0: "fire",
   Mouse2: "aim",
-  // Debug/demo trigger: drop the possessed character into a physics ragdoll
-  // (only fires when the character authored physics bodies). Game logic can drive
-  // the same activation from a death event later.
+  // Debug/demo toggle: drop the possessed character into a physics ragdoll, then
+  // press again to get back up (only fires when the character authored physics
+  // bodies). Game logic drives the same activation/recovery by targeting the pawn
+  // with `death`/`ragdoll`/`getup` script messages — the key is just a manual aid.
   KeyR: "ragdoll",
 };
 

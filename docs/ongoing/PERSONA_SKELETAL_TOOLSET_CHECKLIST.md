@@ -434,8 +434,9 @@ Blend Space sample'larında çözdüğüm gibi `blendSampleClipOptions` desenini
       esnek (yeniden adlandırılan body veri kaybetmez). engine-tests: normalize + validate round-trip.
 - [x] **Aşama 3 — Runtime ragdoll (3b + 3a + 3c + 3d TAMAM, 2026-06-24).** Sıra: 3b→3a→3c→3d.
       Runtime el ile doğrulandı (Play'de `R`); editör Simulate önizlemesi + **cone/twist açısal limiti**
-      (raw `jointSetLimits`, rest-safe) eklendi. Aşama-dışı kalanlar (opsiyonel): gerçek tetik (ölüm/hasar
-      eventi), demo `character-a` body author'lama, get-up geri-blend, gerçek cone limit (daha yeni Rapier).
+      (raw `jointSetLimits`, rest-safe) eklendi. Aşama-dışı kalanlardan **event-driven tetik** ve **get-up
+      geri-blend** sonradan tamamlandı (2026-06-24, aşağıdaki "Aşama 3 sonrası kalan" listesine bkz.); demo
+      `character-a` body author'laması kullanıcıda yapıldı. Açık opsiyonel: gerçek cone limit (daha yeni Rapier).
       Detay alt maddelerde + SONRAKİ bloğunda.
   - [x] **3a — Engine: Rapier joint + ragdoll spawn (2026-06-24).** Yeni generic modül
         [`engine/physics/ragdoll.ts`](../../engine/physics/ragdoll.ts): tipler (`RagdollGroupDesc`/
@@ -504,10 +505,32 @@ Blend Space sample'larında çözdüğüm gibi `blendSampleClipOptions` desenini
 
 **Aşama 3 sonrası kalan (opsiyonel/yeni yön — Aşama 3 kapsamı dışı):**
 
-- **Gerçek ragdoll tetiği:** debug `R` yerine ölüm/hasar eventi (oyun mantığı `activateRagdoll`'u çağırır).
-- **Demo author'lama:** `character-a`'ya editörde örnek physicsBodies/Constraints ekle (henüz yok) — hem
-  Simulate önizlemesi hem runtime `R` için gerekli; demo asset'i ragdoll'a hazır hale getirir.
-- **Geri-blend (get-up):** ragdoll'dan animasyona yumuşak dönüş (şu an ragdoll terminal).
+- [x] **Gerçek ragdoll tetiği — event-driven (2026-06-24).** Debug `R` artık sadece manuel **toggle**
+  (bas → düş, tekrar bas → kalk); asıl tetik **script mesaj eventi**. Yeni inbound kanal: engine
+  [`BehaviorSubsystem.subscribeScriptMessage`](../../engine/behavior/behaviorSubsystem.ts) (target-scoped,
+  unsubscribe döner) + `GameModeContext.onScriptMessage` ([`types.ts`](../../src/game/gameModes/types.ts),
+  `emitAnimNotify`'ın simetrik girişi; [`RuntimeSceneApp`](../../src/scene/RuntimeSceneApp.ts) bus'a delege).
+  [`tpsCharacterGameMode`](../../src/game/gameModes/tpsCharacterGameMode.ts) `possess`'te player entity'sine
+  **`death`/`ragdoll`** (→ düş) ve **`getup`** (→ kalk) mesajlarına abone olur; oyun mantığı/actor script
+  pawn'u hedefleyerek `activateRagdoll`'u eventle sürer (tuş gömülü değil). Handler yalnız flag set eder,
+  spawn/despawn session tick'inde (flush ortası değil). engine-test **+1** (target-scope + unsubscribe).
+- **Demo author'lama:** `character-a`'ya editörde örnek physicsBodies/Constraints ekle — kullanıcı el ile
+  editörde yaptı ve doğruladı (Simulate + runtime `R` çalışıyor).
+- [x] **Geri-blend (get-up) — TAMAM (2026-06-24, el ile doğrulandı).** Ragdoll artık **terminal değil**.
+  [`getUpBlender.ts`](../../src/game/getUpBlender.ts): `getUpBlendFactor` (smoothstep, clamp, sıfır-pencere
+  snap, testli) + `GetUpBlender` — sürülen kemiklerin **yerel** transform'larını çökmüş ragdoll pozundan,
+  **ragdoll aktivasyonunda yakalanan rest (ayakta) poza** ease eder; mixer blend boyunca dondurulu kalır,
+  böylece blender pozu tam sahiplenir. **Önemli düzeltme:** `AnimationMixer` yalnız klipte **track'i olan**
+  bileşenleri geri yazar (Kenney rig'inde uzuv node'larının pozisyonu idle'da animate edilmez) → dünya-uzayı
+  ilk denemede untracked pozisyonlar çökmüş değerde kalıp karakter **oturma pozunda yürüyordu**. Yerel-uzay →
+  rest çözümü: blend bitince kemikler tam temiz rest pozunda olur, sonra mixer çözülür (idle'a `0.2s` crossfade);
+  untracked bileşenler doğru ayakta değerde kalır. Akış [`tpsCharacterGameMode`](../../src/game/gameModes/tpsCharacterGameMode.ts):
+  `activateRagdoll` rest pozu snapshot'lar (`restPose` map, ilk fizik adımından önce), `beginGetUp` ragdoll'u
+  despawn eder + frozen blender kurar, `finishGetUp` mixer'i çözüp idle oynatır. **Hareket askıya alma:**
+  `PlayerState.pawnControlSuspended` (ragdoll + get-up boyunca); iki `isPlayerControlled` kapısı
+  ([`RuntimeSceneApp`](../../src/scene/RuntimeSceneApp.ts)) bunu kontrol eder → ragdoll'luyken input capsule'ü
+  itmez, karakter düştüğü yerde kalkar (root hareket etmedi). engine-test **+1** (`getUpBlendFactor`). Kısıt:
+  rest = ölüm-anı pozu (mid-stride olabilir, idle crossfade toparlar); root reposition yok; montage state korunur.
 - **Gerçek cone limit (cila):** şu an açısal limit raw `jointSetLimits` ile per-axis box + rest-widened
   (approximation, identity-ref). Daha yeni Rapier'in dedicated cone-twist'i veya joint-frame ile rest-ref
   edilmiş gerçek cone daha doğru olur. Mevcut yeterince stiff; doğruluk gerekirse.

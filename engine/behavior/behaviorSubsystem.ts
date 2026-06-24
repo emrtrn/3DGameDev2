@@ -364,6 +364,27 @@ export class BehaviorSubsystem implements Subsystem {
     });
   }
 
+  /**
+   * Subscribes a non-behavior runtime source (e.g. a Game Mode reacting to a
+   * `death`/`ragdoll` event) to a script message type, optionally scoped to one
+   * target entity. Returns an unsubscribe handle the caller must release on
+   * teardown. Unlike actor-script message bindings this is not tracked in the
+   * debug subscriber index; the caller owns the lifetime. Note that `clear()`
+   * (scene teardown/reload) drops all subscriptions, so re-subscribe after a
+   * rebuild if needed.
+   */
+  subscribeScriptMessage(
+    type: string,
+    handler: (envelope: ScriptMessageEnvelope) => void,
+    options: { readonly target?: EntityId } = {},
+  ): () => void {
+    return this.messageBus.subscribe(
+      type,
+      handler,
+      options.target !== undefined ? { target: options.target } : {},
+    );
+  }
+
   update(engine: EngineUpdateContext): void {
     if (!this.enabled) return;
     this.currentEngine = engine;

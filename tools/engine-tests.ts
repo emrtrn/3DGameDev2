@@ -158,6 +158,7 @@ import {
   ragdollJointAngularLimits,
   worldAnchorToBodyLocal,
 } from "../engine/physics/ragdoll";
+import { getUpBlendFactor } from "../src/game/getUpBlender";
 import type {
   GameModeContext,
   InputMode,
@@ -5724,15 +5725,27 @@ check("runtime PlayerController owns possession and input policy", () => {
   );
 
   controller.setPawn("actor:0");
-  assert.deepEqual(controller.playerState, { pawnEntityId: "actor:0", possessed: false });
+  assert.deepEqual(controller.playerState, {
+    pawnEntityId: "actor:0",
+    possessed: false,
+    pawnControlSuspended: false,
+  });
   controller.possess();
-  assert.deepEqual(controller.playerState, { pawnEntityId: "actor:0", possessed: true });
+  assert.deepEqual(controller.playerState, {
+    pawnEntityId: "actor:0",
+    possessed: true,
+    pawnControlSuspended: false,
+  });
   assert.deepEqual(inputModes, ["game"]);
   assert.deepEqual(mouseCursorVisible, [false]);
   assert.deepEqual(pointerLookModes, ["pointer-lock"]);
 
   controller.unpossess();
-  assert.deepEqual(controller.playerState, { pawnEntityId: null, possessed: false });
+  assert.deepEqual(controller.playerState, {
+    pawnEntityId: null,
+    possessed: false,
+    pawnControlSuspended: false,
+  });
   assert.deepEqual(inputModes, ["game", "ui"]);
   assert.deepEqual(mouseCursorVisible, [false, true]);
   assert.deepEqual(pointerLookModes, ["pointer-lock", "right-drag"]);
@@ -7408,6 +7421,48 @@ check("ragdoll joint limits: authored kept when bodies align; widened past the r
   assert.ok(Math.abs(widened.twist - expected) < 1e-3, `widened twist ${widened.twist}`);
   // A generous authored limit (larger than rest) is preserved.
   assert.equal(ragdollJointAngularLimits(identity, identity, 2, 2).swing, 2);
+});
+
+check("get-up blend factor: clamps, smoothsteps, and snaps on a zero window", () => {
+  // Endpoints hold the ragdoll pose (0) and reach the animation pose (1).
+  assert.equal(getUpBlendFactor(0, 0.5), 0);
+  assert.equal(getUpBlendFactor(0.5, 0.5), 1);
+  // Clamped outside [0, duration].
+  assert.equal(getUpBlendFactor(-1, 0.5), 0);
+  assert.equal(getUpBlendFactor(2, 0.5), 1);
+  // Smoothstep: midpoint is 0.5 with zero slope at the ends (monotonic between).
+  assert.ok(Math.abs(getUpBlendFactor(0.25, 0.5) - 0.5) < 1e-9);
+  assert.ok(getUpBlendFactor(0.1, 0.5) < getUpBlendFactor(0.2, 0.5));
+  // A zero/negative window snaps straight to the animation pose.
+  assert.equal(getUpBlendFactor(0, 0), 1);
+});
+
+check("BehaviorSubsystem.subscribeScriptMessage delivers target-scoped events then unsubscribes", () => {
+  // Inject a bus without a targetExists guard so the test needn't register runtime
+  // entities; this exercises the subscribe/target forwarding of the new method.
+  const bus = new ScriptMessageBus();
+  const subsystem = new BehaviorSubsystem(
+    createBehaviorRegistry(),
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    { messageBus: bus },
+  );
+  const sources: string[] = [];
+  const unsubscribe = subsystem.subscribeScriptMessage(
+    "death",
+    (envelope) => sources.push(envelope.source),
+    { target: "player" },
+  );
+  subsystem.emitScriptMessage("death", "enemy", {}, "player"); // targeted at player → delivered
+  subsystem.emitScriptMessage("death", "enemy", {}, "npc"); // other target → not delivered
+  subsystem.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  assert.deepEqual(sources, ["enemy"]);
+  unsubscribe();
+  subsystem.emitScriptMessage("death", "enemy", {}, "player");
+  subsystem.update({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 });
+  assert.deepEqual(sources, ["enemy"]);
 });
 
 check("asset skeleton sidecar normalizes animation metadata", () => {

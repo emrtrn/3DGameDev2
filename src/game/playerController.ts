@@ -19,7 +19,11 @@ export interface RuntimePlayerControllerOptions {
 }
 
 export class RuntimePlayerController {
-  readonly playerState: PlayerState = { pawnEntityId: null, possessed: false };
+  readonly playerState: PlayerState = {
+    pawnEntityId: null,
+    possessed: false,
+    pawnControlSuspended: false,
+  };
   readonly cameraManager: PlayerCameraManager;
   private controlRotation: LookAngles;
 

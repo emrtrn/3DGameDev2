@@ -421,7 +421,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           this.locomotionReports.set(entityId, report);
         },
         isPlayerControlled: (entityId) =>
-          this.inputMode !== "ui" && this.gameModeSession?.playerState.pawnEntityId === entityId,
+          this.inputMode !== "ui" &&
+          this.gameModeSession?.playerState.pawnEntityId === entityId &&
+          !this.gameModeSession.playerState.pawnControlSuspended,
       },
     );
 
@@ -454,7 +456,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         // The active Game Mode owns possession: only the pawn it possessed
         // (none, under the default camera mode) is driven by player input.
         isPlayerControlled: (entityId) =>
-          this.inputMode !== "ui" && this.gameModeSession?.playerState.pawnEntityId === entityId,
+          this.inputMode !== "ui" &&
+          this.gameModeSession?.playerState.pawnEntityId === entityId &&
+          !this.gameModeSession.playerState.pawnControlSuspended,
       }),
       this.inputActions,
       this.syncEntityTransform,
@@ -1003,6 +1007,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       spawnRagdoll: (desc, options) => this.physicsSubsystem.spawnRagdoll(desc, options),
       sampleRagdoll: (id) => this.physicsSubsystem.sampleRagdoll(id),
       despawnRagdoll: (id) => this.physicsSubsystem.despawnRagdoll(id),
+      onScriptMessage: (type, handler, options) =>
+        this.behaviorSubsystem.subscribeScriptMessage(
+          type,
+          handler,
+          options?.target !== undefined ? { target: options.target } : {},
+        ),
       markCameraControlled: () => {
         this.cameraViewTouched = true;
       },

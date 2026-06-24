@@ -42,6 +42,8 @@ import {
   type NotifyMarker,
 } from "@/game/animationNotifies";
 import { createRagdollDriver, type RagdollDriver } from "@/game/ragdollDriver";
+import { GetUpBlender, type RestPose } from "@/game/getUpBlender";
+import type { Object3D } from "three";
 import {
   cameraProjectionFromComponent,
   desiredSpringArmCameraPose,
@@ -84,6 +86,9 @@ const SPRINT_SHAKE_FREQUENCY_HZ = 8;
 /** Crossfade duration (seconds) between locomotion clips. */
 const ANIMATION_CROSSFADE_SECONDS = 0.18;
 
+/** Crossfade (seconds) used when the animator resumes after a get-up blend. */
+const GET_UP_SETTLE_SECONDS = 0.2;
+
 /** Resolves the explicit player character a TPS session should possess. */
 export function resolvePlayerCharacter(
   characters: readonly RuntimeCharacterRef[],
@@ -123,8 +128,21 @@ export class TpsCharacterSession implements GameModeSession {
   private readonly notifyTracker = new AnimationNotifyTracker();
   private followPose: FollowCameraPose | null = null;
   private activeCameraSource: "follow config" | "spring arm component" = "follow config";
-  /** Active physics ragdoll once the character has been dropped (terminal). */
+  /** Active physics ragdoll once the character has been dropped. */
   private ragdoll: RagdollDriver | null = null;
+  /** Active get-up blend (ragdoll pose → animation), once recovery has begun. */
+  private getup: GetUpBlender | null = null;
+  /**
+   * Driven bones' local transforms snapshotted at ragdoll activation — the last
+   * clean standing pose the get-up blend eases back to (so un-animated transform
+   * components don't stay stuck in the collapsed ragdoll pose).
+   */
+  private restPose = new Map<Object3D, RestPose>();
+  /** Pending ragdoll/recovery requests from a toggle press or runtime event. */
+  private ragdollRequested = false;
+  private getUpRequested = false;
+  /** Unsubscribe handles for the death/ragdoll/getup event subscriptions. */
+  private messageUnsubscribers: Array<() => void> = [];
 
   constructor(
     private readonly context: GameModeContext,
@@ -173,37 +191,89 @@ export class TpsCharacterSession implements GameModeSession {
     const bindings = resolveMontageBindings(player.skeleton?.montages);
     this.holdMontages = bindings.filter((binding) => binding.mode === "hold");
     this.pressMontages = bindings.filter((binding) => binding.mode === "press");
+    this.subscribeRagdollEvents(player.entityId);
     // Following the player owns the view; stop the resize handler resetting it.
     this.context.markCameraControlled();
+  }
+
+  /**
+   * Wires the event-driven ragdoll path: game logic or an actor script targets
+   * the player with a `death`/`ragdoll` message to drop it (no hardcoded key
+   * needed), or a `getup` message to recover. The debug `ragdoll` action stays as
+   * a manual toggle. Handlers only flag a request; {@link update} consumes it so
+   * physics spawn/despawn happens at the session tick, not mid message-flush.
+   */
+  private subscribeRagdollEvents(entityId: string): void {
+    const subscribe = this.context.onScriptMessage;
+    if (!subscribe) return;
+    const target = { target: entityId };
+    this.messageUnsubscribers.push(
+      subscribe("ragdoll", () => (this.ragdollRequested = true), target),
+      subscribe("death", () => (this.ragdollRequested = true), target),
+      subscribe("getup", () => (this.getUpRequested = true), target),
+    );
   }
 
   update(deltaSeconds: number): void {
     this.gameState.elapsedSeconds += deltaSeconds;
     const player = this.player;
     if (!player) return;
+
+    // Recovering: ease the bones from the ragdoll pose back to the (now un-frozen)
+    // locomotion animation, then hand movement/animation control back.
+    if (this.getup) {
+      const done = this.getup.update(deltaSeconds);
+      this.updateFollowCamera(player, deltaSeconds);
+      if (done) this.finishGetUp(player);
+      return;
+    }
+
+    // Debug `ragdoll` action toggles: drop when upright, recover when ragdolled.
+    const toggle =
+      this.context.getInputMode() !== "ui" && this.context.actions.pressed("ragdoll");
+
+    // Ragdolled: physics poses the bones; the camera tracks the body. A toggle
+    // press or a `getup` event begins recovery.
     if (this.ragdoll) {
-      // Dead/ragdolled: physics poses the bones; the camera tracks the body, and
-      // locomotion clip selection stops (the frozen mixer is overridden anyway).
+      if (this.getUpRequested || toggle) {
+        this.getUpRequested = false;
+        this.ragdollRequested = false;
+        this.beginGetUp();
+        return;
+      }
       this.ragdoll.update();
       this.updateFollowCamera(player, deltaSeconds, this.ragdoll.getFollowPosition());
       return;
     }
-    if (this.context.actions.pressed("ragdoll")) this.activateRagdoll(player);
+
+    // Upright: a `ragdoll`/`death` event or a toggle press drops into a ragdoll.
+    if (this.ragdollRequested || toggle) {
+      this.ragdollRequested = false;
+      this.getUpRequested = false;
+      if (this.activateRagdoll(player)) {
+        // Just dropped this tick; physics steps next tick, so don't sample it yet
+        // (the follow position is still null and falls back to the player root).
+        this.updateFollowCamera(player, deltaSeconds);
+        return;
+      }
+    }
     this.updateFollowCamera(player, deltaSeconds);
     this.updateAnimation(player, deltaSeconds);
   }
 
   /**
    * Switches the character from kinematic animation to a dynamic physics ragdoll
-   * (debug `ragdoll` action, or a future death event). No-op unless the character
-   * authored physics bodies and the physics bridge/backend is live. Freezes the
-   * locomotion mixers so un-bodied bones hold their pose while bodied bones fall.
+   * (debug `ragdoll` action toggle, or a `death`/`ragdoll` runtime event). No-op
+   * unless the character authored physics bodies and the physics bridge/backend
+   * is live. Freezes the locomotion mixers so un-bodied bones hold their pose
+   * while bodied bones fall, and suspends the pawn's movement so input can't shove
+   * the detached capsule around while it's ragdolled.
    */
-  private activateRagdoll(player: RuntimeCharacterRef): void {
+  private activateRagdoll(player: RuntimeCharacterRef): boolean {
     const bodies = player.skeleton?.physicsBodies;
-    if (!bodies || bodies.length === 0) return;
+    if (!bodies || bodies.length === 0) return false;
     const { spawnRagdoll, sampleRagdoll, despawnRagdoll } = this.context;
-    if (!spawnRagdoll || !sampleRagdoll || !despawnRagdoll) return;
+    if (!spawnRagdoll || !sampleRagdoll || !despawnRagdoll) return false;
     const driver = createRagdollDriver(
       player.object,
       bodies,
@@ -211,15 +281,67 @@ export class TpsCharacterSession implements GameModeSession {
       { spawnRagdoll, sampleRagdoll, despawnRagdoll },
       player.entityId,
     );
-    if (!driver) return;
+    if (!driver) return false;
     this.ragdoll = driver;
+    // Snapshot the current (still kinematic) local pose of each driven bone before
+    // the first physics step displaces it; the get-up blend eases back to this.
+    this.restPose = new Map();
+    for (const node of driver.getDrivenNodes()) {
+      this.restPose.set(node, {
+        position: node.position.clone(),
+        quaternion: node.quaternion.clone(),
+        scale: node.scale.clone(),
+      });
+    }
     this.freezeAnimationMixers();
+    this.playerState.pawnControlSuspended = true;
+    return true;
+  }
+
+  /**
+   * Begins recovery from a ragdoll: releases the physics bodies and starts a
+   * {@link GetUpBlender} that eases the driven bones from their collapsed ragdoll
+   * pose back to the rest pose captured at activation. The locomotion mixer stays
+   * frozen for the duration so the blender owns the pose; {@link finishGetUp} hands
+   * control back. The pawn stays movement-suspended throughout and stands back up
+   * where it fell (its root never moved while ragdolled).
+   */
+  private beginGetUp(): void {
+    const ragdoll = this.ragdoll;
+    if (!ragdoll) return;
+    ragdoll.dispose();
+    this.ragdoll = null;
+    this.getup = new GetUpBlender(this.restPose);
+  }
+
+  /**
+   * Completes recovery: un-freeze the animator onto the idle/stand clip (the bones
+   * are now exactly on the clean rest pose, so un-animated components stay correct),
+   * drop the blender, and hand movement/animation control back.
+   */
+  private finishGetUp(player: RuntimeCharacterRef): void {
+    const initialClip = player.placement.animation ?? "idle";
+    if (this.layered) {
+      this.layered.setAim(null, 0);
+      this.layered.playLocomotion(initialClip, GET_UP_SETTLE_SECONDS);
+    } else if (this.animator) {
+      this.animator.play(initialClip, GET_UP_SETTLE_SECONDS);
+    }
+    this.unfreezeAnimationMixers();
+    this.getup = null;
+    this.playerState.pawnControlSuspended = false;
   }
 
   /** Stops the locomotion mixers advancing so the ragdoll driver fully owns the pose. */
   private freezeAnimationMixers(): void {
     if (this.animator) this.animator.mixer.timeScale = 0;
     if (this.layered) for (const mixer of this.layered.mixers) mixer.timeScale = 0;
+  }
+
+  /** Resumes the locomotion mixers when recovery hands the pose back to animation. */
+  private unfreezeAnimationMixers(): void {
+    if (this.animator) this.animator.mixer.timeScale = 1;
+    if (this.layered) for (const mixer of this.layered.mixers) mixer.timeScale = 1;
   }
 
   beforeEngineUpdate(deltaSeconds: number): void {
@@ -244,11 +366,14 @@ export class TpsCharacterSession implements GameModeSession {
   }
 
   dispose(): void {
+    for (const unsubscribe of this.messageUnsubscribers) unsubscribe();
+    this.messageUnsubscribers = [];
     this.controller.unpossess();
     // Release the ragdoll's physics bodies/joints; the animator's mixer is owned
     // by the AnimationSubsystem (disposed by the EngineApp).
     this.ragdoll?.dispose();
     this.ragdoll = null;
+    this.getup = null;
   }
 
   private updateFollowCamera(

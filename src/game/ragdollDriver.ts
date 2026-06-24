@@ -192,6 +192,16 @@ export class RagdollDriver {
     return this.lastMainPosition;
   }
 
+  /**
+   * The bone nodes this driver poses. Captured at activation (before the first
+   * physics step displaces them) to snapshot the rest pose, and again at recovery
+   * to drive the get-up blend back to it. Only bodied bones — the same set the
+   * ragdoll physically drove.
+   */
+  getDrivenNodes(): Object3D[] {
+    return this.bones.map((bone) => bone.node);
+  }
+
   dispose(): void {
     this.bridge.despawnRagdoll(this.id);
   }
