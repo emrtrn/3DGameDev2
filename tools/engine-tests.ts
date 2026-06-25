@@ -265,6 +265,7 @@ import {
   assetLoadGroup,
   assetPath,
   assetType,
+  inferAssetTypeFromPath,
   validateAssetManifest,
   type AssetRecord,
   type AssetManifest,
@@ -522,6 +523,13 @@ check("asset manifest classifies authored characters as skeletal meshes", () => 
   const character = assetManifest.assets.find((asset) => asset.id === "character-a");
   assert.ok(character);
   assert.equal(assetType(character), "skeletalMesh");
+});
+check("asset manifest classifies Sound Cue assets separately from prefab JSON", () => {
+  const cue = assetManifest.assets.find((asset) => asset.id === "sc-footstep-stone");
+  assert.ok(cue);
+  assert.equal(assetType(cue), "soundCue");
+  assert.equal(inferAssetTypeFromPath("assets/Sounds/SC_Footstep_Stone.soundcue.json"), "soundCue");
+  assert.equal(inferAssetTypeFromPath("assets/Sounds/Warning.sound.json"), "prefab");
 });
 check("asset manifest helpers tolerate the legacy file/loadGroup/bytes shape", () => {
   const legacy = {
@@ -1690,6 +1698,49 @@ check("audio clip manifest resolves default collision chime", () => {
     frequencyHz: 660,
     durationSeconds: 0.09,
   });
+});
+
+check("audio subsystem play handle can cancel a pending request", () => {
+  const audio = new AudioSubsystem();
+  const handle = audio.play("music-loop", { volume: 0.25, loop: true, pitch: 1.5 });
+
+  assert.equal(handle.clipId, "music-loop");
+  assert.equal(handle.volume, 0.25);
+  assert.equal(handle.pitch, 1.5);
+
+  handle.setVolume(0.5);
+  handle.setPitch(0.75);
+  assert.equal(handle.volume, 0.5);
+  assert.equal(handle.pitch, 0.75);
+
+  handle.stop();
+  audio.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+
+  assert.equal(handle.stopped, true);
+  assert.deepEqual(audio.playedRequests(), []);
+});
+
+check("audio subsystem keeps headless looping playback alive until stopped", () => {
+  const audio = new AudioSubsystem();
+  const handle = audio.play("music-loop", { volume: 0.4, loop: true });
+
+  audio.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+
+  assert.equal(handle.stopped, false);
+  assert.deepEqual(audio.playedRequests(), [{ clipId: "music-loop", volume: 0.4, loop: true }]);
+
+  handle.stop(0.25);
+  assert.equal(handle.stopped, true);
+});
+
+check("audio subsystem finishes headless non-loop playback after update", () => {
+  const audio = new AudioSubsystem();
+  const handle = audio.play("ui-click", { volume: 0.7 });
+
+  audio.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+
+  assert.equal(handle.stopped, true);
+  assert.deepEqual(audio.playedRequests(), [{ clipId: "ui-click", volume: 0.7 }]);
 });
 
 // 6.1.4 The behavior subsystem ticks behaviors against a derived entity set,
@@ -8315,6 +8366,17 @@ check("content-new resolves to typed stub files and folders", () => {
   const particle = resolveContentNewFile({ kind: "particle", dir: "assets/effects", name: "Dust Hit" });
   assert.equal(particle.path, "assets/effects/Dust Hit.effect.json");
   assert.equal(parseEffectDefinition(JSON.parse(particle.content ?? ""))?.effectId, "dust-hit");
+
+  const cue = resolveContentNewFile({ kind: "soundCue", dir: "assets/sounds", name: "Footstep Cue" });
+  assert.equal(cue.path, "assets/sounds/Footstep Cue.soundcue.json");
+  assert.deepEqual(JSON.parse(cue.content ?? ""), {
+    schema: 1,
+    type: "soundCue",
+    name: "Footstep Cue",
+    output: { volume: 1, pitch: 1, bus: "sfx" },
+    nodes: [{ id: "output", kind: "output", volume: 1, pitch: 1 }],
+    connections: [],
+  });
 });
 
 check("content-new 'script' creates a `.actor.json` Actor Script seeded with the parent class", () => {
@@ -10323,6 +10385,11 @@ check("buildImportedAssetRecord derives a valid manifest entry per type", () => 
 
   const legacyScript = buildImportedAssetRecord("assets/blueprints/Old.script.json", 75, []);
   assert.equal(legacyScript?.assetType, "prefab");
+
+  const soundCue = buildImportedAssetRecord("assets/sounds/SC_Footstep.soundcue.json", 120, []);
+  assert.equal(soundCue?.assetType, "soundCue");
+  assert.equal(soundCue?.category, "sounds");
+  assert.equal(soundCue?.placeable, false);
 
   // Unknown/companion types are not auto-registered.
   assert.equal(buildImportedAssetRecord("assets/models/props/chair.bin", 10, []), null);

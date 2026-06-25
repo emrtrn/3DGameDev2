@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "type": "soundCue",
+  "name": "SC Footstep Stone",
+  "output": {
+    "volume": 1,
+    "pitch": 1,
+    "bus": "sfx"
+  },
+  "nodes": [
+    {
+      "id": "output",
+      "kind": "output",
+      "volume": 1,
+      "pitch": 1
+    },
+    {
+      "id": "source-footstep",
+      "kind": "source",
+      "clipId": "starter-snd-footstep-stone",
+      "loop": false,
+      "volume": 1,
+      "pitch": 1
+    }
+  ],
+  "connections": [
+    {
+      "from": "source-footstep",
+      "to": "output"
+    }
+  ]
+}

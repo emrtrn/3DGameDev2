@@ -2147,6 +2147,7 @@ export const CONTENT_NEW_KINDS = [
   "particle",
   "script",
   "sound",
+  "soundCue",
   "ui",
 ] as const;
 export type ContentNewKind = (typeof CONTENT_NEW_KINDS)[number];
@@ -2242,6 +2243,15 @@ function contentStubJson(payload: ContentNewPayload): string {
     };
   } else if (kind === "sound") {
     body = { schema: 1, type: "sound", name, clip: "" };
+  } else if (kind === "soundCue") {
+    body = {
+      schema: 1,
+      type: "soundCue",
+      name,
+      output: { volume: 1, pitch: 1, bus: "sfx" },
+      nodes: [{ id: "output", kind: "output", volume: 1, pitch: 1 }],
+      connections: [],
+    };
   } else if (kind === "ui") {
     // UI Widget (UMG Lite) class-asset: a minimal empty Canvas root.
     body = defaultUiWidgetDef(name) as unknown as Record<string, unknown>;
@@ -2266,7 +2276,13 @@ export function resolveContentNewFile(payload: ContentNewPayload): ContentNewFil
   }
   // A "script" is an Actor Script class-asset, stored as `<name>.actor.json`.
   const ext =
-    payload.kind === "script" ? "actor" : payload.kind === "particle" ? "effect" : payload.kind;
+    payload.kind === "script"
+      ? "actor"
+      : payload.kind === "particle"
+        ? "effect"
+        : payload.kind === "soundCue"
+          ? "soundcue"
+          : payload.kind;
   return {
     path: join(`${payload.name}.${ext}.json`),
     content: contentStubJson(payload),
@@ -2393,6 +2409,7 @@ const ASSET_TYPE_CATEGORY: Record<AssetType, string> = {
   texture: "texture",
   material: "material",
   sound: "sound",
+  soundCue: "soundCue",
   animation: "animation",
   prefab: "prefab",
   ui: "UI",

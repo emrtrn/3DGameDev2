@@ -261,7 +261,7 @@ Cue playback; saf graph evaluator + ince Web Audio compiler olarak ayrılmalı. 
 
 ### Faz 1 - Sound Cue Lite
 
-- [ ] `soundCue` asset type ve `*.soundcue.json` manifest desteği ekle.
+- [x] `soundCue` asset type ve `*.soundcue.json` manifest desteği ekle.
 - [ ] Cue schema, normalize/validate ve loader/store katmanını ekle.
 - [ ] `SoundCueEditor` kabuğunu ekle.
 - [ ] Source, Output, Mixer, Random, Modulator, Loop, Delay node'larını destekle.
@@ -273,7 +273,7 @@ Cue playback; saf graph evaluator + ince Web Audio compiler olarak ayrılmalı. 
 ### Faz 2 - Audio component ve spatial v1
 
 - [ ] `sourceId/sourceType` modelini `clipId` uyumluluğunu koruyarak ekle.
-- [ ] Playback handle ile loop stop/fade desteği ekle.
+- [x] Playback handle ile loop stop/fade desteği ekle.
 - [ ] `spatial: true` için Web Audio `PannerNode` uygula.
 - [ ] Listener konumunu runtime kamera/player üzerinden güncelle.
 - [ ] Basit sphere attenuation alanlarını ekle.

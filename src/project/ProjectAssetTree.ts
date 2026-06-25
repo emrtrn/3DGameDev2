@@ -66,6 +66,7 @@ export type ContentNewKind =
   | "particle"
   | "script"
   | "sound"
+  | "soundCue"
   | "ui";
 
 /** Parent class picked for a `kind: "script"` Actor Script (Unreal-style). */

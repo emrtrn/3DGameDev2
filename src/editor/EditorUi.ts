@@ -121,6 +121,7 @@ const CONTENT_NEW_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string }> 
   { kind: "particle", label: "Particle" },
   { kind: "script", label: "Script" },
   { kind: "sound", label: "Sound" },
+  { kind: "soundCue", label: "Sound Cue" },
   { kind: "ui", label: "UI" },
 ];
 
@@ -5119,8 +5120,10 @@ function isContentTypeFilter(value: string): value is ContentTypeFilter {
     value === "texture" ||
     value === "material" ||
     value === "sound" ||
+    value === "soundCue" ||
     value === "animation" ||
     value === "prefab" ||
+    value === "ui" ||
     value === "level" ||
     value === "file"
   );
@@ -5132,6 +5135,7 @@ function formatContentTypeLabel(value: string): string {
   if (value === "texture") return "Textures";
   if (value === "material") return "Materials";
   if (value === "sound") return "Sounds";
+  if (value === "soundCue") return "Sound Cues";
   if (value === "animation") return "Animations";
   if (value === "prefab") return "Prefabs";
   if (value === "level") return "Levels";
@@ -5159,6 +5163,7 @@ function formatContentTypeBadge(value: BrowserAssetItem["type"]): string {
   if (value === "texture") return "Texture";
   if (value === "material") return "Material";
   if (value === "sound") return "Sound";
+  if (value === "soundCue") return "Sound Cue";
   if (value === "animation") return "Animation";
   if (value === "prefab") return "Prefab";
   if (value === "ui") return "UI Widget";
