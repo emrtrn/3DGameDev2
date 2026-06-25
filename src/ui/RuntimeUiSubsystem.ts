@@ -25,7 +25,7 @@ import {
   type UiAction,
   type UiWidgetDef,
 } from "@engine/ui/uiWidget";
-import { renderUiWidget, type RenderedUiWidget } from "@engine/ui/uiRenderer";
+import { renderUiWidget, type RenderedUiWidget, type RenderUiWidgetOptions } from "@engine/ui/uiRenderer";
 import { bindUiWidget } from "@engine/ui/uiBinding";
 import type { UiViewModelStore } from "@engine/ui/uiViewModel";
 import { applyUiTheme, type UiThemeDef } from "@engine/ui/uiTheme";
@@ -39,13 +39,25 @@ export interface RuntimeUiSubsystemOptions {
   store?: UiViewModelStore;
   /** Resolves a widget's `theme` reference to a loaded theme (for `$token` props). */
   resolveTheme?: (ref: string) => UiThemeDef | null;
+  /** Resolves an Include widget's `src` asset-id to its definition for inlining. */
+  resolveWidget?: (src: string) => UiWidgetDef | null;
 }
 
 interface ScreenEntry {
   layer: HTMLElement;
   rendered: RenderedUiWidget;
+  /** Authored widget name, for the `?debug` inspector. */
+  name: string;
   /** Releases this screen's data bindings on pop/clear. */
   disposeBinding: () => void;
+}
+
+/** Live UI host state for the `?debug` inspector (active HUD + screen stack). */
+export interface UiSubsystemDebugSnapshot {
+  /** Mounted HUD widget name, or null when none. */
+  hud: string | null;
+  /** Active screen widget names, bottom → top. */
+  screens: string[];
 }
 
 export class RuntimeUiSubsystem {
@@ -53,6 +65,8 @@ export class RuntimeUiSubsystem {
   private readonly screenRoot: HTMLElement;
   private hud: RenderedUiWidget | null = null;
   private hudBinding: (() => void) | null = null;
+  /** Mounted HUD widget name, for the `?debug` inspector. */
+  private hudName: string | null = null;
   private readonly screens: ScreenEntry[] = [];
 
   constructor(
@@ -79,10 +93,11 @@ export class RuntimeUiSubsystem {
   setHud(def: UiWidgetDef | unknown): RenderedUiWidget {
     const widget = isUiWidgetDef(def) ? def : normalizeUiWidgetDef(def);
     this.clearHud();
-    const rendered = renderUiWidget(widget, { onAction: this.handleAction });
+    const rendered = renderUiWidget(widget, this.renderOptions());
     this.hudLayer.appendChild(rendered.element);
     this.applyTheme(rendered, widget);
     this.hud = rendered;
+    this.hudName = widget.name;
     this.hudBinding = this.bind(rendered, widget);
     return rendered;
   }
@@ -92,6 +107,7 @@ export class RuntimeUiSubsystem {
     this.hudBinding = null;
     this.hud?.dispose();
     this.hud = null;
+    this.hudName = null;
   }
 
   // --- Screen stack --------------------------------------------------------
@@ -102,11 +118,11 @@ export class RuntimeUiSubsystem {
     const prevDepth = this.screens.length;
     const layer = document.createElement("div");
     layer.className = "forge-ui-screen-layer";
-    const rendered = renderUiWidget(widget, { onAction: this.handleAction });
+    const rendered = renderUiWidget(widget, this.renderOptions());
     layer.appendChild(rendered.element);
     this.applyTheme(rendered, widget);
     this.screenRoot.appendChild(layer);
-    this.screens.push({ layer, rendered, disposeBinding: this.bind(rendered, widget) });
+    this.screens.push({ layer, rendered, name: widget.name, disposeBinding: this.bind(rendered, widget) });
     this.fireStackChange(prevDepth);
     return rendered;
   }
@@ -118,10 +134,11 @@ export class RuntimeUiSubsystem {
     const widget = isUiWidgetDef(def) ? def : normalizeUiWidgetDef(def);
     top.disposeBinding();
     top.rendered.dispose();
-    const rendered = renderUiWidget(widget, { onAction: this.handleAction });
+    const rendered = renderUiWidget(widget, this.renderOptions());
     top.layer.appendChild(rendered.element);
     this.applyTheme(rendered, widget);
     top.rendered = rendered;
+    top.name = widget.name;
     top.disposeBinding = this.bind(rendered, widget);
     return rendered;
   }
@@ -160,6 +177,11 @@ export class RuntimeUiSubsystem {
     return this.screens.at(-1)?.rendered.byId.get(nodeId) ?? this.hud?.byId.get(nodeId) ?? null;
   }
 
+  /** Active HUD + screen-stack names for the `?debug` UI inspector. */
+  getDebugSnapshot(): UiSubsystemDebugSnapshot {
+    return { hud: this.hudName, screens: this.screens.map((entry) => entry.name) };
+  }
+
   dispose(): void {
     this.clearScreens();
     this.clearHud();
@@ -174,6 +196,13 @@ export class RuntimeUiSubsystem {
     }
     this.options.onMessageAction?.(action, nodeId);
   };
+
+  /** Builds render options for a widget mount (action handler + optional resolveWidget). */
+  private renderOptions(): RenderUiWidgetOptions {
+    const opts: RenderUiWidgetOptions = { onAction: this.handleAction };
+    if (this.options.resolveWidget) opts.resolveWidget = this.options.resolveWidget;
+    return opts;
+  }
 
   /** Wires a freshly rendered widget's `{ bind }` props to the store (no-op without one). */
   private bind(rendered: RenderedUiWidget, widget: UiWidgetDef): () => void {

@@ -165,6 +165,26 @@ body {
   transition: width 0.15s ease;
 }
 
+/* Include: placeholder shown when a referenced widget asset is not resolved. */
+.forge-ui-include {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px dashed var(--forge-ui-surface, rgba(255, 255, 255, 0.2));
+  border-radius: 3px;
+  color: var(--forge-ui-text, rgba(255, 255, 255, 0.5));
+  font-size: 11px;
+  font-family: monospace;
+  pointer-events: none;
+}
+/* When resolved, the wrapper is layout-transparent (display:contents). */
+.forge-ui-include--resolved {
+  display: contents;
+}
+
 /* Lightweight perf readout (qa-poki measurement standard). Debug-only. */
 #debug-stats {
   position: absolute;

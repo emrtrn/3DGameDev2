@@ -4,7 +4,7 @@
  * lil-gui (devDependency) is dynamically imported on demand later, when
  * scene parameters need live tweaking — keeps it out of the base bundle.
  */
-import type { GameModeDebugSnapshot, RuntimeStatsApp } from "./RuntimeSceneApp";
+import type { GameModeDebugSnapshot, RuntimeStatsApp, UiDebugSnapshot } from "./RuntimeSceneApp";
 
 const UPDATE_INTERVAL_MS = 500;
 
@@ -24,6 +24,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       `${drawCalls} draw calls\n` +
       `${triangles} tris` +
       gameModeDebugText(app) +
+      uiDebugText(app) +
       scriptMessageDebugText(app);
     accumMs = 0;
     frames = 0;
@@ -55,6 +56,43 @@ export function formatGameModeDebug(snapshot: GameModeDebugSnapshot): string[] {
     `camera: ${snapshot.cameraSource ?? "â€”"}`,
     `input: ${snapshot.inputMode}`,
   ];
+}
+
+/** The UI inspector block, or "" when the app exposes no snapshot (editor). */
+function uiDebugText(app: RuntimeStatsApp): string {
+  if (!app.getUiDebugSnapshot) return "";
+  return `\n${formatUiDebug(app.getUiDebugSnapshot()).join("\n")}`;
+}
+
+/**
+ * Formats a {@link UiDebugSnapshot} into overlay lines (pure, DOM-free for unit
+ * tests): the mounted HUD, the active screen stack (bottom → top) and each
+ * bound ViewModel field. Long string values are clipped to keep lines readable.
+ */
+export function formatUiDebug(snapshot: UiDebugSnapshot): string[] {
+  const lines = [
+    "ui",
+    `hud: ${snapshot.hud ?? "none"}`,
+    snapshot.screens.length > 0
+      ? `screens(${snapshot.screens.length}): ${snapshot.screens.join(" > ")}`
+      : "screens: none",
+  ];
+  if (snapshot.fields.length === 0) {
+    lines.push("fields: none");
+  } else {
+    lines.push(`fields(${snapshot.fields.length}):`);
+    for (const [path, value] of snapshot.fields) {
+      lines.push(`  ${path} = ${formatFieldValue(value)}`);
+    }
+  }
+  return lines;
+}
+
+/** Renders a store value compactly; strings are quoted and clipped at 32 chars. */
+function formatFieldValue(value: string | number | boolean): string {
+  if (typeof value !== "string") return String(value);
+  const clipped = value.length > 32 ? `${value.slice(0, 29)}...` : value;
+  return `"${clipped}"`;
 }
 
 function scriptMessageDebugText(app: RuntimeStatsApp): string {

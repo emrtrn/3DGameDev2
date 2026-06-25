@@ -193,7 +193,7 @@ import {
 import { assetPath, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
 import { normalizeUiWidgetDef, type UiWidgetDef } from "@engine/ui/uiWidget";
 import { normalizeUiThemeDef, type UiThemeDef } from "@engine/ui/uiTheme";
-import { UiViewModelStore } from "@engine/ui/uiViewModel";
+import { UiViewModelStore, type UiFieldValue } from "@engine/ui/uiViewModel";
 import { RuntimeUiSubsystem } from "@/ui/RuntimeUiSubsystem";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
@@ -247,12 +247,28 @@ export interface GameModeDebugSnapshot {
   inputMode: InputMode;
 }
 
+/**
+ * Live UI-host readout for the `?debug` overlay: the mounted HUD, the active
+ * screen stack (bottom → top) and the ViewModel store's current fields. Lets an
+ * author confirm which widget is up and watch bound values change in place.
+ */
+export interface UiDebugSnapshot {
+  /** Mounted HUD widget name, or null when none. */
+  hud: string | null;
+  /** Active screen widget names, bottom → top. */
+  screens: string[];
+  /** ViewModel store fields as path-sorted `[path, value]` pairs. */
+  fields: Array<[string, UiFieldValue]>;
+}
+
 export interface RuntimeStatsApp {
   onFrame: ((deltaMs: number) => void) | null;
   getRenderStats(): { drawCalls: number; triangles: number };
   getScriptMessageDebugSnapshot(): ScriptMessageDebugSnapshot;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
+  /** Optional: present on the runtime app, absent on the editor SceneApp. */
+  getUiDebugSnapshot?(): UiDebugSnapshot;
 }
 
 export interface RuntimeSceneAppOptions {
@@ -360,6 +376,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly uiStore = new UiViewModelStore();
   /** Pause-menu widget pushed on the `menu` action; null when none is configured. */
   private pauseMenuDef: UiWidgetDef | null = null;
+  /** All loaded `.ui.json` widget defs keyed by asset id (used by Include resolution). */
+  private readonly uiDefs = new Map<string, UiWidgetDef>();
   /** Loaded UI theme defs keyed by their `theme` reference (asset id or path). */
   private readonly uiThemes = new Map<string, UiThemeDef>();
 
@@ -616,6 +634,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     };
   }
 
+  /**
+   * Snapshots the runtime UI host for the `?debug` overlay: the mounted HUD, the
+   * active screen stack and the ViewModel store fields the widgets bind to.
+   * Returns empty layers before the UI subsystem boots.
+   */
+  getUiDebugSnapshot(): UiDebugSnapshot {
+    const host = this.uiSubsystem?.getDebugSnapshot() ?? { hud: null, screens: [] };
+    return { hud: host.hud, screens: host.screens, fields: this.uiStore.snapshot() };
+  }
+
   /** Authored CharacterMovement mode of a possessed Actor Script pawn, else null. */
   private possessedMovementMode(entityId: string | null): string | null {
     if (entityId === null) return null;
@@ -777,12 +805,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const pauseId = this.layout.worldSettings?.pauseMenuWidget;
     if (!hudId && !pauseId) return;
 
-    const wanted = new Set([hudId, pauseId].filter((id): id is string => Boolean(id)));
-    const defs = await this.loadUiWidgetDefs(wanted);
-    await this.loadUiThemeDefs(defs.values());
+    // Load ALL .ui.json assets so Include refs in any widget can be resolved.
+    const allDefs = await this.loadAllUiWidgetDefs();
+    for (const [id, def] of allDefs) this.uiDefs.set(id, def);
+    await this.loadUiThemeDefs(this.uiDefs.values());
     this.uiSubsystem = new RuntimeUiSubsystem(host, {
       store: this.uiStore,
       resolveTheme: (ref) => this.uiThemes.get(ref) ?? null,
+      resolveWidget: (src) => this.uiDefs.get(src) ?? null,
       onMessageAction: (action) => {
         this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
       },
@@ -794,25 +824,29 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.uiStore.setField("player.speedLabel", "Speed 0.0 m/s");
 
     if (hudId) {
-      const hud = defs.get(hudId);
+      const hud = this.uiDefs.get(hudId);
       if (hud) this.uiSubsystem.setHud(hud);
     }
-    if (pauseId) this.pauseMenuDef = defs.get(pauseId) ?? null;
+    if (pauseId) this.pauseMenuDef = this.uiDefs.get(pauseId) ?? null;
   }
 
-  /** Fetches + normalizes the requested manifest `ui` assets, keyed by asset id. */
-  private async loadUiWidgetDefs(ids: Set<string>): Promise<Map<string, UiWidgetDef>> {
+  /**
+   * Loads all `.ui.json` widget assets from the manifest (excludes `.theme.json`).
+   * Used by {@link setupRuntimeUi} to populate the Include resolver registry.
+   */
+  private async loadAllUiWidgetDefs(): Promise<Map<string, UiWidgetDef>> {
     const out = new Map<string, UiWidgetDef>();
-    if (!this.assetLoader || ids.size === 0) return out;
+    if (!this.assetLoader) return out;
     const manifest = await this.assetLoader.loadManifest();
+    const uiAssets = manifest.assets.filter(
+      (entry) => assetType(entry) === "ui" && assetPath(entry).endsWith(".ui.json"),
+    );
     await Promise.all(
-      [...ids].map(async (id) => {
-        const asset = manifest.assets.find((entry) => entry.id === id);
-        if (!asset || assetType(asset) !== "ui") return;
+      uiAssets.map(async (asset) => {
         try {
           const response = await fetch(projectFileUrl(assetPath(asset)), { cache: "no-cache" });
           if (!response.ok) return;
-          out.set(id, normalizeUiWidgetDef(await response.json(), asset.name));
+          out.set(asset.id, normalizeUiWidgetDef(await response.json(), asset.name));
         } catch {
           // Missing/malformed UI asset: skip it (the scene still plays).
         }

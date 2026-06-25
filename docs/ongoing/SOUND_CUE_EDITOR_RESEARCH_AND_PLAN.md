@@ -323,4 +323,4 @@ Bu kesit, Forge'u tam visual scripting veya MetaSound mimarisine bağlamadan hem
 
 Dialogue/Voice, Sound Cue Lite'a yakın durmalı ama aynı kapsama alınmamalıdır. Sound Cue Lite audio graph playback işini sahiplenir: mixing, randomization, pitch/volume variation, looping, delay, preview ve ileride bus/spatialization. Dialogue/Voice ise speaker/listener context, subtitle, localization key, voice actor direction, conversation flow ve doğru recorded line çözümlemeyi sahiplenir.
 
-Takip planı: `docs/planned/DIALOGUE_AND_VOICE_RESEARCH_AND_PLAN.md`.
+Takip planı: `docs/ongoing/DIALOGUE_AND_VOICE_RESEARCH_AND_PLAN.md`.

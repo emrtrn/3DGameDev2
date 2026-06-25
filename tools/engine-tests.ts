@@ -123,7 +123,7 @@ import {
 } from "../src/game/gameModes/catalog";
 import { resolveGameMode } from "../src/game/gameModes/registry";
 import { createProjectGameMode } from "../src/game/gameModes/projectGameMode";
-import { formatGameModeDebug } from "../src/scene/debugStats";
+import { formatGameModeDebug, formatUiDebug } from "../src/scene/debugStats";
 import {
   applyConfiguredMouseLook,
   applyMouseLook,
@@ -10635,6 +10635,114 @@ check("resolveInlineStyle resolves $token refs to CSS variables", () => {
   assert.equal(style["background"], "var(--forge-ui-color-surface)");
   assert.equal(style["padding"], "var(--forge-ui-space-lg)"); // token wins over px
   assert.equal(style["gap"], "8px"); // literal still px
+});
+
+check("Include node normalizes to a valid UiNode (not a container)", () => {
+  const node = createUiNode("Include", "inc1");
+  assert.equal(node.widget, "Include");
+  assert.equal(node.props.src, "");
+  assert.deepEqual(node.children, []);
+});
+
+check("buildUiRenderNode renders Include placeholder when resolveWidget is absent", () => {
+  const def = normalizeUiWidgetDef({
+    name: "Test",
+    root: {
+      id: "root",
+      widget: "Canvas",
+      children: [{ id: "inc", widget: "Include", props: { src: "some-widget" }, children: [] }],
+    },
+  });
+  const tree = buildUiRenderTree(def);
+  const incNode = tree.children[0];
+  assert.ok(incNode, "Include child should exist");
+  assert.equal(incNode.widget, "Include");
+  assert.equal(incNode.text, "[some-widget]");
+  assert.equal(incNode.children.length, 0);
+});
+
+check("buildUiRenderNode inlines referenced widget when resolveWidget returns a def", () => {
+  const buttonDef = normalizeUiWidgetDef({
+    name: "Button",
+    root: { id: "btn-root", widget: "Button", props: { text: "Click" }, children: [] },
+  });
+  const parentDef = normalizeUiWidgetDef({
+    name: "Parent",
+    root: {
+      id: "root",
+      widget: "Canvas",
+      children: [{ id: "inc", widget: "Include", props: { src: "my-button" }, children: [] }],
+    },
+  });
+  const tree = buildUiRenderTree(parentDef, { resolveWidget: (src) => src === "my-button" ? buttonDef : null });
+  const wrapper = tree.children[0];
+  assert.ok(wrapper, "Include wrapper should exist");
+  assert.equal(wrapper.widget, "Include");
+  assert.equal(wrapper.style["display"], "contents");
+  assert.equal(wrapper.children.length, 1);
+  assert.equal(wrapper.children[0].widget, "Button");
+  assert.equal(wrapper.children[0].text, "Click");
+});
+
+check("buildUiRenderNode guards against Include cycles (depth limit)", () => {
+  let callCount = 0;
+  const cyclicResolver = (): ReturnType<typeof normalizeUiWidgetDef> => {
+    callCount += 1;
+    return normalizeUiWidgetDef({
+      name: "Cyclic",
+      root: { id: "self", widget: "Include", props: { src: "self" }, children: [] },
+    });
+  };
+  const def = normalizeUiWidgetDef({
+    name: "Root",
+    root: { id: "root", widget: "Include", props: { src: "self" }, children: [] },
+  });
+  // Should not throw or recurse infinitely; stops at MAX_INCLUDE_DEPTH (5)
+  const tree = buildUiRenderTree(def, { resolveWidget: cyclicResolver });
+  assert.ok(callCount <= 6, `resolver called ${callCount} times (expected ≤ 6)`);
+  assert.ok(tree, "tree should be non-null after depth-limited recursion");
+});
+
+check("UiViewModelStore.snapshot returns path-sorted [path, value] pairs", () => {
+  const store = new UiViewModelStore();
+  store.setField("player.speed", 2.5);
+  store.setField("inventory.gold", 10);
+  store.setField("player.healthLabel", "100/100");
+  assert.deepEqual(store.snapshot(), [
+    ["inventory.gold", 10],
+    ["player.healthLabel", "100/100"],
+    ["player.speed", 2.5],
+  ]);
+});
+
+check("formatUiDebug renders the HUD, screen stack and bound fields", () => {
+  const lines = formatUiDebug({
+    hud: "Hud",
+    screens: ["Menu", "Options"],
+    fields: [
+      ["player.speed", 2.5],
+      ["player.speedLabel", "Speed 2.5 m/s"],
+    ],
+  });
+  assert.deepEqual(lines, [
+    "ui",
+    "hud: Hud",
+    "screens(2): Menu > Options",
+    "fields(2):",
+    '  player.speed = 2.5',
+    '  player.speedLabel = "Speed 2.5 m/s"',
+  ]);
+});
+
+check("formatUiDebug shows placeholders when nothing is mounted", () => {
+  const lines = formatUiDebug({ hud: null, screens: [], fields: [] });
+  assert.deepEqual(lines, ["ui", "hud: none", "screens: none", "fields: none"]);
+});
+
+check("formatUiDebug clips long string values", () => {
+  const long = "x".repeat(40);
+  const lines = formatUiDebug({ hud: null, screens: [], fields: [["msg", long]] });
+  assert.equal(lines.at(-1), `  msg = "${"x".repeat(29)}..."`);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

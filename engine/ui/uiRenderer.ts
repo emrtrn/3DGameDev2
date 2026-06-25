@@ -11,6 +11,7 @@
  *      node).
  *
  * v1 widget set: Canvas, Panel, Stack, Text, Image, Button, ProgressBar.
+ * v2 adds: Include (embeds another .ui.json asset inline).
  */
 import {
   isUiContainerKind,
@@ -33,7 +34,21 @@ const WIDGET_CSS_NAME: Record<UiWidgetKind, string> = {
   Image: "image",
   Button: "button",
   ProgressBar: "progress",
+  Include: "include",
 };
+
+/**
+ * Options for the pure build pass.
+ * `resolveWidget` is called when an `Include` node is encountered; if it
+ * returns a def the included tree is inlined, otherwise a placeholder is shown.
+ * `_depth` is an internal recursion guard (max {@link MAX_INCLUDE_DEPTH}).
+ */
+export interface UiBuildOptions {
+  resolveWidget?: (src: string) => UiWidgetDef | null;
+  _depth?: number;
+}
+
+const MAX_INCLUDE_DEPTH = 5;
 
 /** Plain, DOM-free description of one rendered element (the renderer's IR). */
 export interface UiRenderNode {
@@ -169,7 +184,39 @@ function classNameFor(node: UiNode): string {
 }
 
 /** Pure: maps one authored {@link UiNode} into a {@link UiRenderNode}. */
-export function buildUiRenderNode(node: UiNode): UiRenderNode {
+export function buildUiRenderNode(node: UiNode, opts: UiBuildOptions = {}): UiRenderNode {
+  // Include: embed the referenced widget's tree (with cycle/depth guard).
+  if (node.widget === "Include") {
+    const src = readUiStaticString(node, "src");
+    const depth = opts._depth ?? 0;
+    if (src && opts.resolveWidget && depth < MAX_INCLUDE_DEPTH) {
+      const ref = opts.resolveWidget(src);
+      if (ref) {
+        const inner = buildUiRenderNode(ref.root, { ...opts, _depth: depth + 1 });
+        // Transparent wrapper preserves the Include node's id in the byId map
+        // without affecting flex layout (display:contents).
+        return {
+          nodeId: node.id,
+          widget: "Include",
+          tag: "div",
+          className: "forge-ui-node forge-ui-include forge-ui-include--resolved",
+          style: { display: "contents" },
+          children: [inner],
+        };
+      }
+    }
+    // Placeholder: show a labelled box so the author knows the ref is unresolved.
+    return {
+      nodeId: node.id,
+      widget: "Include",
+      tag: "div",
+      className: "forge-ui-node forge-ui-include",
+      style: {},
+      text: src ? `[${src}]` : "[include]",
+      children: [],
+    };
+  }
+
   const style = resolveInlineStyle(node);
   const className = classNameFor(node);
 
@@ -217,13 +264,15 @@ export function buildUiRenderNode(node: UiNode): UiRenderNode {
   }
 
   // Containers (Canvas/Panel/Stack): recurse children.
-  const children = isUiContainerKind(node.widget) ? node.children.map(buildUiRenderNode) : [];
+  const children = isUiContainerKind(node.widget)
+    ? node.children.map((child) => buildUiRenderNode(child, opts))
+    : [];
   return { nodeId: node.id, widget: node.widget, tag: "div", className, style, children };
 }
 
 /** Pure: builds the full render tree for an asset (its root node). */
-export function buildUiRenderTree(def: UiWidgetDef): UiRenderNode {
-  return buildUiRenderNode(def.root);
+export function buildUiRenderTree(def: UiWidgetDef, opts: UiBuildOptions = {}): UiRenderNode {
+  return buildUiRenderNode(def.root, opts);
 }
 
 export interface UiMountContext {
@@ -267,6 +316,8 @@ export interface RenderedUiWidget {
 
 export interface RenderUiWidgetOptions {
   onAction?: (action: UiAction, nodeId: string) => void;
+  /** Resolves Include widget `src` references to their definitions. */
+  resolveWidget?: (src: string) => UiWidgetDef | null;
 }
 
 /** Builds + mounts a widget asset into a detached element ready to append to the overlay. */
@@ -274,7 +325,9 @@ export function renderUiWidget(
   def: UiWidgetDef,
   options: RenderUiWidgetOptions = {},
 ): RenderedUiWidget {
-  const tree = buildUiRenderTree(def);
+  const buildOpts: UiBuildOptions = {};
+  if (options.resolveWidget) buildOpts.resolveWidget = options.resolveWidget;
+  const tree = buildUiRenderTree(def, buildOpts);
   const byId = new Map<string, HTMLElement>();
   const element = mountUiRenderNode(tree, { onAction: options.onAction, byId });
   return {

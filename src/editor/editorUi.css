@@ -2474,6 +2474,13 @@ body.editor-mode #debug-stats {
   transform-origin: top left;
   background: #0e1014;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  /* Mirror the runtime #ui-overlay defaults so non-themed widgets preview as
+     they play; a widget's resolved .theme.json overrides these at render time. */
+  --forge-ui-color: #f5f7fb;
+  --forge-ui-accent: #4f8cff;
+  --forge-ui-surface: rgba(16, 19, 26, 0.82);
+  --forge-ui-radius: 6px;
+  --forge-ui-gap: 12px;
 }
 .uie-stage-inner .forge-ui-node,
 .uie-stage-inner .forge-ui-canvas { pointer-events: auto; }

@@ -111,7 +111,7 @@ tutkalı shell'lerde ince kalır.
   grafi Source/Output/Mixer/Random/Modulator/Loop/Delay ile baslar, spatial,
   bus/submix, modulation, occlusion ve MetaSound-benzeri procedural graph daha
   sonraki fazlara ertelenir. Takip dokumani:
-  `docs/planned/SOUND_CUE_EDITOR_RESEARCH_AND_PLAN.md`.
+  `docs/ongoing/SOUND_CUE_EDITOR_RESEARCH_AND_PLAN.md`.
 
 - *2026-06-23* - **Dialogue/Voice kapsam karari.** Unreal'daki Dialogue Voice
   ve Dialogue Wave modeli, Sound Cue Lite'in alt ozelligi degil; speaker/listener
@@ -119,7 +119,7 @@ tutkalı shell'lerde ince kalır.
   nedeniyle ayri bir Dialogue/Voice feature alani olmali. Sound Cue Lite ile
   yalnizca playback katmaninda kesisir; live voice chat / microphone capture ise
   daha ayri bir multiplayer/media kapsamidir. Takip dokumani:
-  `docs/planned/DIALOGUE_AND_VOICE_RESEARCH_AND_PLAN.md`.
+  `docs/ongoing/DIALOGUE_AND_VOICE_RESEARCH_AND_PLAN.md`.
 
 - *2026-06-23* - **User Interface / UMG-Slate kapsam karari.** Forge, Unreal'in
   UI ayrimlarini alacak ama araclari birebir kopyalamayacak: oyun HUD/menu

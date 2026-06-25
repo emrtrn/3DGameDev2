@@ -72,4 +72,12 @@ export class UiViewModelStore {
     this.fields.clear();
     this.dirty.clear();
   }
+
+  /**
+   * All fields as a path-sorted `[path, value]` list — for the `?debug` UI
+   * inspector. Read-only view; mutate via {@link setField}. Pure: no DOM.
+   */
+  snapshot(): Array<[string, UiFieldValue]> {
+    return [...this.fields.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }
 }

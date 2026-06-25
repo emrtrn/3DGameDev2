@@ -28,7 +28,8 @@ import {
 } from "@engine/ui/uiWidget";
 import { renderUiWidget, type RenderedUiWidget } from "@engine/ui/uiRenderer";
 import { BINDABLE_UI_PROPS } from "@engine/ui/uiBinding";
-import { loadUiWidgetAsset, saveUiWidgetAsset } from "@/editor/uiWidgetStore";
+import { applyUiTheme, type UiThemeDef } from "@engine/ui/uiTheme";
+import { loadUiThemeAsset, loadUiWidgetAsset, saveUiWidgetAsset } from "@/editor/uiWidgetStore";
 
 type StatusTone = "info" | "success" | "error";
 
@@ -85,6 +86,8 @@ function fieldsForWidget(kind: UiWidgetKind): FieldDesc[] {
     case "Button":
       // Button text + action are rendered specially (see renderDetails).
       return [{ key: "text", label: "Label", kind: "text" }];
+    case "Include":
+      return [{ key: "src", label: "Widget Asset ID", kind: "text" }];
     default:
       return layout; // Canvas / Panel
   }
@@ -125,6 +128,8 @@ export class UiWidgetEditor {
 
   private def: UiWidgetDef;
   private selectedId: string;
+  /** Resolved theme for the live preview (matches runtime $token rendering). */
+  private theme: UiThemeDef | null = null;
   private rendered: RenderedUiWidget | null = null;
   private idCounter = 0;
   private dirty = false;
@@ -208,6 +213,7 @@ export class UiWidgetEditor {
   private async load(): Promise<void> {
     try {
       this.def = await loadUiWidgetAsset(this.options.path, this.options.label);
+      this.theme = this.def.theme ? await loadUiThemeAsset(this.def.theme) : null;
       this.selectedId = this.def.root.id;
       this.dirty = false;
       this.renderAll();
@@ -283,6 +289,8 @@ export class UiWidgetEditor {
     this.rendered?.dispose();
     // No onAction: in the editor a click selects the node, it does not navigate.
     this.rendered = renderUiWidget(this.def, {});
+    // Apply the widget's referenced theme so $token props preview as they play.
+    if (this.theme) applyUiTheme(this.rendered.element, this.theme);
     this.stageInner.replaceChildren(this.rendered.element);
     this.fitStage();
     this.highlightSelected();

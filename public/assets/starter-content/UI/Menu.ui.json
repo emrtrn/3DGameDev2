@@ -16,6 +16,15 @@
     },
     "children": [
       {
+        "id": "image-1",
+        "widget": "Image",
+        "props": {
+          "width": 200,
+          "height": 50
+        },
+        "children": []
+      },
+      {
         "id": "panel",
         "widget": "Stack",
         "props": {
@@ -24,7 +33,7 @@
           "align": "center",
           "padding": 20,
           "background": "$color.surface",
-          "radius": "$radius.lg"
+          "radius": 8
         },
         "children": [
           {

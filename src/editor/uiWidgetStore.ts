@@ -7,7 +7,9 @@
  * `materialStore.ts`.
  */
 import { normalizeUiWidgetDef, type UiWidgetDef } from "@engine/ui/uiWidget";
-import { projectFileUrl } from "@/project/ProjectSystem";
+import { normalizeUiThemeDef, type UiThemeDef } from "@engine/ui/uiTheme";
+import { assetPath, type AssetManifest } from "@engine/assets/manifest";
+import { loadActiveProject, projectFileUrl } from "@/project/ProjectSystem";
 
 export async function loadUiWidgetAsset(
   path: string,
@@ -20,6 +22,42 @@ export async function loadUiWidgetAsset(
   } catch {
     return normalizeUiWidgetDef({ name: fallbackName }, fallbackName);
   }
+}
+
+/**
+ * Resolves a widget `theme` reference (manifest asset id first, else a direct
+ * public-relative path) to its theme def, mirroring
+ * `RuntimeSceneApp.loadUiThemeDefs` so the editor preview matches what plays.
+ * Returns null when the reference cannot be resolved (preview falls back to the
+ * built-in CSS variables).
+ */
+export async function loadUiThemeAsset(ref: string): Promise<UiThemeDef | null> {
+  try {
+    const path = await resolveThemePath(ref);
+    const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
+    if (!response.ok) return null;
+    return normalizeUiThemeDef(await response.json(), ref);
+  } catch {
+    return null;
+  }
+}
+
+/** Maps a theme ref to a public path via the asset manifest, else uses it as-is. */
+async function resolveThemePath(ref: string): Promise<string> {
+  try {
+    const project = await loadActiveProject();
+    const response = await fetch(projectFileUrl(project.manifest.editor.assetManifest), {
+      cache: "no-cache",
+    });
+    if (response.ok) {
+      const manifest = (await response.json()) as AssetManifest;
+      const asset = manifest.assets.find((entry) => entry.id === ref);
+      if (asset) return assetPath(asset);
+    }
+  } catch {
+    // Manifest unavailable: treat the ref as a direct public-relative path.
+  }
+  return ref;
 }
 
 export async function saveUiWidgetAsset(

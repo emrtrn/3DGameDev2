@@ -295,6 +295,9 @@ Bu, Forge'un mevcut `?editor` / runtime ayrimina uyumludur.
 - [x] Tema/token sistemi ekle: `.theme.json` ve CSS variable uretimi. → `engine/ui/uiTheme.ts` (`UiThemeDef`, `themeToCssVariables`, `applyUiTheme`); widget prop'larinda `$token` ref → `var(--forge-ui-*)`; runtime widget'in `theme` ref'ini yukler + koke uygular.
 - [x] UI icin headless schema/render testleri ekle. → `tools/engine-tests.ts` icinde 11 check (normalizer + render-tree + style allowlist).
 - [x] `npm run build:verify` ile runtime paketinde editor UI import'u olmadigini dogrula. → U3 sonrasi yesil: 330 test + `verify:dist --strict` "runtime-only" (UI artik runtime bundle'da, editor degil).
+- [x] **Include** widget kind ekle: baska `.ui.json` asset'lerini inline gomme, derinlik limiti ile dongü koruması, placeholder + resolved CSS wrapper, RuntimeUiSubsystem'e `resolveWidget` callback, RuntimeSceneApp'te tum `.ui.json` asset'leri on-load, 4 yeni headless test. → 344 check + `verify:dist --strict` yesil.
+- [x] **UI debug inspector** ekle: `?debug` overlay'inde aktif HUD + ekran stack'i + ViewModel store alanlari. → `UiViewModelStore.snapshot()` + `RuntimeUiSubsystem.getDebugSnapshot()` + `RuntimeSceneApp.getUiDebugSnapshot()` + `debugStats.ts#formatUiDebug` (pure); 4 yeni headless test → 348 check.
+- [x] **Editor tema onizleme** ekle: UI editordeki canli preview artik widget'in `theme` ref'ini cozup uyguluyor (`loadUiThemeAsset` + `applyUiTheme`); stage'e runtime `--forge-ui-*` varsayilanlari verildi, boylece temasiz widget'lar da oyundaki gibi gorunuyor. `verify:dist --strict` hala runtime-only (editor kodu dist'e sizmaz).
 - [ ] Sonraki faz icin animation, localization, accessibility ve world-space UI gereksinimlerini ayri planla. (U7)
 
 ## Uygulama durumu
@@ -431,11 +434,41 @@ Eklenenler:
 Kapsam disi (U6b'ye not): reusable widget/template (named slot) ve debug inspector
 bu fazda yapilmadi — ayri, daha buyuk parcalar.
 
-### Sonraki adim (U6b/U7)
+### U6b — reusable widget + debug inspector + editor tema onizleme (TAMAMLANDI)
 
-- U6b: reusable widget/template (named slot/`include`), UI debug inspector
-  (aktif ekranlar + store alanlari), editor tema onizleme.
-- U7: animation, localization, accessibility, world-space widget/component.
+Uretim kalitesi polish'inin kalan ucu. Uc parca:
+
+- **Reusable widget (`Include`):** ayri `.ui.json` asset'lerini inline gomer
+  (yukarida ayri checklist maddesi + Include notlari). Named slot/template sonraki
+  fazda.
+- **UI debug inspector:** `?debug` overlay'i artik UI host durumunu da yaziyor —
+  mounted HUD adi, aktif ekran stack'i (alt→ust) ve ViewModel store alanlari
+  (`path = value`, uzun string'ler kirpilir). Veri yollari:
+  `UiViewModelStore.snapshot()` (path-sorted `[path, value]`), `RuntimeUiSubsystem`
+  ekran/HUD adlarini izler ve `getDebugSnapshot()` ile verir,
+  `RuntimeSceneApp.getUiDebugSnapshot()` ikisini + store'u birlestirir,
+  `debugStats.ts#formatUiDebug` (pure, DOM'suz) overlay satirlarina cevirir.
+  `RuntimeStatsApp.getUiDebugSnapshot?` opsiyonel — editor `SceneApp`'te yok, o
+  yuzden inspector yalniz runtime app'te gorunur. 4 yeni headless test
+  (snapshot sirasi + formatUiDebug doluluk/placeholder/kirpma).
+- **Editor tema onizleme:** UI editordeki canli preview artik widget'in `theme`
+  ref'ini cozup uyguluyor (`uiWidgetStore.loadUiThemeAsset` → manifest id/path
+  resolve, sonra `applyUiTheme` preview kokune). Ayrica `.uie-stage-inner`'a
+  runtime `--forge-ui-*` varsayilanlari verildi, boylece temasiz widget'lar da
+  oyundaki gibi gorunuyor; tema varsa onun token'lari ustune yazar. Editor kodu
+  dev-only kalir (`verify:dist --strict` hala runtime-only).
+
+Dogrulama: `tsc`, `npm run build:verify` (348 test + `verify:dist --strict`
+runtime-only) PASS.
+
+Kapsam disi (U6b'de yapilmadi): named slot/template (Include'un parametreli
+hali) ve editorde Include subtree'sinin canli onizlemesi (editor hala placeholder
+gosterir) — U7 oncesi opsiyonel polish.
+
+### Sonraki adim (U7)
+
+- U7: animation, localization, accessibility, world-space widget/component
+  gereksinimlerini ayri planla.
 
 ## Onerilen uygulama sirasi
 

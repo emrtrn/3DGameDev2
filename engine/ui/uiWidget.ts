@@ -33,6 +33,7 @@ export const UI_WIDGET_KINDS = [
   "Image",
   "Button",
   "ProgressBar",
+  "Include",
 ] as const;
 export type UiWidgetKind = (typeof UI_WIDGET_KINDS)[number];
 
@@ -174,6 +175,7 @@ const NEW_NODE_PROPS: Partial<Record<UiWidgetKind, Record<string, SceneJsonValue
   Button: { text: "Button" },
   ProgressBar: { value: 50, max: 100 },
   Stack: { direction: "column", gap: 8 },
+  Include: { src: "" },
 };
 
 /** Builds a new node of the given kind with default props and the supplied id. */
