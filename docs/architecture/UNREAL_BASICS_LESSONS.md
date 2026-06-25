@@ -128,7 +128,7 @@ tutkalı shell'lerde ince kalır.
   store, input tarafi Common UI benzeri screen stack/focus/back routing olacak.
   World-space UI, screen UI oturduktan sonra `WidgetComponentLite` fazina
   birakilmali. Takip dokumani:
-  `docs/planned/USER_INTERFACE_UMG_SLATE_RESEARCH_AND_PLAN.md`.
+  `docs/completed/USER_INTERFACE_UMG_SLATE_RESEARCH_AND_PLAN.md`.
 
 - *2026-06-20* — **Script Communication System kararı.** Forge, Unreal Blueprint
   Communication modelini görsel node VM olarak kopyalamayacak. Actor Script verisi
