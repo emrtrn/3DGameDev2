@@ -195,7 +195,9 @@ import { normalizeUiWidgetDef, type UiWidgetDef } from "@engine/ui/uiWidget";
 import { normalizeUiThemeDef, type UiThemeDef } from "@engine/ui/uiTheme";
 import { UiViewModelStore, type UiFieldValue } from "@engine/ui/uiViewModel";
 import { LocaleRegistry, normalizeUiLocaleTable } from "@engine/ui/uiLocale";
+import { normalizeWorldWidgets } from "@engine/ui/uiWorldWidget";
 import { RuntimeUiSubsystem } from "@/ui/RuntimeUiSubsystem";
+import { WorldUiSubsystem, type WorldUiDebugSnapshot } from "@/ui/WorldUiSubsystem";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   assetCollisionDefHasCollider,
@@ -264,6 +266,8 @@ export interface UiDebugSnapshot {
   locale: string | null;
   /** Accessibility audit findings across the mounted HUD + screens. */
   audit: string[];
+  /** World-space UI billboards: mounted + on-screen counts. */
+  world: WorldUiDebugSnapshot;
 }
 
 export interface RuntimeStatsApp {
@@ -377,6 +381,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private inputMode: InputMode = "ui";
   /** UMG Lite runtime UI host; null when the layout authors no HUD/pause widget. */
   private uiSubsystem: RuntimeUiSubsystem | null = null;
+  /** World-space UI host (projected DOM billboards); null when the layout places none. */
+  private worldUiSubsystem: WorldUiSubsystem | null = null;
   /** ViewModel-lite store backing UI `{ "bind": "path" }` props (e.g. `player.speed`). */
   private readonly uiStore = new UiViewModelStore();
   /** Pause-menu widget pushed on the `menu` action; null when none is configured. */
@@ -545,6 +551,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.updateUiInput();
       this.gameModeSession?.update(deltaMs / 1000);
       this.updateUiStore();
+      this.updateWorldUi();
       this.updateParticleEffects(deltaMs / 1000);
       if (this.skyObject) followCameraWithSky(this.skyObject, this.camera);
       if (this.cloudObject) {
@@ -563,6 +570,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     window.removeEventListener("resize", this.handleResize);
     this.uiSubsystem?.dispose();
     this.uiSubsystem = null;
+    this.worldUiSubsystem?.dispose();
+    this.worldUiSubsystem = null;
     this.keyboardInput.detach();
     this.pointerLook.detach();
     this.pointerButtons.detach();
@@ -654,6 +663,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       fields: this.uiStore.snapshot(),
       locale: this.localeRegistry?.activeLocale ?? null,
       audit: host.audit,
+      world: this.worldUiSubsystem?.getDebugSnapshot() ?? { count: 0, visible: 0 },
     };
   }
 
@@ -816,33 +826,49 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!host) return;
     const hudId = this.layout.worldSettings?.hudWidget;
     const pauseId = this.layout.worldSettings?.pauseMenuWidget;
-    if (!hudId && !pauseId) return;
+    const worldWidgets = normalizeWorldWidgets(this.layout.worldWidgets);
+    if (!hudId && !pauseId && worldWidgets.length === 0) return;
 
     // Load ALL .ui.json assets so Include refs in any widget can be resolved.
     const allDefs = await this.loadAllUiWidgetDefs();
     for (const [id, def] of allDefs) this.uiDefs.set(id, def);
     await this.loadUiThemeDefs(this.uiDefs.values());
     this.localeRegistry = await this.loadUiLocaleRegistry();
-    this.uiSubsystem = new RuntimeUiSubsystem(host, {
-      store: this.uiStore,
-      ...(this.localeRegistry ? { locale: this.localeRegistry } : {}),
-      resolveTheme: (ref) => this.uiThemes.get(ref) ?? null,
-      resolveWidget: (src) => this.uiDefs.get(src) ?? null,
-      onMessageAction: (action) => {
-        this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
-      },
-      onScreenStackChange: (depth) => this.handleUiScreenStackChange(depth),
-    });
 
     // Seed bound fields so the initial render shows values (not blanks/zeroes).
     this.uiStore.setField("player.speed", 0);
     this.uiStore.setField("player.speedLabel", "Speed 0.0 m/s");
 
-    if (hudId) {
-      const hud = this.uiDefs.get(hudId);
-      if (hud) this.uiSubsystem.setHud(hud);
+    if (hudId || pauseId) {
+      this.uiSubsystem = new RuntimeUiSubsystem(host, {
+        store: this.uiStore,
+        ...(this.localeRegistry ? { locale: this.localeRegistry } : {}),
+        resolveTheme: (ref) => this.uiThemes.get(ref) ?? null,
+        resolveWidget: (src) => this.uiDefs.get(src) ?? null,
+        onMessageAction: (action) => {
+          this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
+        },
+        onScreenStackChange: (depth) => this.handleUiScreenStackChange(depth),
+      });
+      if (hudId) {
+        const hud = this.uiDefs.get(hudId);
+        if (hud) this.uiSubsystem.setHud(hud);
+      }
+      if (pauseId) this.pauseMenuDef = this.uiDefs.get(pauseId) ?? null;
     }
-    if (pauseId) this.pauseMenuDef = this.uiDefs.get(pauseId) ?? null;
+
+    if (worldWidgets.length > 0) {
+      this.worldUiSubsystem = new WorldUiSubsystem(host, {
+        resolveWidget: (src) => this.uiDefs.get(src) ?? null,
+        resolveTheme: (ref) => this.uiThemes.get(ref) ?? null,
+        store: this.uiStore,
+        ...(this.localeRegistry ? { locale: this.localeRegistry } : {}),
+        onMessageAction: (action) => {
+          this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
+        },
+      });
+      this.worldUiSubsystem.setWidgets(worldWidgets);
+    }
   }
 
   /**
@@ -967,12 +993,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * planar speed (`player.speed` / `player.speedLabel`); the HUD binds to these.
    */
   private updateUiStore(): void {
-    if (!this.uiSubsystem) return;
+    if (!this.uiSubsystem && !this.worldUiSubsystem) return;
     const possessed = this.gameModeSession?.playerState.pawnEntityId ?? null;
     const speed = (possessed ? this.locomotionReports.get(possessed)?.planarSpeed : 0) ?? 0;
     this.uiStore.setField("player.speed", speed);
     this.uiStore.setField("player.speedLabel", `Speed ${speed.toFixed(1)} m/s`);
     this.uiStore.flush();
+  }
+
+  /**
+   * Projects each world-space UI widget onto the screen for this frame, using the
+   * live camera + the canvas pixel size. No-op when the layout places none.
+   */
+  private updateWorldUi(): void {
+    if (!this.worldUiSubsystem) return;
+    const canvas = this.renderer.domElement;
+    this.worldUiSubsystem.update(this.camera, canvas.clientWidth, canvas.clientHeight);
   }
 
   /**

@@ -302,7 +302,7 @@ Bu, Forge'un mevcut `?editor` / runtime ayrimina uyumludur.
 - [x] **U7a — UI animation:** deklaratif gecis preset'leri (fade/slide/scale) ekran push/pop icin; `prefers-reduced-motion` saygisi. (timeline yok) → `engine/ui/uiTransition.ts` + `UiWidgetDef.transition` + RuntimeUiSubsystem enter/exit + style.css preset'leri + editor transition paneli & "Play"; 6 yeni headless test → 354 check, `verify:dist --strict` runtime-only.
 - [x] **U7b — Localization:** `.loc.json` string tablolari + Text `textKey`, aktif locale resolver, runtime + binding entegrasyonu. → `engine/ui/uiLocale.ts` (`normalizeUiLocaleTable`/`applyLocParams`/`LocaleRegistry`) + `UiTextKey` (`uiWidget.ts`) + renderer `resolveLoc` + `bindUiLocale` (locale-change re-apply) + `RuntimeSceneApp.loadUiLocaleRegistry` + `worldSettings.locale` (save-validator allowlist) + debug `locale:` satiri; demo en/tr tablolari, `Menu.ui.json` textKey'lere tasindi; 8 yeni headless test → 361 check, `verify:dist --strict` runtime-only.
 - [x] **U7c — Accessibility:** ARIA rol/label/alt, klavye focus navigation, modal focus trap + initial/restore focus, high-contrast tema. → `engine/ui/uiA11y.ts` (`resolveUiA11yAttrs`/`collectFocusables`/`nextFocusIndex`/`auditUiA11y`) + `UiNode.a11y`/`UiWidgetDef.initialFocus` (`uiWidget.ts`) + renderer ARIA attrs + ProgressBar canli `aria-valuenow` (`uiBinding.ts`) + RuntimeUiSubsystem `role=dialog`/`aria-modal` + focus trap + initial/restore focus + Tab/arrow nav + `?debug` a11y audit + `:focus-visible` & `prefers-contrast` (style.css) + editor a11y/initialFocus paneli; 8 yeni headless test → 369 check, `verify:dist --strict` runtime-only.
-- [ ] **U7d — World-space widget (WidgetComponentLite):** once screen-projected DOM (billboard label/prompt), sonra raycast etkilesim; true 3D widget mesh en sona.
+- [x] **U7d — World-space widget (WidgetComponentLite) — Secenek A:** screen-projected DOM billboard (world-pos anchor). → `engine/ui/uiWorldWidget.ts` (`WorldUiWidget` model + `normalizeWorldWidget(s)` + `resolveWorldWidgetVisibility` fade/scale + `ndcToScreen`) + `RoomLayout.worldWidgets` (`layout.ts`, save-validator allowlist'inde) + `src/ui/WorldUiSubsystem.ts` (overlay layer, frame basina projeksiyon) + RuntimeSceneApp entegrasyonu + `?debug` `world: n/m` + `.forge-ui-world-*` CSS + demo `WorldLabel.ui.json`/`playground.json`; 4 yeni headless test → 373 check, `verify:dist --strict` runtime-only. **Ertelendi:** entity/socket anchor, editor gizmo yerlestirme, raycast etkilesim derinligi, Secenek B (true 3D widget mesh).
 
 ## Uygulama durumu
 
@@ -605,11 +605,57 @@ Kapsam disi (planda): gamepad focus routing (public `moveFocus`/`activateFocused
 hazir ama action-map'e baglanmadi — `GamepadInputSource` yok), tam screen-reader
 live-region senaryolari, otomatik kontrast hesaplama, RTL layout.
 
+### U7d — World-space widget (WidgetComponentLite), Secenek A (TAMAMLANDI)
+
+U7 son alt-fazinin ilk kesimi: `.ui.json` widget'lari **ekrana izdusurulen DOM
+billboard'lari** olarak — UMG Widget Component'in hafif karsiligi. Ucuz, net
+metin, DOM-to-texture yok; gercek 3D widget mesh (Secenek B) ertelendi.
+
+Eklenenler:
+
+- `engine/ui/uiWorldWidget.ts` (saf): `WorldUiWidget` veri modeli (`widget`
+  asset id + `anchor.worldPos` + opsiyonel `offset`/`maxDistance`),
+  `normalizeWorldWidget`/`normalizeWorldWidgets` (savunmaci — anchor yoksa origin,
+  bozuk entry dusurulur), `resolveWorldWidgetVisibility(distance, {maxDistance})`
+  → `{ visible, opacity, scale }` (son %20'de fade + referans-mesafe perspektif
+  scale, clamp'li), `ndcToScreen` (NDC→viewport px + kamera onunde mi). Three/DOM
+  bagimsiz, headless test.
+- `engine/scene/layout.ts`: `RoomLayout.worldWidgets?: WorldUiWidget[]`.
+  `tools/saveValidator.ts`: layout output'una `worldWidgets` eklendi
+  (`normalizeWorldWidgets` ile lenient — `.ui.json` save deseninin kardesi),
+  yoksa kayitta duserdi (CLAUDE.md allowlist gotcha — yeni top-level layout alani).
+- `src/ui/WorldUiSubsystem.ts`: `#ui-overlay` altinda `.forge-ui-world-layer`
+  (click-through); her widget bir kez mount edilir (render + tema + store/locale
+  binding — screen-space host ile ayni boru hatti), her frame `update(camera,
+  w, h)` anchor'i izdusurup `translate(px) translate(-50%,-50%) scale()` +
+  opacity yazar; kamera arkasi / `maxDistance` otesi gizlenir.
+- `src/scene/RuntimeSceneApp.ts`: `setupRuntimeUi` artik HUD/pause olmasa da
+  `worldWidgets` icin calisir; frame loop'ta `updateWorldUi` (canvas client px);
+  `dispose` temizler; `UiDebugSnapshot.world = { count, visible }` →
+  `debugStats.ts` `world: n/m` satiri.
+- `src/style.css`: `.forge-ui-world-layer` + `.forge-ui-world-item` (mutlak
+  konum, frame'de transform) + item icindeki `.forge-ui-canvas`'i icerige
+  gore boyutlandirma (HUD gibi tam-cerceve degil).
+- Demo: `WorldLabel.ui.json` ("Player Start" pill, default-theme `$token`) +
+  manifest `world-label`; `playground.json` `worldWidgets` (Player Start uzerinde,
+  `maxDistance: 30`).
+- 4 yeni headless test (normalizeWorldWidget(s) / resolveWorldWidgetVisibility
+  fade+scale / ndcToScreen + formatUiDebug `world` satiri).
+
+Dogrulama: `tsc`, `npm run build:verify` (373 test + `verify:dist --strict`
+runtime-only), `check:assets` PASS. Elle: `/` ac, Player Start uzerinde "Player
+Start" etiketini gor; yaklas/uzaklas → buyur/kuculur ve uzakta solar; `?debug`
+ile `world: n/m` say.
+
+Kapsam disi (sonraki kesim): entity/socket anchor (su an yalniz `worldPos`),
+editor gizmo ile yerlestirme (su an JSON authoring), raycast occlusion +
+3D-widget etkilesim, Secenek B (DOM→texture / gercek Three mesh, egri panel).
+
 ### Sonraki adim (U7)
 
-- Sirada **U7d (world-space widget / WidgetComponentLite)** — son alt-faz, ayri
-  subsystem; Secenek A (screen-projected DOM billboard) ile baslar. Detayli plan
-  asagida ("## U7 — Ileri UI plani").
+- U7'nin dort alt-fazi (a–d) ilk kesimleriyle tamamlandi. Acik takip isleri:
+  U7d entity/socket anchor + editor gizmo yerlestirme + Secenek B (true 3D
+  widget mesh / raycast). Bunlar ayri, daha buyuk parcalar — istege bagli.
 
 ## U7 — Ileri UI plani
 

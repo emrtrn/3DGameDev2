@@ -301,5 +301,22 @@
       ],
       "rotationYDeg": 0
     }
+  ],
+  "worldWidgets": [
+    {
+      "widget": "world-label",
+      "anchor": {
+        "worldPos": [
+          -0.77,
+          1.7,
+          1.89
+        ]
+      },
+      "offset": [
+        0,
+        -8
+      ],
+      "maxDistance": 30
+    }
   ]
 }

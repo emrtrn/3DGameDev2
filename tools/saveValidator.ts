@@ -44,6 +44,7 @@ import {
   type ParentClass,
 } from "../engine/scene/actorScript";
 import { defaultUiWidgetDef, normalizeUiWidgetDef } from "../engine/ui/uiWidget";
+import { normalizeWorldWidgets } from "../engine/ui/uiWorldWidget";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -1169,6 +1170,15 @@ export function validateLayout(value: unknown): unknown {
             throw new Error("actors must be an array");
           })();
 
+  // World-space UI widgets (screen-projected billboards). Normalized defensively
+  // (mirrors the `.ui.json` save path): unusable entries are dropped, not thrown.
+  const worldWidgets = (() => {
+    if (layout.worldWidgets === undefined) return null;
+    if (!Array.isArray(layout.worldWidgets)) throw new Error("worldWidgets must be an array");
+    const normalized = normalizeWorldWidgets(layout.worldWidgets);
+    return normalized.length > 0 ? (normalized as unknown as Record<string, unknown>[]) : null;
+  })();
+
   const output: Record<string, unknown> = {
     schema: 1,
     name: layout.name,
@@ -1195,6 +1205,7 @@ export function validateLayout(value: unknown): unknown {
   if (reflectiveSurfaces) output.reflectiveSurfaces = reflectiveSurfaces;
   if (reflectionCaptures) output.reflectionCaptures = reflectionCaptures;
   if (actors) output.actors = actors;
+  if (worldWidgets) output.worldWidgets = worldWidgets;
   return output;
 }
 

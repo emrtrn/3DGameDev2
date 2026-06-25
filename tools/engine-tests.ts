@@ -433,6 +433,12 @@ import {
   normalizeUiA11y,
   resolveUiA11yAttrs,
 } from "../engine/ui/uiA11y";
+import {
+  ndcToScreen,
+  normalizeWorldWidget,
+  normalizeWorldWidgets,
+  resolveWorldWidgetVisibility,
+} from "../engine/ui/uiWorldWidget";
 
 let checks = 0;
 const check = (label: string, fn: () => void): void => {
@@ -10755,12 +10761,14 @@ check("formatUiDebug renders the HUD, screen stack, locale and bound fields", ()
       ["player.speedLabel", "Speed 2.5 m/s"],
     ],
     audit: [],
+    world: { count: 2, visible: 1 },
   });
   assert.deepEqual(lines, [
     "ui",
     "hud: Hud",
     "screens(2): Menu > Options",
     "locale: tr",
+    "world: 1/2",
     "fields(2):",
     '  player.speed = 2.5',
     '  player.speedLabel = "Speed 2.5 m/s"',
@@ -10768,8 +10776,22 @@ check("formatUiDebug renders the HUD, screen stack, locale and bound fields", ()
 });
 
 check("formatUiDebug shows placeholders when nothing is mounted", () => {
-  const lines = formatUiDebug({ hud: null, screens: [], locale: null, fields: [], audit: [] });
-  assert.deepEqual(lines, ["ui", "hud: none", "screens: none", "locale: none", "fields: none"]);
+  const lines = formatUiDebug({
+    hud: null,
+    screens: [],
+    locale: null,
+    fields: [],
+    audit: [],
+    world: { count: 0, visible: 0 },
+  });
+  assert.deepEqual(lines, [
+    "ui",
+    "hud: none",
+    "screens: none",
+    "locale: none",
+    "world: 0/0",
+    "fields: none",
+  ]);
 });
 
 check("formatUiDebug clips long string values", () => {
@@ -10780,6 +10802,7 @@ check("formatUiDebug clips long string values", () => {
     locale: null,
     fields: [["msg", long]],
     audit: [],
+    world: { count: 0, visible: 0 },
   });
   assert.equal(lines.at(-1), `  msg = "${"x".repeat(29)}..."`);
 });
@@ -10791,6 +10814,7 @@ check("formatUiDebug lists accessibility audit findings", () => {
     locale: null,
     fields: [],
     audit: ['Menu: Button "go" — Button has no text or label'],
+    world: { count: 0, visible: 0 },
   });
   assert.deepEqual(lines.slice(-2), [
     "a11y(1):",
@@ -11111,6 +11135,63 @@ check("auditUiA11y flags nameless Button + Image, passes named ones", () => {
     issues.map((issue) => issue.nodeId).sort(),
     ["blank", "logo"],
   );
+});
+
+// --- U7d world-space widgets -----------------------------------------------
+
+check("normalizeWorldWidget keeps valid fields, defaults the anchor, drops junk", () => {
+  assert.deepEqual(
+    normalizeWorldWidget({ widget: "label", anchor: { worldPos: [1, 2, 3] }, offset: [0, -8], maxDistance: 30 }),
+    { widget: "label", anchor: { worldPos: [1, 2, 3] }, offset: [0, -8], maxDistance: 30 },
+  );
+  // Missing/garbage anchor → origin; bad offset/maxDistance dropped.
+  assert.deepEqual(normalizeWorldWidget({ widget: "label", offset: [1], maxDistance: -5 }), {
+    widget: "label",
+    anchor: { worldPos: [0, 0, 0] },
+  });
+  // No widget id → unusable.
+  assert.equal(normalizeWorldWidget({ anchor: { worldPos: [0, 0, 0] } }), null);
+  assert.equal(normalizeWorldWidget(null), null);
+});
+
+check("normalizeWorldWidgets drops unusable entries", () => {
+  const list = normalizeWorldWidgets([
+    { widget: "a", anchor: { worldPos: [0, 1, 0] } },
+    { anchor: { worldPos: [0, 0, 0] } },
+    "junk",
+  ]);
+  assert.equal(list.length, 1);
+  assert.equal(list[0]!.widget, "a");
+  assert.deepEqual(normalizeWorldWidgets("nope"), []);
+});
+
+check("resolveWorldWidgetVisibility fades + scales by distance", () => {
+  // No maxDistance → never culled, perspective scale shrinks with distance.
+  const near = resolveWorldWidgetVisibility(4);
+  assert.equal(near.visible, true);
+  assert.equal(near.opacity, 1);
+  assert.equal(near.scale, 1.6); // 8/4 = 2, clamped to maxScale 1.6
+  const far = resolveWorldWidgetVisibility(16);
+  assert.equal(far.scale, 0.5); // 8/16
+  // maxDistance: full opacity until the last 20% (fadeStart=80), then linear to 0.
+  assert.equal(resolveWorldWidgetVisibility(50, { maxDistance: 100 }).opacity, 1);
+  assert.equal(resolveWorldWidgetVisibility(80, { maxDistance: 100 }).opacity, 1);
+  assert.equal(resolveWorldWidgetVisibility(90, { maxDistance: 100 }).opacity, 0.5);
+  assert.equal(resolveWorldWidgetVisibility(95, { maxDistance: 100 }).opacity, 0.25);
+  const culled = resolveWorldWidgetVisibility(100, { maxDistance: 100 });
+  assert.equal(culled.visible, false);
+  assert.equal(culled.opacity, 0);
+});
+
+check("ndcToScreen maps clip space to viewport pixels + front/back", () => {
+  // Center of clip space → center of the viewport.
+  assert.deepEqual(ndcToScreen(0, 0, 0.5, 800, 600), { x: 400, y: 300, inFront: true });
+  // Top-right NDC (1, 1) → top-right pixel (y axis flips).
+  assert.deepEqual(ndcToScreen(1, 1, 0, 800, 600), { x: 800, y: 0, inFront: true });
+  // Bottom-left NDC (-1, -1) → bottom-left pixel.
+  assert.deepEqual(ndcToScreen(-1, -1, 0, 800, 600), { x: 0, y: 600, inFront: true });
+  // NDC z > 1 means behind the camera.
+  assert.equal(ndcToScreen(0, 0, 1.2, 800, 600).inFront, false);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

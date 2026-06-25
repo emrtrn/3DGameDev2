@@ -127,6 +127,33 @@ body {
   pointer-events: auto;
 }
 
+/*
+ * World-space UI (U7d, Option A): screen-projected DOM billboards. The layer is
+ * click-through; each item is absolutely positioned and the runtime writes its
+ * transform (projected px + center + perspective scale) every frame. The widget
+ * root sizes to its content here (not full-frame like a HUD Canvas).
+ */
+.forge-ui-world-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.forge-ui-world-item {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+.forge-ui-world-item .forge-ui-canvas {
+  position: static;
+  inset: auto;
+  display: inline-flex;
+  width: max-content;
+  height: auto;
+}
+
 /* U7a screen transitions: `.forge-ui-tx` enables the transition (duration set
    inline by the host); each `.forge-ui-tx-<preset>` is the from/out offset state
    the host adds/removes to drive enter/exit. Reused by the editor preview. */

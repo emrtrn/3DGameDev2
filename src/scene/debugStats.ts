@@ -77,6 +77,7 @@ export function formatUiDebug(snapshot: UiDebugSnapshot): string[] {
       ? `screens(${snapshot.screens.length}): ${snapshot.screens.join(" > ")}`
       : "screens: none",
     `locale: ${snapshot.locale ?? "none"}`,
+    `world: ${snapshot.world.visible}/${snapshot.world.count}`,
   ];
   if (snapshot.fields.length === 0) {
     lines.push("fields: none");

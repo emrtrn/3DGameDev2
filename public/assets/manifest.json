@@ -6441,6 +6441,29 @@
       "license": "Unknown"
     },
     {
+      "id": "world-label",
+      "name": "World Label",
+      "assetType": "ui",
+      "category": "UI",
+      "path": "assets/starter-content/UI/WorldLabel.ui.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 66
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "default-theme",
       "name": "Default Theme",
       "assetType": "ui",

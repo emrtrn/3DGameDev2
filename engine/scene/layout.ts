@@ -4,6 +4,7 @@ import type {
   CollisionPresetId,
   CollisionResponseMap,
 } from "./collision";
+import type { WorldUiWidget } from "../ui/uiWorldWidget";
 
 export type Vec3 = [number, number, number];
 export type LayoutLightType = "directional" | "point" | "spot";
@@ -614,4 +615,6 @@ export interface RoomLayout {
   characters: LayoutCharacter[];
   /** Placed Actor Script class instances (resolved + spawned at runtime). */
   actors?: LayoutActorInstance[];
+  /** World-space UI widgets (screen-projected DOM billboards; see `engine/ui/uiWorldWidget.ts`). */
+  worldWidgets?: WorldUiWidget[];
 }

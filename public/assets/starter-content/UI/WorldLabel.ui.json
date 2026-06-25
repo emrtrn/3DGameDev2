@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "type": "ui",
+  "name": "World Label",
+  "preview": {
+    "width": 240,
+    "height": 80
+  },
+  "theme": "default-theme",
+  "root": {
+    "id": "root",
+    "widget": "Canvas",
+    "props": {
+      "align": "center",
+      "justify": "center"
+    },
+    "children": [
+      {
+        "id": "pill",
+        "widget": "Panel",
+        "props": {
+          "background": "$color.surface",
+          "padding": 8,
+          "radius": 8,
+          "align": "center"
+        },
+        "children": [
+          {
+            "id": "label",
+            "widget": "Text",
+            "props": {
+              "text": "Player Start",
+              "fontSize": 18,
+              "fontWeight": 600,
+              "color": "$color.text"
+            },
+            "a11y": {
+              "label": "Player Start marker"
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}
