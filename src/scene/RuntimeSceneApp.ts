@@ -319,6 +319,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly gamepadInput = new GamepadInputSource(this.inputActions);
   /** On-screen touch controls (virtual move stick + look pad + buttons); null until mounted. */
   private touchInput: TouchInputSource | null = null;
+  /** Reusable scratch vectors for the per-frame spatial-audio listener update. */
+  private readonly listenerPos = new Vector3();
+  private readonly listenerDir = new Vector3();
   private readonly pointerLook: PointerLookSource;
   private readonly pointerButtons: PointerButtonSource;
   private readonly behaviorSubsystem: BehaviorSubsystem;
@@ -578,6 +581,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.updateGameRules(deltaMs / 1000);
       this.updateUiStore();
       this.updateWorldUi();
+      this.updateAudioListener();
       this.updateParticleEffects(deltaMs / 1000);
       if (this.skyObject) followCameraWithSky(this.skyObject, this.camera);
       if (this.cloudObject) {
@@ -1150,6 +1154,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
+   * Drives the spatial-audio listener from the runtime camera each frame, so a
+   * spatial cue's PannerNode pans/attenuates relative to where the player looks.
+   */
+  private updateAudioListener(): void {
+    this.camera.getWorldPosition(this.listenerPos);
+    this.camera.getWorldDirection(this.listenerDir);
+    this.audioSubsystem.setListenerPose(
+      [this.listenerPos.x, this.listenerPos.y, this.listenerPos.z],
+      [this.listenerDir.x, this.listenerDir.y, this.listenerDir.z],
+    );
+  }
+
+  /**
    * Resolves a world-widget `anchor.entityId` (`actor:<i>` / `character:<i>`) to
    * the entity's live world position, writing into `target`. Returns false when
    * the entity has no render object (e.g. a mesh-less logic actor, or an
@@ -1215,10 +1232,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     for (const entity of document.entities) {
       const audio = readAudioComponent(entity);
       if (!audio?.autoPlay) continue;
+      const position = audio.spatial ? readTransformComponent(entity)?.position : undefined;
       this.audioSubsystem.playOneShot(audio.clipId, {
         volume: audio.volume,
         loop: audio.loop,
         spatial: audio.spatial,
+        ...(position ? { position: [position[0], position[1], position[2]] as const } : {}),
       });
     }
   }

@@ -274,10 +274,14 @@ Cue playback; saf graph evaluator + ince Web Audio compiler olarak ayrılmalı. 
 
 - [ ] `sourceId/sourceType` modelini `clipId` uyumluluğunu koruyarak ekle.
 - [x] Playback handle ile loop stop/fade desteği ekle.
-- [ ] `spatial: true` için Web Audio `PannerNode` uygula.
-- [ ] Listener konumunu runtime kamera/player üzerinden güncelle.
-- [ ] Basit sphere attenuation alanlarını ekle.
-- [ ] Runtime bundle içinde editor import sızıntısı olmadığını doğrula.
+- [x] `spatial: true` için Web Audio `PannerNode` uygula. (emitter pozisyonu
+  behavior/autoPlay üzerinden geçiyor; `AudioPlayOptions.position`)
+- [x] Listener konumunu runtime kamera/player üzerinden güncelle.
+  (`AudioSubsystem.setListenerPose`, her frame kameradan)
+- [x] Basit sphere attenuation alanlarını ekle. (runtime `refDistance/maxDistance/
+  rolloff` defaultlu, `resolveSpatialPannerConfig`; authored editör alanları sonraya)
+- [x] Runtime bundle içinde editor import sızıntısı olmadığını doğrula.
+  (`npm run build` yeşil; audioSubsystem editör import etmiyor)
 
 ### Faz 3 - Audio Bus Lite
 

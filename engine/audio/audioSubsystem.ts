@@ -8,11 +8,54 @@ import {
 export const AUDIO_SUBSYSTEM_ID = "audio";
 export type AudioBackend = "none" | "web-audio";
 
+export type AudioVec3 = readonly [number, number, number];
+
 export interface AudioPlayOptions {
   volume?: number;
   loop?: boolean;
   spatial?: boolean;
   pitch?: number;
+  /** Emitter world position; routes a spatial sound through a `PannerNode`. */
+  position?: AudioVec3;
+  /** Distance at which spatial attenuation begins. Default {@link DEFAULT_SPATIAL_ATTENUATION}. */
+  refDistance?: number;
+  /** Distance past which a spatial sound no longer attenuates. */
+  maxDistance?: number;
+  /** Spatial attenuation rolloff factor (higher = quieter sooner). */
+  rolloff?: number;
+}
+
+/** Resolved sphere-attenuation parameters for a spatial `PannerNode`. */
+export interface SpatialPannerConfig {
+  readonly refDistance: number;
+  readonly maxDistance: number;
+  readonly rolloff: number;
+}
+
+/** Default sphere attenuation: full volume within 4 units, silent past 60. */
+export const DEFAULT_SPATIAL_ATTENUATION: SpatialPannerConfig = {
+  refDistance: 4,
+  maxDistance: 60,
+  rolloff: 1,
+};
+
+function positiveOr(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+/**
+ * Resolves a spatial play's attenuation parameters, clamping to positive values
+ * and guaranteeing `maxDistance > refDistance` (an inverted/equal pair would make
+ * the PannerNode silent or NaN). Pure: unit-tested without a Web Audio context.
+ */
+export function resolveSpatialPannerConfig(options: AudioPlayOptions): SpatialPannerConfig {
+  const refDistance = positiveOr(options.refDistance, DEFAULT_SPATIAL_ATTENUATION.refDistance);
+  const maxCandidate = positiveOr(options.maxDistance, DEFAULT_SPATIAL_ATTENUATION.maxDistance);
+  return {
+    refDistance,
+    maxDistance: Math.max(maxCandidate, refDistance + 1),
+    rolloff: positiveOr(options.rolloff, DEFAULT_SPATIAL_ATTENUATION.rolloff),
+  };
 }
 
 export interface AudioPlayRequest extends AudioPlayOptions {
@@ -160,6 +203,29 @@ function applySourcePitch(source: AudioSourceNode, pitch: number, base: number):
   else source.frequency.value = base * pitch;
 }
 
+/**
+ * Writes a 3-vector to a Web Audio `positionX/Y/Z` (or `forwardX/Y/Z`) AudioParam
+ * trio when the browser exposes them, else calls the deprecated `setPosition`/
+ * `setOrientation` fallback. Keeps spatial audio working across browser versions.
+ */
+function setAudioVec3(
+  context: BrowserAudioContext,
+  x: AudioParam | undefined,
+  y: AudioParam | undefined,
+  z: AudioParam | undefined,
+  value: AudioVec3,
+  fallback: () => void,
+): void {
+  if (x && y && z) {
+    const t = context.currentTime;
+    x.setValueAtTime(value[0], t);
+    y.setValueAtTime(value[1], t);
+    z.setValueAtTime(value[2], t);
+  } else {
+    fallback();
+  }
+}
+
 export class AudioSubsystem implements Subsystem, AudioBus {
   readonly id = AUDIO_SUBSYSTEM_ID;
   private readonly backend: AudioBackend;
@@ -171,6 +237,9 @@ export class AudioSubsystem implements Subsystem, AudioBus {
   private played: AudioPlayRequest[] = [];
   /** Decoded audio buffers keyed by URL; promise-cached so each file loads once. */
   private readonly buffers = new Map<string, Promise<AudioBuffer | null>>();
+  /** Latest listener pose (camera), applied to the context once it exists. */
+  private listenerPosition: AudioVec3 | null = null;
+  private listenerForward: AudioVec3 = [0, 0, -1];
 
   constructor(options: AudioSubsystemOptions = {}) {
     this.backend = options.backend ?? "none";
@@ -185,6 +254,59 @@ export class AudioSubsystem implements Subsystem, AudioBus {
    */
   resumeContext(): void {
     void this.context?.resume().catch(() => undefined);
+  }
+
+  /**
+   * Updates the spatial-audio listener (the runtime camera/player). Stored and
+   * applied to the Web Audio listener whenever the context exists, so the host
+   * can call it every frame; a no-op for the `none` backend.
+   */
+  setListenerPose(position: AudioVec3, forward: AudioVec3): void {
+    this.listenerPosition = position;
+    this.listenerForward = forward;
+    if (this.context) this.applyListener(this.context);
+  }
+
+  private applyListener(context: BrowserAudioContext): void {
+    const position = this.listenerPosition;
+    if (!position) return;
+    const listener = context.listener;
+    setAudioVec3(context, listener.positionX, listener.positionY, listener.positionZ, position, () =>
+      listener.setPosition?.(position[0], position[1], position[2]),
+    );
+    const f = this.listenerForward;
+    setAudioVec3(context, listener.forwardX, listener.forwardY, listener.forwardZ, f, () =>
+      listener.setOrientation?.(f[0], f[1], f[2], 0, 1, 0),
+    );
+  }
+
+  /**
+   * Connects a play's gain to the output. Spatial plays with a position route
+   * through a `PannerNode` (sphere attenuation); everything else goes straight
+   * to the destination.
+   */
+  private connectSpatialOutput(
+    context: BrowserAudioContext,
+    gain: GainNode,
+    request: AudioPlayRequest,
+  ): void {
+    if (!request.spatial || !request.position) {
+      gain.connect(context.destination);
+      return;
+    }
+    const panner = context.createPanner();
+    panner.panningModel = "HRTF";
+    panner.distanceModel = "inverse";
+    const config = resolveSpatialPannerConfig(request);
+    panner.refDistance = config.refDistance;
+    panner.maxDistance = config.maxDistance;
+    panner.rolloffFactor = config.rolloff;
+    const p = request.position;
+    setAudioVec3(context, panner.positionX, panner.positionY, panner.positionZ, p, () =>
+      panner.setPosition?.(p[0], p[1], p[2]),
+    );
+    gain.connect(panner);
+    panner.connect(context.destination);
   }
 
   playOneShot(clipId: string, options: AudioPlayOptions = {}): void {
@@ -249,7 +371,7 @@ export class AudioSubsystem implements Subsystem, AudioBus {
       const now = context.currentTime;
       oscillator.frequency.value = tone.frequencyHz;
       oscillator.connect(gain);
-      gain.connect(context.destination);
+      this.connectSpatialOutput(context, gain, request);
       handle.attach(context, oscillator, gain);
       if (handle.stopped) return;
       oscillator.start(now);
@@ -279,7 +401,7 @@ export class AudioSubsystem implements Subsystem, AudioBus {
     source.loop = request.loop ?? false;
     const gain = context.createGain();
     source.connect(gain);
-    gain.connect(context.destination);
+    this.connectSpatialOutput(context, gain, request);
     handle.attach(context, source, gain);
     if (handle.stopped) return;
     source.start();
@@ -302,6 +424,7 @@ export class AudioSubsystem implements Subsystem, AudioBus {
     const ctor = globalThis.AudioContext ?? globalThis.webkitAudioContext;
     if (!ctor) return null;
     this.context = new ctor();
+    this.applyListener(this.context);
     return this.context;
   }
 }

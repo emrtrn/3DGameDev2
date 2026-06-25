@@ -107,12 +107,17 @@ const collisionAudioPlayed = new Set<string>();
 
 /** Plays the entity's authored audio cue once, immediately (no contact gating). */
 function playAudioCue(context: Parameters<BehaviorUpdate>[0]): void {
-  const { audio, audioComponent } = context;
+  const { audio, audioComponent, transform } = context;
   if (!audio || !audioComponent) return;
   audio.playOneShot(audioComponent.clipId, {
     volume: audioComponent.volume,
     loop: audioComponent.loop,
     spatial: audioComponent.spatial,
+    // A spatial cue is pinned at the emitter's position so the PannerNode +
+    // listener give it direction/distance; non-spatial cues ignore position.
+    ...(audioComponent.spatial
+      ? { position: [transform.position[0], transform.position[1], transform.position[2]] as const }
+      : {}),
   });
 }
 

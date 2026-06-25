@@ -72,7 +72,11 @@ import { BehaviorSubsystem } from "../engine/behavior/behaviorSubsystem";
 import type { BehaviorRegistry } from "../engine/behavior/behaviorSubsystem";
 import { ScriptMessageBus } from "../engine/behavior/scriptMessages";
 import { PhysicsSubsystem } from "../engine/physics/physicsSubsystem";
-import { AudioSubsystem } from "../engine/audio/audioSubsystem";
+import {
+  AudioSubsystem,
+  DEFAULT_SPATIAL_ATTENUATION,
+  resolveSpatialPannerConfig,
+} from "../engine/audio/audioSubsystem";
 import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/audio";
 import { KeyboardInputSource } from "../src/input/keyboardInputSource";
 import {
@@ -1749,6 +1753,31 @@ check("audio subsystem finishes headless non-loop playback after update", () => 
 
   assert.equal(handle.stopped, true);
   assert.deepEqual(audio.playedRequests(), [{ clipId: "ui-click", volume: 0.7 }]);
+});
+
+check("resolveSpatialPannerConfig defaults, clamps, and keeps max > ref", () => {
+  assert.deepEqual(resolveSpatialPannerConfig({}), DEFAULT_SPATIAL_ATTENUATION);
+  // Negative/zero inputs fall back to the defaults.
+  assert.deepEqual(resolveSpatialPannerConfig({ refDistance: -2, rolloff: 0 }), {
+    refDistance: DEFAULT_SPATIAL_ATTENUATION.refDistance,
+    maxDistance: DEFAULT_SPATIAL_ATTENUATION.maxDistance,
+    rolloff: DEFAULT_SPATIAL_ATTENUATION.rolloff,
+  });
+  // An inverted pair is corrected so the PannerNode can't go silent/NaN.
+  const fixed = resolveSpatialPannerConfig({ refDistance: 30, maxDistance: 5 });
+  assert.equal(fixed.refDistance, 30);
+  assert.equal(fixed.maxDistance, 31);
+});
+
+check("audio subsystem records a spatial play's position; listener pose is safe headless", () => {
+  const audio = new AudioSubsystem();
+  // No Web Audio context exists headless; updating the listener must not throw.
+  audio.setListenerPose([1, 2, 3], [0, 0, -1]);
+  audio.play("footstep", { spatial: true, position: [4, 0, -2] });
+  audio.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  assert.deepEqual(audio.playedRequests(), [
+    { clipId: "footstep", spatial: true, position: [4, 0, -2] },
+  ]);
 });
 
 // 6.1.4 The behavior subsystem ticks behaviors against a derived entity set,
