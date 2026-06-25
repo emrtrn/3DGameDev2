@@ -24,6 +24,8 @@ import {
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
+import { GamepadInputSource } from "@/input/gamepadInputSource";
+import { TouchInputSource, isTouchLikely } from "@/input/touchInputSource";
 import { PointerLookSource } from "@/input/pointerLookSource";
 import { PointerButtonSource } from "@/input/pointerButtonSource";
 import { consumePlayCameraPose } from "@/play/cameraHandoff";
@@ -313,6 +315,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     resolveClipUrl: (clipId) => this.soundUrlById.get(clipId) ?? null,
   });
   private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
+  /** Gamepad → action-map bridge (poll-only, fed once per frame in the loop). */
+  private readonly gamepadInput = new GamepadInputSource(this.inputActions);
+  /** On-screen touch controls (virtual move stick + look pad + buttons); null until mounted. */
+  private touchInput: TouchInputSource | null = null;
   private readonly pointerLook: PointerLookSource;
   private readonly pointerButtons: PointerButtonSource;
   private readonly behaviorSubsystem: BehaviorSubsystem;
@@ -544,6 +550,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
     this.engineApp.registerSubsystem(this.audioSubsystem);
     this.keyboardInput.attach();
+    this.gamepadInput.attach();
+    this.attachTouchControls(canvas);
     this.pointerLook.attach();
     this.pointerButtons.attach();
     this.resumeAudioOnFirstGesture();
@@ -559,6 +567,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.frameHandle = requestAnimationFrame(loop);
       const deltaMs = Math.min(now - this.lastTime, 100);
       this.lastTime = now;
+      // Gamepad is poll-only: feed it before the input subsystem advances.
+      this.gamepadInput.poll();
       this.gameModeSession?.beforeEngineUpdate?.(deltaMs / 1000);
       this.engineApp.update(deltaMs / 1000);
       // Consume the `menu` edge after input advances, before the Game Mode reads
@@ -592,6 +602,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.gameEventUnsub = null;
     this.gameStateStore = null;
     this.keyboardInput.detach();
+    this.gamepadInput.detach();
+    this.touchInput?.detach();
+    this.touchInput = null;
     this.pointerLook.detach();
     this.pointerButtons.detach();
     for (const effect of this.particleEffects) {
@@ -1010,6 +1023,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * pointer lock when the active camera uses it (a no-op for right-drag).
    */
   private handleUiScreenStackChange(depth: number): void {
+    // Hide the on-screen touch controls behind any open menu/outcome screen so
+    // the stick/buttons can't be hit through it (and held input is released).
+    this.touchInput?.setVisible(depth === 0);
     if (depth > 0) {
       this.inputMode = "ui";
       this.pointerLook.release();
@@ -1017,6 +1033,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     } else {
       this.pointerLook.reengage();
     }
+  }
+
+  /**
+   * Mounts the on-screen touch controls when the host looks touch-driven (a
+   * phone/tablet browser). Desktop pointer/keyboard hosts pay nothing. The
+   * controls feed the same action map as keyboard/gamepad.
+   */
+  private attachTouchControls(canvas: HTMLCanvasElement): void {
+    if (!isTouchLikely()) return;
+    const host = document.getElementById("ui-overlay") ?? canvas.parentElement ?? document.body;
+    this.touchInput = new TouchInputSource(this.inputActions, host);
+    this.touchInput.attach();
   }
 
   /** Toggles the pause menu on the `menu` action edge (Escape). */

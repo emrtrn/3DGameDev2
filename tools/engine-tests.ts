@@ -114,6 +114,8 @@ import {
   normalizeGameRules,
   parseGameEvent,
 } from "../src/game/gameRules";
+import { firstConnectedGamepad, readGamepadCodes } from "../src/input/gamepadInput";
+import { joystickMoveCodes, joystickVector } from "../src/input/virtualJoystick";
 import { parseEffectDefinition } from "../engine/render-three/particleEffect";
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
 import { collectSubtreeNodeNames, splitClipsByUpperBody } from "../engine/render-three/bodyMask";
@@ -11492,6 +11494,54 @@ check("formatTimer renders mm:ss and floors/clamps", () => {
   assert.equal(formatTimer(5), "00:05");
   assert.equal(formatTimer(75.9), "01:15");
   assert.equal(formatTimer(-3), "00:00");
+});
+
+// --- Gamepad + touch input mapping --------------------------------------
+
+check("readGamepadCodes maps buttons + left stick + dpad to codes", () => {
+  const buttons = Array.from({ length: 16 }, (_, i) => ({ pressed: i === 0 || i === 9 }));
+  const result = readGamepadCodes({ axes: [-1, -1, 0, 0], buttons });
+  assert.ok(result.down.includes("Pad_A")); // button 0
+  assert.ok(result.down.includes("Pad_Start")); // button 9
+  // Left stick hard up-left ⇒ forward + left move codes.
+  assert.ok(result.down.includes("Pad_LStickUp"));
+  assert.ok(result.down.includes("Pad_LStickLeft"));
+  assert.ok(!result.down.includes("Pad_LStickDown"));
+});
+
+check("readGamepadCodes exposes the right stick as analog look axes", () => {
+  const buttons = Array.from({ length: 16 }, () => ({ pressed: false }));
+  const result = readGamepadCodes({ axes: [0, 0, 0.7, -0.4], buttons });
+  assert.deepEqual(result.axes, [
+    ["Pad_RStickX", 0.7],
+    ["Pad_RStickY", -0.4],
+  ]);
+  assert.equal(result.down.length, 0); // centered left stick, no buttons
+});
+
+check("firstConnectedGamepad returns the first non-null pad", () => {
+  const pad = { axes: [], buttons: [] };
+  assert.equal(firstConnectedGamepad([null, null, pad]), pad);
+  assert.equal(firstConnectedGamepad([null, null]), null);
+});
+
+check("joystickVector clamps magnitude to the radius and normalizes", () => {
+  // Within the ring: linear.
+  const inside = joystickVector(20, 0, 40);
+  assert.equal(inside.x, 0.5);
+  assert.equal(inside.magnitude, 0.5);
+  // Past the ring saturates at 1 along the drag direction.
+  const past = joystickVector(80, 0, 40);
+  assert.equal(past.x, 1);
+  assert.equal(past.magnitude, 1);
+  assert.deepEqual(joystickVector(0, 0, 40), { x: 0, y: 0, magnitude: 0 });
+});
+
+check("joystickMoveCodes thresholds a stick vector into move codes", () => {
+  assert.deepEqual(joystickMoveCodes({ x: 0, y: -1, magnitude: 1 }), ["Pad_LStickUp"]);
+  assert.deepEqual(joystickMoveCodes({ x: 1, y: 0, magnitude: 1 }), ["Pad_LStickRight"]);
+  // Below threshold ⇒ nothing.
+  assert.deepEqual(joystickMoveCodes({ x: 0.2, y: 0.2, magnitude: 0.28 }), []);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);
