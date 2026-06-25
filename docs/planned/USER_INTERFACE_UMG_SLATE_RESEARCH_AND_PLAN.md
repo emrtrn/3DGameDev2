@@ -652,8 +652,9 @@ solar; entity anchor'da (`actor:<i>`) aktor hareket edince etiket takip eder;
 `?debug` ile `world: n/m` say.
 
 Kapsam disi (sonraki kesim): socket anchor (su an `worldPos` + `entityId`),
-editor gizmo ile yerlestirme (su an JSON authoring), raycast occlusion +
-3D-widget etkilesim, Secenek B (DOM→texture / gercek Three mesh, egri panel).
+raycast occlusion + 3D-widget etkilesim, Secenek B (DOM→texture / gercek Three
+mesh, egri panel). (Editor yerlestirme — marker + gizmo ile surukleme — sonraki
+iki bolumde tamamlandi.)
 
 ### U7d — Editor yerlestirme (marker-first, gizmo'suz) (TAMAMLANDI)
 
@@ -697,16 +698,44 @@ round-trip'inde **kayipsiz** (bu fazdan once de oyleydi). `tsc`, `npm run
 build:verify` (374 test + `verify:dist --strict` runtime-only — editor kodu
 oyun bundle'ina sizmaz), `check:assets` PASS.
 
-Kapsam disi (sonraki kesim): **gizmo ile surukleme** (su an Details'te numeric
-konum), outliner'da gizle/kilit, grouping/parenting/duplicate, socket anchor,
-Secenek B.
+Kapsam disi (sonraki kesim): outliner'da gizle/kilit, grouping/parenting/
+duplicate, socket anchor, Secenek B.
+
+### U7d — Editor yerlestirme: gizmo ile surukleme (TAMAMLANDI)
+
+Marker-first kesimin uzerine **viewport gizmo ile tasima** eklendi. World widget'in
+anchor world noktasi (`anchor.worldPos`) artik Move (W) aracinda transform gizmo'su
+ile suruklenebilir; rotate/scale anlamsiz oldugu icin yalniz move handle'lari gosterilir.
+
+Editorun ortak transform makinesi `getMutableTransform`'a (LayoutPlacement benzeri
+nesne donduren) **dokunulmadi** — anchor `worldPos` nested oldugu icin o adaptore
+zorlanmak yerine cerrahi dallar eklendi:
+
+- `updateGizmo` (`SceneApp`): worldWidget secilince arac ne olursa olsun gizmo "move"a
+  zorlanir (handle'lar marker/anchor noktasinda; `getSelectionPivotWorld` → null
+  oldugundan gizmo `selected.position` = `worldPos`'ta durur).
+- `updateMoveDragPosition`: worldWidget icin erken dal → `applyWorldWidgetWorldPos`
+  (live, undo'suz; `worldPos`'u yazar, marker'i + selection box'i + gizmo'yu tazeler).
+  Pivot/linked-move/getMutableTransform yollarini tamamen atlar.
+- `commitPointerDrag`: worldWidget icin `commitWorldWidgetMove(index, startWorldPos)` →
+  birakista tek undo komutu (before/after `worldPos`; degisim yoksa no-op).
+
+`startTransform` zaten `selected` (EditableSelection, `position = worldPos`) uzerinden
+uretildigi icin drag baslangic noktasi dogru; `captureLinkedMoveStarts` worldWidget'i
+(transform-less) sessizce disar birakir. `tsc`, `npm run build:verify` (374 test +
+`verify:dist --strict` runtime-only), `check:assets` PASS.
+
+Not: `offset3d` sifir disi oldugunda gizmo anchor noktasinda (worldPos), marker ise
+worldPos+offset3d'de durur — gizmo "anchor"i, marker "gosterim konumu"nu temsil eder.
+Varsayilan offset3d=[0,0,0]'da ikisi cakisir.
 
 ### Sonraki adim (U7)
 
 - U7'nin dort alt-fazi (a–d) ilk kesimleriyle tamamlandi; U7d ayrica entity
-  anchor + editor yerlestirme (marker-first) kazandi. Acik takip isleri: U7d
-  **gizmo ile surukleme** (su an Details numeric konum), socket anchor + Secenek B
-  (true 3D widget mesh / raycast). Bunlar ayri, daha buyuk parcalar — istege bagli.
+  anchor + editor yerlestirme (marker-first **+ gizmo ile surukleme**) kazandi.
+  Acik takip isleri: outliner'da gizle/kilit + grouping/parenting/duplicate,
+  socket anchor + Secenek B (true 3D widget mesh / raycast). Bunlar ayri, daha
+  buyuk parcalar — istege bagli.
 
 ## U7 — Ileri UI plani
 

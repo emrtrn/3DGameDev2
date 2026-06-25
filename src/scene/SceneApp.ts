@@ -3792,6 +3792,46 @@ export class SceneApp {
   }
 
   /**
+   * Live-writes a world widget's anchor world point during a gizmo move drag (no
+   * undo entry — {@link commitWorldWidgetMove} records the before/after on release).
+   */
+  private applyWorldWidgetWorldPos(index: number, position: Vec3): void {
+    const widget = this.layout?.worldWidgets?.[index];
+    if (!widget) return;
+    widget.anchor.worldPos = [round(position[0]), round(position[1]), round(position[2])];
+    this.refreshWorldWidgetObject(index);
+    this.updateSelectionBox();
+    this.updateGizmo();
+    this.emitSelectionChanged();
+  }
+
+  /** Records one undoable command for a gizmo-drag move of a world widget anchor. */
+  private commitWorldWidgetMove(index: number, before: Vec3): void {
+    const widget = this.layout?.worldWidgets?.[index];
+    if (!widget) return;
+    const after: Vec3 = [...widget.anchor.worldPos];
+    if (after[0] === before[0] && after[1] === before[1] && after[2] === before[2]) return;
+    const start: Vec3 = [...before];
+    const apply = (worldPos: Vec3): void => {
+      const target = this.layout?.worldWidgets?.[index];
+      if (!target) return;
+      target.anchor.worldPos = [...worldPos];
+      this.select({ kind: "worldWidget", index });
+      this.refreshWorldWidgetObject(index);
+      this.updateSelectionBox();
+      this.updateGizmo();
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label: "Move World Widget",
+      redo: () => apply(after),
+      undo: () => apply(start),
+    });
+  }
+
+  /**
    * Re-bakes one probe's cubemap from the current scene. Not undoable: the cached
    * PMREM is derived data (like {@link recaptureSkyLightCapture}), so moving objects or
    * the probe then pressing Recapture refreshes the capture without a history entry.
@@ -4694,6 +4734,10 @@ export class SceneApp {
   }
 
   private commitPointerDrag(drag: GizmoPointerDrag): void {
+    if (drag.selection.kind === "worldWidget") {
+      this.commitWorldWidgetMove(drag.selection.index, drag.startTransform.position);
+      return;
+    }
     if (drag.mode === "move" && drag.pivotEdit) {
       this.commitPivotChange(
         drag.selection,
@@ -4808,6 +4852,14 @@ export class SceneApp {
   private updateMoveDragPosition(position: Vec3): void {
     if (!this.pointerDrag || this.pointerDrag.mode !== "move") return;
     const drag = this.pointerDrag;
+
+    // World widgets store their drag position on the UI anchor world point, not a
+    // layout transform, so they bypass getMutableTransform / pivot / linked moves.
+    if (drag.selection.kind === "worldWidget") {
+      this.applyWorldWidgetWorldPos(drag.selection.index, position);
+      return;
+    }
+
     const activeTransform = this.getMutableTransform(drag.selection);
     if (!activeTransform) return;
 
@@ -5534,7 +5586,10 @@ export class SceneApp {
       this.gizmoGroup.rotation.set(0, 0, 0);
     }
 
-    const tool = pivotEditing ? "move" : this.activeTool;
+    // World widgets are screen-projected billboards: only translation is
+    // meaningful, so they always show the move gizmo regardless of the active tool.
+    const tool =
+      this.selection.kind === "worldWidget" ? "move" : pivotEditing ? "move" : this.activeTool;
     if (tool === "move" || tool === "rotate" || tool === "scale") {
       buildGizmoHandles(tool, this.gizmoGroup, this.gizmoPickables, this.gizmoInteraction);
     }

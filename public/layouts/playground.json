@@ -301,5 +301,17 @@
       ],
       "rotationYDeg": 0
     }
+  ],
+  "worldWidgets": [
+    {
+      "widget": "menu",
+      "anchor": {
+        "worldPos": [
+          2.47,
+          2.73,
+          4.04
+        ]
+      }
+    }
   ]
 }
