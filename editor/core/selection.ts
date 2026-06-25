@@ -6,6 +6,7 @@ export type Selection =
   | { kind: "reflectionPlane"; index: number }
   | { kind: "reflectiveSurface"; index: number }
   | { kind: "reflectionCapture"; index: number }
+  | { kind: "worldWidget"; index: number }
   | { kind: "sky" }
   | { kind: "fog" }
   | { kind: "cloud" }
@@ -21,6 +22,8 @@ export type ReflectionPlaneSelection = Extract<Selection, { kind: "reflectionPla
 export type ReflectiveSurfaceSelection = Extract<Selection, { kind: "reflectiveSurface" }>;
 /** A placed Sphere Reflection Capture (probe) actor. */
 export type ReflectionCaptureSelection = Extract<Selection, { kind: "reflectionCapture" }>;
+/** A placed world-space UI widget (screen-projected DOM billboard). */
+export type WorldWidgetSelection = Extract<Selection, { kind: "worldWidget" }>;
 /** The singleton Sky Atmosphere environment actor (no index/transform). */
 export type SkySelection = Extract<Selection, { kind: "sky" }>;
 /** The singleton Exponential Height Fog environment actor (no index/transform). */
@@ -43,6 +46,7 @@ export function cloneSelection(selection: Selection): Selection {
   if (selection.kind === "reflectionPlane") return { kind: "reflectionPlane", index: selection.index };
   if (selection.kind === "reflectiveSurface") return { kind: "reflectiveSurface", index: selection.index };
   if (selection.kind === "reflectionCapture") return { kind: "reflectionCapture", index: selection.index };
+  if (selection.kind === "worldWidget") return { kind: "worldWidget", index: selection.index };
   if (selection.kind === "sky") return { kind: "sky" };
   if (selection.kind === "fog") return { kind: "fog" };
   if (selection.kind === "cloud") return { kind: "cloud" };
@@ -57,6 +61,7 @@ export function selectionId(selection: Selection): string {
   if (selection.kind === "reflectionPlane") return `reflectionPlane:${selection.index}`;
   if (selection.kind === "reflectiveSurface") return `reflectiveSurface:${selection.index}`;
   if (selection.kind === "reflectionCapture") return `reflectionCapture:${selection.index}`;
+  if (selection.kind === "worldWidget") return `worldWidget:${selection.index}`;
   if (selection.kind === "sky") return "sky";
   if (selection.kind === "fog") return "fog";
   if (selection.kind === "cloud") return "cloud";
@@ -94,6 +99,10 @@ export function parseSelectionId(id: string): Selection | null {
     const index = Number(encodedAssetId);
     return Number.isInteger(index) ? { kind: "reflectionCapture", index } : null;
   }
+  if (kind === "worldWidget") {
+    const index = Number(encodedAssetId);
+    return Number.isInteger(index) ? { kind: "worldWidget", index } : null;
+  }
   if (kind !== "instance" || rawIndex === undefined) return null;
   const placementIndex = Number(rawIndex);
   if (!Number.isInteger(placementIndex)) return null;
@@ -125,6 +134,9 @@ export function selectionsEqual(
     return left.index === right.index;
   }
   if (left.kind === "reflectionCapture" && right.kind === "reflectionCapture") {
+    return left.index === right.index;
+  }
+  if (left.kind === "worldWidget" && right.kind === "worldWidget") {
     return left.index === right.index;
   }
   // The Sky Atmosphere + Height Fog + Cloud Layer are singletons: same kind ⇒ same object.
@@ -256,6 +268,22 @@ export function compareActorDeletes(
 ): number {
   if (left.selection.kind !== "actor" || right.selection.kind !== "actor") return 0;
   return right.selection.index - left.selection.index;
+}
+
+export function compareWorldWidgetDeletes(
+  left: { selection: Selection },
+  right: { selection: Selection },
+): number {
+  if (left.selection.kind !== "worldWidget" || right.selection.kind !== "worldWidget") return 0;
+  return right.selection.index - left.selection.index;
+}
+
+export function compareWorldWidgetRestores(
+  left: { selection: Selection },
+  right: { selection: Selection },
+): number {
+  if (left.selection.kind !== "worldWidget" || right.selection.kind !== "worldWidget") return 0;
+  return left.selection.index - right.selection.index;
 }
 
 export function compareActorRestores(

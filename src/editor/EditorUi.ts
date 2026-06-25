@@ -39,6 +39,7 @@ import type {
   LayoutPostProcess,
   LayoutSkyAtmosphere,
   MetadataValue,
+  Vec3,
 } from "@engine/scene/layout";
 import {
   isShapePrimitiveType,
@@ -374,6 +375,8 @@ export class EditorUi {
               <button type="button" data-add-reflective-surface>Reflective Surface</button>
               <button type="button" data-add-reflection-capture>Sphere Reflection Capture</button>
               <button type="button" data-add-post-process>Post Process</button>
+              <div class="add-actor-section-title">UI</div>
+              <button type="button" data-add-world-widget>World Widget</button>
               <div class="add-actor-section-title">Gameplay</div>
               <button type="button" data-add-player-start>Player Start</button>
             </div>
@@ -683,6 +686,13 @@ export class EditorUi {
       .querySelector<HTMLButtonElement>("[data-add-post-process]")
       ?.addEventListener("click", () => {
         this.app.addPostProcess();
+      });
+
+    // World Widget is a placed world-space UI billboard (anchor + Details fields).
+    this.root
+      .querySelector<HTMLButtonElement>("[data-add-world-widget]")
+      ?.addEventListener("click", () => {
+        this.app.addWorldWidget(this.firstUiWidgetAssetId());
       });
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
@@ -2471,6 +2481,10 @@ export class EditorUi {
       this.renderReflectionCaptureDetails(selection);
       return;
     }
+    if (selection.kind === "worldWidget" && selection.worldWidget) {
+      this.renderWorldWidgetDetails(selection);
+      return;
+    }
 
     this.detailsScale = [...selection.scale];
 
@@ -3208,7 +3222,8 @@ export class EditorUi {
    * core stays generic: groups/fields come from the project's metadata schema.
    */
   private renderMetadataSections(selection: EditableSelection): string {
-    // Environment singletons + reflection planes carry no schema-driven metadata.
+    // Environment singletons + reflection planes + world widgets carry no
+    // schema-driven metadata.
     if (
       selection.kind === "sky" ||
       selection.kind === "fog" ||
@@ -3216,6 +3231,7 @@ export class EditorUi {
       selection.kind === "reflectionPlane" ||
       selection.kind === "reflectiveSurface" ||
       selection.kind === "reflectionCapture" ||
+      selection.kind === "worldWidget" ||
       selection.kind === "post"
     ) {
       return "";
@@ -3400,6 +3416,7 @@ export class EditorUi {
       this.selected.kind === "reflectionPlane" ||
       this.selected.kind === "reflectiveSurface" ||
       this.selected.kind === "reflectionCapture" ||
+      this.selected.kind === "worldWidget" ||
       this.selected.kind === "post"
     ) {
       return null;
@@ -3829,6 +3846,121 @@ export class EditorUi {
    * intensity / near-far / priority / parallax. There is no rotation or scale â€” the
    * influence size is the radius.
    */
+  /** First `*.ui.json` widget asset id (for a new World Widget), or "" when none. */
+  private firstUiWidgetAssetId(): string {
+    const widget = this.editableAssets.find(
+      (asset) => assetType(asset) === "ui" && assetPath(asset).toLowerCase().endsWith(".ui.json"),
+    );
+    return widget?.id ?? "";
+  }
+
+  /** Reads three numbered `[data-<attr>="0|1|2"]` inputs into a Vec3 (fallback per axis). */
+  private readWorldWidgetVec(attr: string, fallback: Vec3): Vec3 {
+    const vec: Vec3 = [fallback[0], fallback[1], fallback[2]];
+    for (let i = 0; i < 3; i += 1) {
+      const input = this.detailsBody.querySelector<HTMLInputElement>(`[data-${attr}="${i}"]`);
+      if (input) {
+        const value = Number(input.value);
+        if (Number.isFinite(value)) vec[i] = value;
+      }
+    }
+    return vec;
+  }
+
+  /** Reads the two `[data-ww-off="0|1"]` screen-offset inputs into an `[x, y]` pair. */
+  private readWorldWidgetOffset(fallback: [number, number]): [number, number] {
+    const out: [number, number] = [fallback[0], fallback[1]];
+    for (let i = 0; i < 2; i += 1) {
+      const input = this.detailsBody.querySelector<HTMLInputElement>(`[data-ww-off="${i}"]`);
+      if (input) {
+        const value = Number(input.value);
+        if (Number.isFinite(value)) out[i] = value;
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Details panel for a placed world-space UI widget. Numeric fields write through
+   * {@link SceneApp.setSelectedWorldWidget} (no transform gizmo in v1 — the anchor
+   * world point is edited here and shown by the viewport marker).
+   */
+  private renderWorldWidgetDetails(selection: EditableSelection): void {
+    const widget = selection.worldWidget;
+    if (!widget) return;
+    this.detailsScale = [...selection.scale];
+    const p = selection.position;
+    const o3 = widget.offset3d;
+    this.detailsBody.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>ui / world widget</span>
+      </div>
+      <label class="detail-row">
+        <span>Widget</span>
+        <input data-ww-field="widget" type="text" value="${escapeHtml(widget.widget)}"
+          placeholder="ui asset id (e.g. world-label)" />
+      </label>
+      <div class="detail-section">
+        <div class="detail-section-title">Anchor</div>
+        <label class="detail-row"><span>World X</span>
+          <input data-ww-pos="0" type="number" step="0.1" value="${p[0]}" /></label>
+        <label class="detail-row"><span>World Y</span>
+          <input data-ww-pos="1" type="number" step="0.1" value="${p[1]}" /></label>
+        <label class="detail-row"><span>World Z</span>
+          <input data-ww-pos="2" type="number" step="0.1" value="${p[2]}" /></label>
+        <label class="detail-row"><span>Entity Id</span>
+          <input data-ww-field="entityId" type="text" value="${escapeHtml(widget.entityId)}"
+            placeholder="actor:0 (optional, tracks entity)" /></label>
+        <label class="detail-row"><span>Offset X</span>
+          <input data-ww-off3="0" type="number" step="0.1" value="${o3[0]}" /></label>
+        <label class="detail-row"><span>Offset Y</span>
+          <input data-ww-off3="1" type="number" step="0.1" value="${o3[1]}" /></label>
+        <label class="detail-row"><span>Offset Z</span>
+          <input data-ww-off3="2" type="number" step="0.1" value="${o3[2]}" /></label>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Screen</div>
+        <label class="detail-row"><span>Offset X (px)</span>
+          <input data-ww-off="0" type="number" step="1" value="${widget.offset[0]}" /></label>
+        <label class="detail-row"><span>Offset Y (px)</span>
+          <input data-ww-off="1" type="number" step="1" value="${widget.offset[1]}" /></label>
+        <label class="detail-row"><span>Max Distance</span>
+          <input data-ww-field="maxDistance" type="number" min="0" step="1"
+            value="${widget.maxDistance}" /></label>
+      </div>
+      <div class="detail-hint">World-space billboard. Anchor by a world point or an entity id; offsets nudge it. Position is edited numerically here (no gizmo yet).</div>
+    `;
+
+    this.detailsBody.querySelectorAll<HTMLInputElement>("[data-ww-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.wwField;
+        if (key === "widget") this.app.setSelectedWorldWidget({ widget: input.value.trim() });
+        else if (key === "entityId") this.app.setSelectedWorldWidget({ entityId: input.value.trim() });
+        else if (key === "maxDistance") {
+          const value = Number(input.value);
+          this.app.setSelectedWorldWidget({ maxDistance: Number.isFinite(value) ? value : 0 });
+        }
+      });
+    });
+
+    this.detailsBody.querySelectorAll<HTMLInputElement>("[data-ww-pos]").forEach((input) => {
+      input.addEventListener("change", () =>
+        this.app.setSelectedWorldWidget({ worldPos: this.readWorldWidgetVec("ww-pos", selection.position) }),
+      );
+    });
+    this.detailsBody.querySelectorAll<HTMLInputElement>("[data-ww-off3]").forEach((input) => {
+      input.addEventListener("change", () =>
+        this.app.setSelectedWorldWidget({ offset3d: this.readWorldWidgetVec("ww-off3", widget.offset3d) }),
+      );
+    });
+    this.detailsBody.querySelectorAll<HTMLInputElement>("[data-ww-off]").forEach((input) => {
+      input.addEventListener("change", () =>
+        this.app.setSelectedWorldWidget({ offset: this.readWorldWidgetOffset(widget.offset) }),
+      );
+    });
+  }
+
   private renderReflectionCaptureDetails(selection: EditableSelection): void {
     const capture = selection.reflectionCapture;
     if (!capture) return;
@@ -4975,6 +5107,7 @@ function outlinerKindLabel(kind: EditableSceneObject["kind"]): string {
   if (kind === "reflectiveSurface") return "R";
   if (kind === "reflectionCapture") return "O";
   if (kind === "post") return "P";
+  if (kind === "worldWidget") return "W";
   return "I";
 }
 

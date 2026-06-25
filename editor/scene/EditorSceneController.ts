@@ -680,8 +680,8 @@ export class EditorSceneController {
         continue;
       }
 
-      // Environment singletons + reflection planes are deleted via their own
-      // dedicated (SceneApp) commands, not the multi-select snapshot stack.
+      // Environment singletons + reflection planes + world widgets are deleted via
+      // their own dedicated (SceneApp) commands, not the multi-select snapshot stack.
       if (
         selection.kind === "sky" ||
         selection.kind === "fog" ||
@@ -689,6 +689,7 @@ export class EditorSceneController {
         selection.kind === "reflectionPlane" ||
         selection.kind === "reflectiveSurface" ||
         selection.kind === "reflectionCapture" ||
+        selection.kind === "worldWidget" ||
         selection.kind === "post"
       ) {
         continue;
@@ -1206,7 +1207,8 @@ export class EditorSceneController {
       selection.kind === "cloud" ||
       selection.kind === "reflectionPlane" ||
       selection.kind === "reflectiveSurface" ||
-      selection.kind === "reflectionCapture"
+      selection.kind === "reflectionCapture" ||
+      selection.kind === "worldWidget"
     ) {
       return null;
     }

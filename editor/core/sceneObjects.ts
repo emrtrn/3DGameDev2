@@ -20,6 +20,7 @@ import type {
   LayoutSphereReflectionCapture,
   RoomLayout,
 } from "@engine/scene/layout";
+import type { WorldUiWidget } from "@engine/ui/uiWorldWidget";
 
 import {
   type EditableSceneObject,
@@ -275,6 +276,45 @@ function buildReflectionCaptureEditableSelection(
   };
 }
 
+/**
+ * Builds the Details/Outliner view-model for a placed world-space UI widget. Its
+ * anchor world point rides in the shared `position` transform field (so the
+ * Outliner/Details numeric position works); the widget reference + anchor/offset
+ * options ride along in {@link EditableSelection.worldWidget}.
+ */
+function buildWorldWidgetEditableSelection(
+  widget: WorldUiWidget,
+  index: number,
+  deps: SceneObjectDeps,
+): EditableSelection {
+  const category = deps.assetCategory(widget.widget);
+  return {
+    id: selectionId({ kind: "worldWidget", index }),
+    kind: "worldWidget",
+    assetId: widget.widget,
+    category: category || "ui",
+    label: widget.widget ? `Widget: ${widget.widget}` : `World Widget #${index + 1}`,
+    position: [...widget.anchor.worldPos],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+    pivot: [0, 0, 0],
+    scaleLocked: true,
+    locked: false,
+    castShadow: false,
+    collision: false,
+    simulatePhysics: false,
+    physics: {},
+    metadata: {},
+    worldWidget: {
+      widget: widget.widget,
+      entityId: widget.anchor.entityId ?? "",
+      offset3d: widget.anchor.offset3d ? [...widget.anchor.offset3d] : [0, 0, 0],
+      offset: widget.offset ? [widget.offset[0], widget.offset[1]] : [0, 0],
+      maxDistance: widget.maxDistance ?? 0,
+    },
+  };
+}
+
 /** Shared inputs the editable view-models need that aren't on the layout. */
 export interface SceneObjectDeps {
   /** Resolves an asset's manifest category for Details display. */
@@ -495,6 +535,16 @@ export function buildSceneObjects(
     });
   });
 
+  layout.worldWidgets?.forEach((widget, index) => {
+    const selection: Selection = { kind: "worldWidget", index };
+    objects.push({
+      ...buildWorldWidgetEditableSelection(widget, index, deps),
+      selected: deps.isSelected(selection),
+      hidden: false,
+      locked: false,
+    });
+  });
+
   return objects;
 }
 
@@ -609,6 +659,12 @@ export function buildEditableSelection(
     const capture = layout.reflectionCaptures?.[selection.index];
     if (!capture) return null;
     return buildReflectionCaptureEditableSelection(capture, selection.index);
+  }
+
+  if (selection.kind === "worldWidget") {
+    const widget = layout.worldWidgets?.[selection.index];
+    if (!widget) return null;
+    return buildWorldWidgetEditableSelection(widget, selection.index, deps);
   }
 
   if (selection.kind === "actor") {

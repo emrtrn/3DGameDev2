@@ -111,6 +111,25 @@ export interface EditableReflectiveSurface {
   resolution: number;
 }
 
+/**
+ * Resolved world-space UI widget fields for the Details panel. A placed billboard
+ * (`engine/ui/uiWorldWidget.ts`): its anchor world point rides in the shared
+ * `position` transform field, while the widget reference + anchor/offset options
+ * ride here in {@link EditableSelection.worldWidget}.
+ */
+export interface EditableWorldWidget {
+  /** Referenced UI Widget asset id (a manifest `ui` asset). */
+  widget: string;
+  /** Entity anchor id (`actor:<i>` / `character:<i>`); empty = a fixed world point. */
+  entityId: string;
+  /** World-space offset `[x, y, z]` added after the anchor resolves. */
+  offset3d: Vec3;
+  /** Screen-space pixel offset `[x, y]` applied after projection. */
+  offset: [number, number];
+  /** Cull/fade distance in world units; 0 = never cull. */
+  maxDistance: number;
+}
+
 /** Resolved global Post Process fields for the Details panel. */
 export interface EditablePostProcess {
   name: string;
@@ -223,6 +242,8 @@ export interface EditableSelection {
   reflectiveSurface?: EditableReflectiveSurface;
   /** Resolved Post Process settings; present only when `kind === "post"`. */
   post?: EditablePostProcess;
+  /** Resolved world-space UI widget settings; present only when `kind === "worldWidget"`. */
+  worldWidget?: EditableWorldWidget;
 }
 
 export interface EditableSceneObject extends EditableSelection {

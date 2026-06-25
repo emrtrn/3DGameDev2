@@ -235,6 +235,8 @@ import type {
   RoomLayout,
   Vec3,
 } from "@engine/scene/layout";
+import { normalizeWorldWidgets, type WorldUiWidget } from "@engine/ui/uiWorldWidget";
+import { createActorBillboardIcon } from "@engine/render-three/actorIcon";
 import type {
   AssetCollisionDef,
   CollisionComplexity,
@@ -277,6 +279,7 @@ import {
   cloneReflectionPlane,
   cloneReflectiveSurface,
   cloneSphereReflectionCapture,
+  cloneWorldWidget,
   lightActorsEqual,
   transformsEqual,
 } from "@editor/core/layoutSnapshots";
@@ -435,6 +438,8 @@ export class SceneApp {
   private reflectionCaptureIcons: Sprite[] = [];
   /** Baked PMREM cache per Sphere Reflection Capture, by index (null = not baked / hidden). */
   private reflectionCaptureBakes: (SphereReflectionCaptureBake | null)[] = [];
+  /** Billboard icons (clickable markers) for placed world-space UI widgets, by index. */
+  private worldWidgetIcons: Sprite[] = [];
   private postProcessPipeline: PostProcessPipeline | null = null;
   private autoSaveTimer = 0;
   private frameHandle = 0;
@@ -648,6 +653,7 @@ export class SceneApp {
         // The influence sphere never picks — it only previews the radius while the
         // probe is selected. The probe is selected through its billboard icon.
         objects.push(...this.reflectionCaptureIcons);
+        objects.push(...this.worldWidgetIcons);
         return objects;
       },
       surfacePickables: () => {
@@ -1618,6 +1624,13 @@ export class SceneApp {
       this.removeReflectionCapture(this.selection.index);
       return;
     }
+    if (
+      this.selection?.kind === "worldWidget" &&
+      this.editorSceneController.selectedCount <= 1
+    ) {
+      this.removeWorldWidget(this.selection.index);
+      return;
+    }
     this.editorSceneController.deleteSelected();
   }
 
@@ -2037,6 +2050,11 @@ export class SceneApp {
       return null;
     });
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
+    // Normalize world widgets so the editor never reads a malformed anchor (the
+    // runtime normalizes on its own load path); keeps the saved JSON clean too.
+    if (this.layout.worldWidgets) {
+      this.layout.worldWidgets = normalizeWorldWidgets(this.layout.worldWidgets);
+    }
     this.ensureDefaultLights();
     this.physicsSubsystem.setGravity(resolveSceneWorldSettings(this.layout).gravity);
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
@@ -2073,6 +2091,7 @@ export class SceneApp {
     this.buildReflectionPlanes();
     this.buildReflectiveSurfaces();
     this.buildReflectionCaptures();
+    this.buildWorldWidgetMarkers();
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();
     this.emitHistoryChanged();
@@ -2413,6 +2432,11 @@ export class SceneApp {
 
     if (selection.kind === "reflectionCapture") {
       this.refreshReflectionCaptureObject(selection.index);
+      return;
+    }
+
+    if (selection.kind === "worldWidget") {
+      this.refreshWorldWidgetObject(selection.index);
       return;
     }
 
@@ -3361,6 +3385,7 @@ export class SceneApp {
     hide(this.gizmoGroup);
     for (const helper of this.reflectionCaptureObjects) hide(helper);
     for (const icon of this.reflectionCaptureIcons) hide(icon);
+    for (const icon of this.worldWidgetIcons) hide(icon);
     for (const reflector of this.reflectionPlaneObjects) hide(reflector);
     for (const icon of this.reflectionPlaneIcons) hide(icon);
     for (const surface of this.reflectiveSurfaceObjects) hide(surface);
@@ -3581,6 +3606,189 @@ export class SceneApp {
   }): void {
     if (this.selection?.kind !== "reflectionCapture") return;
     this.setReflectionCapture(this.selection.index, patch);
+  }
+
+  // --- World-space UI widget markers (editor) ------------------------------
+
+  /** Builds one clickable billboard marker for the world widget at `index`. */
+  private createWorldWidgetIcon(index: number): Sprite {
+    const icon = createActorBillboardIcon("world-widget", drawWorldWidgetGlyph, 0.5);
+    icon.userData.worldWidgetIndex = index;
+    return icon;
+  }
+
+  /** Positions a marker at its widget's anchor world point (+ any world offset). */
+  private positionWorldWidgetIcon(icon: Sprite, widget: WorldUiWidget): void {
+    const [px, py, pz] = widget.anchor.worldPos;
+    const [ox, oy, oz] = widget.anchor.offset3d ?? [0, 0, 0];
+    icon.position.set(px + ox, py + oy, pz + oz);
+  }
+
+  /** Rebuilds every world-widget billboard marker from `layout.worldWidgets` (load). */
+  private buildWorldWidgetMarkers(): void {
+    for (const icon of this.worldWidgetIcons) this.scene.remove(icon);
+    this.worldWidgetIcons = [];
+    const widgets = this.layout?.worldWidgets ?? [];
+    widgets.forEach((widget, index) => {
+      const icon = this.createWorldWidgetIcon(index);
+      this.positionWorldWidgetIcon(icon, widget);
+      this.worldWidgetIcons.push(icon);
+      this.scene.add(icon);
+    });
+  }
+
+  /** Repositions one world-widget marker after its anchor changes. */
+  private refreshWorldWidgetObject(index: number): void {
+    const widget = this.layout?.worldWidgets?.[index];
+    const icon = this.worldWidgetIcons[index];
+    if (widget && icon) this.positionWorldWidgetIcon(icon, widget);
+  }
+
+  /** Re-tags marker `userData.worldWidgetIndex` after an insert/remove shifts indices. */
+  private refreshWorldWidgetIndices(): void {
+    this.worldWidgetIcons.forEach((icon, index) => {
+      icon.userData.worldWidgetIndex = index;
+    });
+  }
+
+  private insertWorldWidget(index: number, widget: WorldUiWidget): void {
+    if (!this.layout) return;
+    this.layout.worldWidgets ??= [];
+    const insertionIndex = clampIndex(index, this.layout.worldWidgets.length);
+    this.layout.worldWidgets.splice(insertionIndex, 0, cloneWorldWidget(widget));
+    const icon = this.createWorldWidgetIcon(insertionIndex);
+    this.positionWorldWidgetIcon(icon, widget);
+    this.worldWidgetIcons.splice(insertionIndex, 0, icon);
+    this.scene.add(icon);
+    this.refreshWorldWidgetIndices();
+    this.emitSceneObjectsChanged();
+  }
+
+  private removeWorldWidgetAt(index: number): WorldUiWidget | null {
+    if (!this.layout?.worldWidgets) return null;
+    const [removed] = this.layout.worldWidgets.splice(index, 1);
+    const [icon] = this.worldWidgetIcons.splice(index, 1);
+    if (icon) this.scene.remove(icon);
+    this.refreshWorldWidgetIndices();
+    this.emitSceneObjectsChanged();
+    return removed ? cloneWorldWidget(removed) : null;
+  }
+
+  /** Appends a world widget referencing `assetId` in front of the camera + selects it. */
+  addWorldWidget(assetId: string): void {
+    if (!this.layout) return;
+    const index = this.layout.worldWidgets?.length ?? 0;
+    const widget: WorldUiWidget = {
+      widget: assetId,
+      anchor: { worldPos: this.defaultWorldWidgetAnchor() },
+    };
+    this.executeCommand({
+      label: "Add World Widget",
+      redo: () => {
+        this.insertWorldWidget(index, widget);
+        this.select({ kind: "worldWidget", index });
+      },
+      undo: () => {
+        this.removeWorldWidgetAt(index);
+        this.select(null);
+      },
+    });
+  }
+
+  /** Deletes the world widget at `index` (undoable). */
+  removeWorldWidget(index: number): void {
+    const widget = this.layout?.worldWidgets?.[index];
+    if (!widget) return;
+    const snapshot = cloneWorldWidget(widget);
+    this.executeCommand({
+      label: "Delete World Widget",
+      redo: () => {
+        this.removeWorldWidgetAt(index);
+        if (this.selection?.kind === "worldWidget" && this.selection.index === index) {
+          this.select(null);
+        }
+      },
+      undo: () => {
+        this.insertWorldWidget(index, snapshot);
+        this.select({ kind: "worldWidget", index });
+      },
+    });
+  }
+
+  /** A point ~5 units in front of the camera (where a new world widget lands). */
+  private defaultWorldWidgetAnchor(): Vec3 {
+    const direction = new Vector3();
+    this.camera.getWorldDirection(direction);
+    const point = this.camera.position.clone().addScaledVector(direction, 5);
+    return [
+      Number(point.x.toFixed(3)),
+      Number(point.y.toFixed(3)),
+      Number(point.z.toFixed(3)),
+    ];
+  }
+
+  /**
+   * Edits a placed world widget's fields (Details panel). Empty/zero optional
+   * fields are dropped so the saved JSON stays clean; undoable.
+   */
+  setWorldWidget(
+    index: number,
+    patch: {
+      widget?: string;
+      worldPos?: Vec3;
+      entityId?: string;
+      offset3d?: Vec3;
+      offset?: [number, number];
+      maxDistance?: number;
+    },
+    label = "Edit World Widget",
+  ): void {
+    const current = this.layout?.worldWidgets?.[index];
+    if (!current) return;
+    const previous = cloneWorldWidget(current);
+    const draft = cloneWorldWidget(current);
+    if (patch.widget !== undefined) draft.widget = patch.widget;
+    if (patch.worldPos !== undefined) draft.anchor.worldPos = [...patch.worldPos];
+    if (patch.entityId !== undefined) {
+      if (patch.entityId) draft.anchor.entityId = patch.entityId;
+      else delete draft.anchor.entityId;
+    }
+    if (patch.offset3d !== undefined) {
+      if (patch.offset3d.some((value) => value !== 0)) draft.anchor.offset3d = [...patch.offset3d];
+      else delete draft.anchor.offset3d;
+    }
+    if (patch.offset !== undefined) {
+      if (patch.offset[0] !== 0 || patch.offset[1] !== 0) draft.offset = [...patch.offset];
+      else delete draft.offset;
+    }
+    if (patch.maxDistance !== undefined) {
+      if (patch.maxDistance > 0) draft.maxDistance = patch.maxDistance;
+      else delete draft.maxDistance;
+    }
+    const next = cloneWorldWidget(draft);
+
+    const apply = (value: WorldUiWidget): void => {
+      if (!this.layout?.worldWidgets?.[index]) return;
+      this.layout.worldWidgets[index] = cloneWorldWidget(value);
+      this.refreshWorldWidgetObject(index);
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({ label, redo: () => apply(next), undo: () => apply(previous) });
+  }
+
+  /** Edits the currently selected world widget (Details panel). */
+  setSelectedWorldWidget(patch: {
+    widget?: string;
+    worldPos?: Vec3;
+    entityId?: string;
+    offset3d?: Vec3;
+    offset?: [number, number];
+    maxDistance?: number;
+  }): void {
+    if (this.selection?.kind !== "worldWidget") return;
+    this.setWorldWidget(this.selection.index, patch);
   }
 
   /**
@@ -4389,6 +4597,8 @@ export class SceneApp {
       this.applyPostProcess();
       return;
     }
+    // World-widget markers carry no hidden flag (always shown in the editor).
+    if (selection.kind === "worldWidget") return;
     const object = this.characterObjects[selection.index];
     const character = this.layout?.characters[selection.index];
     if (object && character) object.visible = !(character.hidden ?? false);
@@ -4954,6 +5164,10 @@ export class SceneApp {
       const helper = this.reflectionCaptureObjects[selection.index];
       return helper ? new Box3().setFromObject(helper) : null;
     }
+    if (selection.kind === "worldWidget") {
+      const icon = this.worldWidgetIcons[selection.index];
+      return icon ? new Box3().setFromObject(icon) : null;
+    }
     // Environment singletons have no transform bounds.
     if (
       selection.kind === "sky" ||
@@ -5060,6 +5274,12 @@ export class SceneApp {
     }
 
     if (selection.kind === "post") {
+      return null;
+    }
+
+    // World widgets are billboard markers, not renderable meshes — the selection
+    // box (selectionBounds) is feedback enough; no outline.
+    if (selection.kind === "worldWidget") {
       return null;
     }
 
@@ -5359,12 +5579,14 @@ export class SceneApp {
     if (selection.kind === "reflectionCapture") {
       return this.layout.reflectionCaptures?.[selection.index] ?? null;
     }
-    // Environment singletons are transform-less (no gizmo / move target).
+    // Environment singletons are transform-less (no gizmo / move target). World
+    // widgets are placed via the Details panel + marker, not the gizmo (v1).
     if (
       selection.kind === "sky" ||
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
-      selection.kind === "post"
+      selection.kind === "post" ||
+      selection.kind === "worldWidget"
     ) {
       return null;
     }
@@ -5538,6 +5760,9 @@ export class SceneApp {
     if (selection.kind === "reflectionCapture") {
       return Boolean(this.layout.reflectionCaptures?.[selection.index]);
     }
+    if (selection.kind === "worldWidget") {
+      return Boolean(this.layout.worldWidgets?.[selection.index]);
+    }
     return Boolean(this.layout.characters[selection.index]);
   }
 
@@ -5556,4 +5781,46 @@ export class SceneApp {
       this.cameraController.syncAnglesFromCurrentView();
     }
   };
+}
+
+/**
+ * Paints the world-widget editor billboard glyph: a rounded speech-tag with a
+ * downward pointer, evoking a screen-space label pinned in the world.
+ */
+function drawWorldWidgetGlyph(ctx: CanvasRenderingContext2D, size: number): void {
+  ctx.clearRect(0, 0, size, size);
+  const pad = size * 0.14;
+  const left = pad;
+  const top = pad;
+  const right = size - pad;
+  const bottom = size * 0.66;
+  const radius = size * 0.16;
+  const tipX = size * 0.4;
+
+  ctx.beginPath();
+  ctx.moveTo(left + radius, top);
+  ctx.lineTo(right - radius, top);
+  ctx.quadraticCurveTo(right, top, right, top + radius);
+  ctx.lineTo(right, bottom - radius);
+  ctx.quadraticCurveTo(right, bottom, right - radius, bottom);
+  ctx.lineTo(tipX + size * 0.12, bottom);
+  ctx.lineTo(tipX, bottom + size * 0.18);
+  ctx.lineTo(tipX - size * 0.04, bottom);
+  ctx.lineTo(left + radius, bottom);
+  ctx.quadraticCurveTo(left, bottom, left, bottom - radius);
+  ctx.lineTo(left, top + radius);
+  ctx.quadraticCurveTo(left, top, left + radius, top);
+  ctx.closePath();
+
+  ctx.fillStyle = "rgba(18, 22, 32, 0.92)";
+  ctx.fill();
+  ctx.lineWidth = size * 0.045;
+  ctx.strokeStyle = "#4f8cff";
+  ctx.stroke();
+
+  // Two text lines inside the tag.
+  ctx.fillStyle = "#dfe7ff";
+  const lineH = size * 0.07;
+  ctx.fillRect(left + radius, top + size * 0.16, (right - left) * 0.62, lineH);
+  ctx.fillRect(left + radius, top + size * 0.31, (right - left) * 0.4, lineH);
 }

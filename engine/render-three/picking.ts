@@ -62,3 +62,12 @@ export function findParentReflectionCapture(object: Object3D): Object3D | null {
   }
   return null;
 }
+
+export function findParentWorldWidget(object: Object3D): Object3D | null {
+  let current: Object3D | null = object;
+  while (current) {
+    if (current.userData.worldWidgetIndex !== undefined) return current;
+    current = current.parent;
+  }
+  return null;
+}

@@ -9,6 +9,7 @@ import {
   findParentReflectionCapture,
   findParentReflectionPlane,
   findParentReflectiveSurface,
+  findParentWorldWidget,
 } from "@engine/render-three/picking";
 import type { InstanceSelection, Selection } from "@editor/core/selection";
 import { pickGizmoHandle as pickGizmoHandleFromObjects } from "@editor/gizmos/interaction";
@@ -115,6 +116,12 @@ export class ScenePicker {
         const index = Number(reflectionCapture.userData.reflectionCaptureIndex);
         if (Number.isInteger(index)) return { kind: "reflectionCapture", index };
       }
+
+      const worldWidget = findParentWorldWidget(hit.object);
+      if (worldWidget) {
+        const index = Number(worldWidget.userData.worldWidgetIndex);
+        if (Number.isInteger(index)) return { kind: "worldWidget", index };
+      }
     }
     return null;
   }
@@ -189,6 +196,10 @@ export class ScenePicker {
     if (selection.kind === "reflectionCapture") {
       const capture = findParentReflectionCapture(hit.object);
       return capture ? Number(capture.userData.reflectionCaptureIndex) === selection.index : false;
+    }
+    if (selection.kind === "worldWidget") {
+      const widget = findParentWorldWidget(hit.object);
+      return widget ? Number(widget.userData.worldWidgetIndex) === selection.index : false;
     }
     // Environment singletons have no pickable geometry.
     if (

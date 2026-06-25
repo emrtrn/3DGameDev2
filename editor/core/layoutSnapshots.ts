@@ -13,6 +13,7 @@ import type {
   MetadataValue,
   Vec3,
 } from "@engine/scene/layout";
+import type { WorldUiWidget } from "@engine/ui/uiWorldWidget";
 
 export interface EditableTransformLike {
   position: Vec3;
@@ -283,6 +284,19 @@ export function cloneSphereReflectionCapture(
   if (capture.far !== undefined) clone.far = capture.far;
   if (capture.parallax !== undefined) clone.parallax = capture.parallax;
   if (capture.priority !== undefined) clone.priority = capture.priority;
+  return clone;
+}
+
+export function cloneWorldWidget(widget: WorldUiWidget): WorldUiWidget {
+  const clone: WorldUiWidget = {
+    widget: widget.widget,
+    anchor: { worldPos: [...widget.anchor.worldPos] },
+  };
+  if (widget.anchor.entityId !== undefined) clone.anchor.entityId = widget.anchor.entityId;
+  if (widget.anchor.offset3d !== undefined) clone.anchor.offset3d = [...widget.anchor.offset3d];
+  if (widget.space !== undefined) clone.space = widget.space;
+  if (widget.offset !== undefined) clone.offset = [widget.offset[0], widget.offset[1]];
+  if (widget.maxDistance !== undefined) clone.maxDistance = widget.maxDistance;
   return clone;
 }
 

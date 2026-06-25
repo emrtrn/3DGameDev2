@@ -302,7 +302,7 @@ Bu, Forge'un mevcut `?editor` / runtime ayrimina uyumludur.
 - [x] **U7a — UI animation:** deklaratif gecis preset'leri (fade/slide/scale) ekran push/pop icin; `prefers-reduced-motion` saygisi. (timeline yok) → `engine/ui/uiTransition.ts` + `UiWidgetDef.transition` + RuntimeUiSubsystem enter/exit + style.css preset'leri + editor transition paneli & "Play"; 6 yeni headless test → 354 check, `verify:dist --strict` runtime-only.
 - [x] **U7b — Localization:** `.loc.json` string tablolari + Text `textKey`, aktif locale resolver, runtime + binding entegrasyonu. → `engine/ui/uiLocale.ts` (`normalizeUiLocaleTable`/`applyLocParams`/`LocaleRegistry`) + `UiTextKey` (`uiWidget.ts`) + renderer `resolveLoc` + `bindUiLocale` (locale-change re-apply) + `RuntimeSceneApp.loadUiLocaleRegistry` + `worldSettings.locale` (save-validator allowlist) + debug `locale:` satiri; demo en/tr tablolari, `Menu.ui.json` textKey'lere tasindi; 8 yeni headless test → 361 check, `verify:dist --strict` runtime-only.
 - [x] **U7c — Accessibility:** ARIA rol/label/alt, klavye focus navigation, modal focus trap + initial/restore focus, high-contrast tema. → `engine/ui/uiA11y.ts` (`resolveUiA11yAttrs`/`collectFocusables`/`nextFocusIndex`/`auditUiA11y`) + `UiNode.a11y`/`UiWidgetDef.initialFocus` (`uiWidget.ts`) + renderer ARIA attrs + ProgressBar canli `aria-valuenow` (`uiBinding.ts`) + RuntimeUiSubsystem `role=dialog`/`aria-modal` + focus trap + initial/restore focus + Tab/arrow nav + `?debug` a11y audit + `:focus-visible` & `prefers-contrast` (style.css) + editor a11y/initialFocus paneli; 8 yeni headless test → 369 check, `verify:dist --strict` runtime-only.
-- [x] **U7d — World-space widget (WidgetComponentLite) — Secenek A:** screen-projected DOM billboard (world-pos **+ entity anchor**). → `engine/ui/uiWorldWidget.ts` (`WorldUiWidget` model: `worldPos`/`entityId`/`offset3d` anchor + `normalizeWorldWidget(s)` + `resolveWorldWidgetVisibility` fade/scale + `ndcToScreen`) + `RoomLayout.worldWidgets` (`layout.ts`, save-validator allowlist'inde) + `src/ui/WorldUiSubsystem.ts` (overlay layer, frame basina projeksiyon + `resolveEntityPosition`) + RuntimeSceneApp entegrasyonu (`resolveEntityWorldPosition` actor/character Object3D) + `?debug` `world: n/m` + `.forge-ui-world-*` CSS + `WorldLabel.ui.json`/`world-label` asset; 5 yeni headless test → 374 check, `verify:dist --strict` runtime-only. **Ertelendi:** socket anchor, editor gizmo yerlestirme, raycast etkilesim derinligi, Secenek B (true 3D widget mesh).
+- [x] **U7d — World-space widget (WidgetComponentLite) — Secenek A:** screen-projected DOM billboard (world-pos **+ entity anchor**). → `engine/ui/uiWorldWidget.ts` (`WorldUiWidget` model: `worldPos`/`entityId`/`offset3d` anchor + `normalizeWorldWidget(s)` + `resolveWorldWidgetVisibility` fade/scale + `ndcToScreen`) + `RoomLayout.worldWidgets` (`layout.ts`, save-validator allowlist'inde) + `src/ui/WorldUiSubsystem.ts` (overlay layer, frame basina projeksiyon + `resolveEntityPosition`) + RuntimeSceneApp entegrasyonu (`resolveEntityWorldPosition` actor/character Object3D) + `?debug` `world: n/m` + `.forge-ui-world-*` CSS + `WorldLabel.ui.json`/`world-label` asset; 5 yeni headless test → 374 check, `verify:dist --strict` runtime-only. **Editor yerlestirme (marker-first):** world widget'lar artik editorde Add menusu + viewport billboard marker + outliner + Details (anchor/widget/offset/maxDistance numeric) + tikla-sec + sil ile yonetilir (gizmo surukleme haric). **Ertelendi:** gizmo surukleme, socket anchor, raycast etkilesim derinligi, Secenek B (true 3D widget mesh).
 
 ## Uygulama durumu
 
@@ -655,12 +655,58 @@ Kapsam disi (sonraki kesim): socket anchor (su an `worldPos` + `entityId`),
 editor gizmo ile yerlestirme (su an JSON authoring), raycast occlusion +
 3D-widget etkilesim, Secenek B (DOM→texture / gercek Three mesh, egri panel).
 
+### U7d — Editor yerlestirme (marker-first, gizmo'suz) (TAMAMLANDI)
+
+World widget'lari editorde **gorunur + secilebilir + duzenlenebilir** yapan
+asamali ilk kesim (kullanici tercihi: once marker, gizmo sonra). Editorun
+ortak gizmo/transform makinesine dokunmadan, transform-less placed-actor desenini
+(sky/post + reflectionCapture ikonu) izler.
+
+Eklenenler:
+
+- **Selection kind** `worldWidget` (`editor/core/selection.ts`): clone/id/parse/
+  equal + delete/restore karsilastiricilari.
+- **Editable model** (`editor/core/editableScene.ts` `EditableWorldWidget` +
+  `sceneObjects.ts` `buildWorldWidgetEditableSelection`): anchor world noktasi
+  ortak `position` alaninda, widget ref/entityId/offset3d/offset/maxDistance
+  `selection.worldWidget`'te. Outliner + Details bundan beslenir.
+  `layoutSnapshots.ts` `cloneWorldWidget` (insert/remove undo).
+- **Viewport marker** (`SceneApp`): her widget icin tiklanabilir billboard ikon
+  (`createActorBillboardIcon` + `drawWorldWidgetGlyph` speech-tag glyph), load'da
+  `buildWorldWidgetMarkers`, anchor degisince reposition, pickable listede,
+  secimde marker etrafinda selection box; `getMutableTransform` → null
+  (transform-less, gizmo yok); `withEditorAidsHidden` probe-bake'te gizler.
+  Sessiz fallthrough guard'lari: `hasSelection`/`applyVisibility`/
+  `selectionBounds`/outline-target/multi-delete worldWidget'i artik dogru ele alir.
+- **Picking** (`engine/render-three/picking.ts` `findParentWorldWidget` +
+  `editor/render-three/scenePicker.ts` pick/isSelfHit dallari): viewport'ta ikona
+  tiklayinca secilir.
+- **Host komutlari** (`SceneApp`): `addWorldWidget(assetId)` (kameranin 5 birim
+  onune yerlestirir, undo'lu), `removeWorldWidget` (undo'lu), `setWorldWidget`/
+  `setSelectedWorldWidget` (Details alan yazimlari, bos/sifir optional'lari duser,
+  undo'lu). `EditorSceneController` worldWidget'i duplicate + multi-delete'ten
+  haric tutar. Load'da `normalizeWorldWidgets` editor in-memory layout'unu temizler.
+- **EditorUi**: Details paneli (`renderWorldWidgetDetails` — widget ref + anchor
+  X/Y/Z + entityId + offset3d + ekran offset + maxDistance, hepsi
+  `setSelectedWorldWidget`'e baglar) + **Add → UI → World Widget** menusu
+  (`firstUiWidgetAssetId`) + outliner "W" rozeti + metadata bolumlerinden haric.
+
+Kritik dogrulama: editorun save'i `this.layout`'u dogrudan yazdigi ve
+`normalizeLoadedRoomLayout` alani korudugu icin `worldWidgets` zaten editor
+round-trip'inde **kayipsiz** (bu fazdan once de oyleydi). `tsc`, `npm run
+build:verify` (374 test + `verify:dist --strict` runtime-only — editor kodu
+oyun bundle'ina sizmaz), `check:assets` PASS.
+
+Kapsam disi (sonraki kesim): **gizmo ile surukleme** (su an Details'te numeric
+konum), outliner'da gizle/kilit, grouping/parenting/duplicate, socket anchor,
+Secenek B.
+
 ### Sonraki adim (U7)
 
 - U7'nin dort alt-fazi (a–d) ilk kesimleriyle tamamlandi; U7d ayrica entity
-  anchor kazandi. Acik takip isleri: U7d socket anchor + editor gizmo
-  yerlestirme + Secenek B (true 3D widget mesh / raycast). Bunlar ayri, daha
-  buyuk parcalar — istege bagli.
+  anchor + editor yerlestirme (marker-first) kazandi. Acik takip isleri: U7d
+  **gizmo ile surukleme** (su an Details numeric konum), socket anchor + Secenek B
+  (true 3D widget mesh / raycast). Bunlar ayri, daha buyuk parcalar — istege bagli.
 
 ## U7 — Ileri UI plani
 
