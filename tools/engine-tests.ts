@@ -108,6 +108,12 @@ import {
   type LocomotionInput,
 } from "../src/game/locomotionAnimation";
 import { initialInteractionState, stepInteractionTrigger } from "../src/game/interaction";
+import {
+  GameStateStore,
+  formatTimer,
+  normalizeGameRules,
+  parseGameEvent,
+} from "../src/game/gameRules";
 import { parseEffectDefinition } from "../engine/render-three/particleEffect";
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
 import { collectSubtreeNodeNames, splitClipsByUpperBody } from "../engine/render-three/bodyMask";
@@ -11271,6 +11277,171 @@ check("ndcToScreen maps clip space to viewport pixels + front/back", () => {
   assert.deepEqual(ndcToScreen(-1, -1, 0, 800, 600), { x: 0, y: 600, inFront: true });
   // NDC z > 1 means behind the camera.
   assert.equal(ndcToScreen(0, 0, 1.2, 800, 600).inFront, false);
+});
+
+// --- Game Framework (rules layer) ---------------------------------------
+
+check("normalizeGameRules returns null when there is nothing to drive", () => {
+  assert.equal(normalizeGameRules(undefined), null);
+  assert.equal(normalizeGameRules({}), null);
+  assert.equal(normalizeGameRules({ variables: [], objectives: [] }), null);
+  // A bare variable list is enough to activate the rules layer.
+  assert.notEqual(normalizeGameRules({ variables: [{ id: "score", initial: 0 }] }), null);
+});
+
+check("normalizeGameRules clamps objectives and dedupes ids", () => {
+  const config = normalizeGameRules({
+    objectives: [
+      { id: "coins", label: "Coins", target: 5, initial: 9 },
+      { id: "coins", label: "dup", target: 99 },
+      { id: "", target: 3 },
+      { target: 3 },
+    ],
+  });
+  assert.ok(config?.objectives);
+  assert.equal(config.objectives.length, 1);
+  const coins = config.objectives[0];
+  assert.equal(coins.target, 5);
+  assert.equal(coins.initial, 5); // initial clamped to target
+  // objectives present ⇒ win-on-objectives defaults true
+  assert.equal(config.winWhenObjectivesComplete, true);
+});
+
+check("normalizeGameRules drops a non-positive timer, keeps a valid one", () => {
+  assert.equal(normalizeGameRules({ timer: { durationSeconds: 0 } }), null);
+  const config = normalizeGameRules({ timer: { durationSeconds: 30, direction: "down" } });
+  assert.equal(config?.timer?.durationSeconds, 30);
+  assert.equal(config?.timer?.direction, "down");
+});
+
+check("parseGameEvent maps loose payloads and rejects junk", () => {
+  assert.deepEqual(parseGameEvent({ event: "add", variable: "score", amount: 10 }), {
+    kind: "add",
+    variable: "score",
+    amount: 10,
+  });
+  assert.deepEqual(parseGameEvent({ kind: "objective", id: "coins" }), {
+    kind: "objective",
+    id: "coins",
+  });
+  assert.deepEqual(parseGameEvent({ event: "win" }), { kind: "win" });
+  assert.equal(parseGameEvent({ event: "add" }), null); // missing variable
+  assert.equal(parseGameEvent({ event: "nope" }), null);
+  assert.equal(parseGameEvent(42), null);
+});
+
+check("GameStateStore add/set only mutates declared variables", () => {
+  const store = new GameStateStore(normalizeGameRules({ variables: [{ id: "score", initial: 0 }] })!);
+  store.dispatch({ kind: "add", variable: "score", amount: 5 });
+  store.dispatch({ kind: "add", variable: "ghost", amount: 99 }); // undeclared: ignored
+  assert.equal(store.variable("score"), 5);
+  assert.equal(store.variable("ghost"), undefined);
+  store.dispatch({ kind: "set", variable: "score", value: 2 });
+  assert.equal(store.variable("score"), 2);
+});
+
+check("GameStateStore wins when all required objectives complete", () => {
+  const store = new GameStateStore(
+    normalizeGameRules({
+      objectives: [
+        { id: "coins", label: "Coins", target: 3 },
+        { id: "bonus", label: "Bonus", target: 1, optional: true },
+      ],
+    })!,
+  );
+  assert.equal(store.phase, "playing");
+  store.dispatch({ kind: "objective", id: "coins" });
+  store.dispatch({ kind: "objective", id: "coins", amount: 5 }); // clamps at target 3
+  assert.equal(store.snapshot().objectives[0].count, 3);
+  // Optional objective still incomplete, but the round is already won.
+  assert.equal(store.phase, "won");
+});
+
+check("GameStateStore loses when the tracked variable depletes; lose beats win", () => {
+  const store = new GameStateStore(
+    normalizeGameRules({
+      variables: [{ id: "lives", initial: 1 }],
+      objectives: [{ id: "coins", label: "Coins", target: 1 }],
+      loseWhenVariableDepleted: "lives",
+    })!,
+  );
+  // Complete the objective AND deplete lives on the same evaluation pass.
+  store.dispatch({ kind: "objective", id: "coins" });
+  assert.equal(store.phase, "won");
+  // Fresh store: deplete first ⇒ lost, and terminal phase ignores later events.
+  const store2 = new GameStateStore(
+    normalizeGameRules({
+      variables: [{ id: "lives", initial: 1 }],
+      objectives: [{ id: "coins", label: "Coins", target: 1 }],
+      loseWhenVariableDepleted: "lives",
+    })!,
+  );
+  store2.dispatch({ kind: "add", variable: "lives", amount: -1 });
+  assert.equal(store2.phase, "lost");
+  store2.dispatch({ kind: "objective", id: "coins" });
+  assert.equal(store2.snapshot().objectives[0].count, 0); // ignored once terminal
+});
+
+check("GameStateStore down-timer expires to its outcome; up-timer never expires", () => {
+  const down = new GameStateStore(normalizeGameRules({ timer: { durationSeconds: 2 } })!);
+  down.tick(1);
+  assert.equal(down.phase, "playing");
+  assert.equal(down.timerSeconds(), 1);
+  down.tick(5);
+  assert.equal(down.timerSeconds(), 0);
+  assert.equal(down.phase, "lost"); // default onExpire
+  const up = new GameStateStore(
+    normalizeGameRules({ timer: { durationSeconds: 2, direction: "up" } })!,
+  );
+  up.tick(10);
+  assert.equal(up.phase, "playing");
+  assert.equal(up.timerSeconds(), 10);
+});
+
+check("GameStateStore restart/reset restores authored initial state", () => {
+  const store = new GameStateStore(
+    normalizeGameRules({
+      variables: [{ id: "score", initial: 0 }],
+      objectives: [{ id: "coins", label: "Coins", target: 2 }],
+    })!,
+  );
+  store.dispatch({ kind: "add", variable: "score", amount: 7 });
+  store.dispatch({ kind: "objective", id: "coins", amount: 2 });
+  assert.equal(store.phase, "won");
+  store.dispatch({ kind: "restart" });
+  assert.equal(store.phase, "playing");
+  assert.equal(store.variable("score"), 0);
+  assert.equal(store.snapshot().objectives[0].count, 0);
+});
+
+check("GameStateStore.hudFields exposes namespaced bindable paths", () => {
+  const store = new GameStateStore(
+    normalizeGameRules({
+      variables: [{ id: "score", initial: 0, label: "Score" }],
+      objectives: [{ id: "coins", label: "Coins", target: 3 }],
+      timer: { durationSeconds: 90 },
+    })!,
+  );
+  store.dispatch({ kind: "add", variable: "score", amount: 40 });
+  store.dispatch({ kind: "objective", id: "coins" });
+  const fields = store.hudFields();
+  assert.equal(fields["game.phase"], "playing");
+  assert.equal(fields["game.var.score"], 40);
+  assert.equal(fields["game.var.score.label"], "Score");
+  assert.equal(fields["game.objective.coins.count"], 1);
+  assert.equal(fields["game.objective.coins.target"], 3);
+  assert.equal(fields["game.objective.coins.complete"], false);
+  assert.equal(fields["game.objectivesComplete"], 0);
+  assert.equal(fields["game.objectivesTotal"], 1);
+  assert.equal(fields["game.timer.seconds"], 90);
+  assert.equal(fields["game.timer.label"], "01:30");
+});
+
+check("formatTimer renders mm:ss and floors/clamps", () => {
+  assert.equal(formatTimer(0), "00:00");
+  assert.equal(formatTimer(5), "00:05");
+  assert.equal(formatTimer(75.9), "01:15");
+  assert.equal(formatTimer(-3), "00:00");
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);
