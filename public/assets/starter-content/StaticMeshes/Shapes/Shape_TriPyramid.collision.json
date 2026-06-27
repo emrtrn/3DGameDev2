@@ -1,0 +1,41 @@
+{
+  "primitives": [
+    {
+      "shape": "convex",
+      "size": [
+        1.2,
+        1,
+        1
+      ],
+      "center": [
+        0,
+        0.5,
+        -0.1667
+      ],
+      "points": [
+        [
+          -0.6,
+          0,
+          0.3333
+        ],
+        [
+          0.6,
+          0,
+          0.3333
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          -0.6667
+        ]
+      ]
+    }
+  ],
+  "complexity": "projectDefault",
+  "preset": "blockAll"
+}

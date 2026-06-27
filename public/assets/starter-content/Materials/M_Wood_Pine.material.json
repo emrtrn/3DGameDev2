@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "M_Wood_Pine",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "t-wood-pine-d",
+  "normalTexture": "t-wood-pine-n",
+  "maskTexture": null,
+  "roughnessTexture": "t-wood-pine-m",
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "opacityTexture": null,
+  "emissiveTexture": null,
+  "ormTexture": null,
+  "uvTiling": {
+    "x": 1,
+    "y": 1
+  },
+  "roughness": 0.7,
+  "metalness": 0,
+  "aoIntensity": 1,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "layerBlend": null
+}

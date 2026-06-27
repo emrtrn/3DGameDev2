@@ -13,7 +13,7 @@
     "snapRotationDeg": 15,
     "snapRotationEnabled": false,
     "snapScale": 0.1,
-    "snapScaleEnabled": false
+    "snapScaleEnabled": true
   },
   "scripts": {
     "preview": "npm run dev",

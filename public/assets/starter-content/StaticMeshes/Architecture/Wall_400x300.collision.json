@@ -1,0 +1,19 @@
+{
+  "primitives": [
+    {
+      "shape": "box",
+      "size": [
+        4,
+        3,
+        0.2
+      ],
+      "center": [
+        2,
+        1.5,
+        0
+      ]
+    }
+  ],
+  "complexity": "projectDefault",
+  "preset": "blockAll"
+}

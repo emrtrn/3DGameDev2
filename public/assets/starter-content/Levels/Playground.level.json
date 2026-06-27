@@ -17,8 +17,8 @@
         {
           "position": [
             -0.77,
-            0.25,
-            1.89
+            0,
+            -3.68
           ],
           "name": "Player Start",
           "collision": false,
@@ -37,19 +37,7 @@
     },
     {
       "assetId": "starter-sm-platform",
-      "placements": [
-        {
-          "position": [
-            0,
-            0,
-            0
-          ],
-          "scaleLocked": true,
-          "materialSlot": "white-material",
-          "rotationYDeg": 0,
-          "scale": 2
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "starter-sm-ramp",
@@ -57,48 +45,7 @@
     },
     {
       "assetId": "starter-sm-pillar",
-      "placements": [
-        {
-          "position": [
-            -3.17,
-            1.75,
-            -3.11
-          ],
-          "materialSlot": "red-material",
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -3.17,
-            1.75,
-            3.31
-          ],
-          "materialSlot": "red-material",
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            3.41,
-            1.75,
-            -3.1
-          ],
-          "materialSlot": "red-material",
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            3.41,
-            1.75,
-            3.32
-          ],
-          "materialSlot": "red-material",
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "starter-sm-sphere",
@@ -106,18 +53,7 @@
     },
     {
       "assetId": "starter-sm-cube",
-      "placements": [
-        {
-          "position": [
-            0,
-            0.75,
-            0
-          ],
-          "materialSlot": "concratetile-material",
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "starter-sm-cylinder",
@@ -138,6 +74,152 @@
     {
       "assetId": "sm-pano",
       "placements": []
+    },
+    {
+      "assetId": "sm-chair",
+      "placements": []
+    },
+    {
+      "assetId": "shape-cone",
+      "placements": []
+    },
+    {
+      "assetId": "shape-cube",
+      "placements": [
+        {
+          "position": [
+            0,
+            3.21,
+            0
+          ],
+          "materialSlot": "m-techpanel-material",
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "shape-cylender",
+      "placements": []
+    },
+    {
+      "assetId": "shape-cylinder",
+      "placements": []
+    },
+    {
+      "assetId": "shape-narrowcapsule",
+      "placements": []
+    },
+    {
+      "assetId": "shape-pipe-180",
+      "placements": []
+    },
+    {
+      "assetId": "shape-pipe-90",
+      "placements": []
+    },
+    {
+      "assetId": "shape-pipe",
+      "placements": []
+    },
+    {
+      "assetId": "shape-quadpyramid",
+      "placements": []
+    },
+    {
+      "assetId": "shape-sphere",
+      "placements": []
+    },
+    {
+      "assetId": "shape-plane",
+      "placements": []
+    },
+    {
+      "assetId": "floor-400x400",
+      "placements": [
+        {
+          "position": [
+            -4,
+            0,
+            -4
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            2,
+            1,
+            2
+          ]
+        },
+        {
+          "position": [
+            -2.05,
+            3.2,
+            -2.65
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            1.1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "wall-door-400x300",
+      "placements": []
+    },
+    {
+      "assetId": "wall-400x300",
+      "placements": [
+        {
+          "position": [
+            -1.85,
+            0,
+            -2.55
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            2.25,
+            0,
+            -2.65
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "wall-window-400x300",
+      "placements": [
+        {
+          "position": [
+            -1.95,
+            0,
+            -2.65
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": 1
+        }
+      ]
     }
   ],
   "characters": [],
@@ -155,7 +237,7 @@
     "mieDirectionalG": 0.8,
     "exposure": 1,
     "skyLightCapture": {
-      "intensity": 0.4
+      "intensity": 0.6
     }
   },
   "cloudLayer": {
@@ -173,7 +255,7 @@
     "bloom": {
       "enabled": true,
       "threshold": 1,
-      "intensity": 0.5,
+      "intensity": 1,
       "radius": 1
     },
     "vignette": {
@@ -192,6 +274,7 @@
       "maxBlur": 1
     },
     "ao": {
+      "enabled": true,
       "radius": 1,
       "intensity": 1
     },
@@ -206,14 +289,14 @@
       "type": "directional",
       "position": [
         0,
-        2.01,
+        6.14,
         0
       ],
       "name": "Sun",
       "rotation": [
-        -26,
-        1.1,
-        -25.7
+        -30,
+        0,
+        0
       ],
       "color": "#ffffff",
       "intensity": 5,
@@ -221,7 +304,33 @@
     }
   ],
   "reflectionPlanes": [],
-  "reflectiveSurfaces": [],
+  "reflectiveSurfaces": [
+    {
+      "id": "reflective-surface-1",
+      "position": [
+        0,
+        0.01,
+        0
+      ],
+      "name": "Reflective Surface",
+      "rotation": [
+        -90,
+        0,
+        0
+      ],
+      "scale": [
+        8,
+        8,
+        1.5
+      ],
+      "material": "m-wood-floor-material",
+      "reflectionStrength": 0.2,
+      "fresnelPower": 1,
+      "fresnelBias": 0.1,
+      "distortion": 0.2,
+      "resolution": 512
+    }
+  ],
   "reflectionCaptures": [
     {
       "id": "reflection-capture-1",
@@ -232,7 +341,7 @@
       ],
       "name": "Sphere Reflection Capture",
       "radius": 6,
-      "intensity": 0.4,
+      "intensity": 0.8,
       "resolution": 256,
       "near": 0.1,
       "parallax": true

@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "M_Wood_Floor",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "t-wood-floor-walnut-d",
+  "normalTexture": "t-wood-floor-walnut-n",
+  "maskTexture": null,
+  "roughnessTexture": "t-wood-floor-walnut-m",
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "opacityTexture": null,
+  "emissiveTexture": null,
+  "ormTexture": null,
+  "uvTiling": {
+    "x": 2,
+    "y": 2
+  },
+  "roughness": 0.8,
+  "metalness": 0,
+  "aoIntensity": 1,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "layerBlend": null
+}

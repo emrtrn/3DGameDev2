@@ -4,166 +4,6 @@
   "ktx2": false,
   "assets": [
     {
-      "id": "starter-sm-cube",
-      "name": "Starter Cube",
-      "assetType": "staticMesh",
-      "category": "starter-shapes",
-      "path": "assets/starter-content/StaticMeshes/Shapes/SM_Starter_Cube.glb",
-      "tags": [
-        "starter",
-        "shape",
-        "cube"
-      ],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "starter-static-meshes",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 2024
-      },
-      "source": {
-        "origin": "forge",
-        "pack": "Forge Starter Content",
-        "packVersion": "0.1"
-      },
-      "license": "Project-local placeholder; replace before distribution if needed"
-    },
-    {
-      "id": "starter-sm-sphere",
-      "name": "Starter Sphere",
-      "assetType": "staticMesh",
-      "category": "starter-shapes",
-      "path": "assets/starter-content/StaticMeshes/Shapes/SM_Starter_Sphere.glb",
-      "tags": [
-        "starter",
-        "shape",
-        "sphere"
-      ],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "starter-static-meshes",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 24928
-      },
-      "source": {
-        "origin": "forge",
-        "pack": "Forge Starter Content",
-        "packVersion": "0.1"
-      },
-      "license": "Project-local placeholder; replace before distribution if needed"
-    },
-    {
-      "id": "starter-sm-cylinder",
-      "name": "Starter Cylinder",
-      "assetType": "staticMesh",
-      "category": "starter-shapes",
-      "path": "assets/starter-content/StaticMeshes/Shapes/SM_Starter_Cylinder.glb",
-      "tags": [
-        "starter",
-        "shape",
-        "cylinder"
-      ],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "starter-static-meshes",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 8240
-      },
-      "source": {
-        "origin": "forge",
-        "pack": "Forge Starter Content",
-        "packVersion": "0.1"
-      },
-      "license": "Project-local placeholder; replace before distribution if needed"
-    },
-    {
-      "id": "starter-sm-cone",
-      "name": "Starter Cone",
-      "assetType": "staticMesh",
-      "category": "starter-shapes",
-      "path": "assets/starter-content/StaticMeshes/Shapes/SM_Starter_Cone.glb",
-      "tags": [
-        "starter",
-        "shape",
-        "cone"
-      ],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "starter-static-meshes",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 5856
-      },
-      "source": {
-        "origin": "forge",
-        "pack": "Forge Starter Content",
-        "packVersion": "0.1"
-      },
-      "license": "Project-local placeholder; replace before distribution if needed"
-    },
-    {
-      "id": "starter-sm-plane",
-      "name": "Starter Plane",
-      "assetType": "staticMesh",
-      "category": "starter-shapes",
-      "path": "assets/starter-content/StaticMeshes/Shapes/SM_Starter_Plane.glb",
-      "tags": [
-        "starter",
-        "shape",
-        "plane"
-      ],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "starter-static-meshes",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 1296
-      },
-      "source": {
-        "origin": "forge",
-        "pack": "Forge Starter Content",
-        "packVersion": "0.1"
-      },
-      "license": "Project-local placeholder; replace before distribution if needed"
-    },
-    {
       "id": "starter-sm-ramp",
       "name": "Prototype Ramp",
       "assetType": "staticMesh",
@@ -283,38 +123,6 @@
         "receiveShadow": true,
         "collision": true,
         "bytes": 6572
-      },
-      "source": {
-        "origin": "forge",
-        "pack": "Forge Starter Content",
-        "packVersion": "0.1"
-      },
-      "license": "Project-local placeholder; replace before distribution if needed"
-    },
-    {
-      "id": "starter-sm-crate",
-      "name": "Prototype Crate",
-      "assetType": "staticMesh",
-      "category": "starter-props",
-      "path": "assets/starter-content/StaticMeshes/Props/SM_Prototype_Crate.glb",
-      "tags": [
-        "starter",
-        "prop",
-        "crate"
-      ],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "starter-static-meshes",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 2024
       },
       "source": {
         "origin": "forge",
@@ -2627,10 +2435,10 @@
     },
     {
       "id": "white-material",
-      "name": "White.Material",
+      "name": "M_White",
       "assetType": "material",
       "category": "Materials",
-      "path": "assets/starter-content/Materials/White.material.json",
+      "path": "assets/starter-content/Materials/M_White.material.json",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -2742,10 +2550,10 @@
     },
     {
       "id": "mirror-material",
-      "name": "Mirror.Material",
+      "name": "M_Mirror",
       "assetType": "material",
       "category": "Materials",
-      "path": "assets/starter-content/Materials/Mirror.material.json",
+      "path": "assets/starter-content/Materials/M_Mirror.material.json",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -3550,52 +3358,6 @@
       "license": "Unknown"
     },
     {
-      "id": "t-rockmesh-m",
-      "name": "T Rock Mesh M",
-      "assetType": "texture",
-      "category": "Textures",
-      "path": "assets/starter-content/Textures/T_RockMesh_M.png",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Textures",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 269879
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "t-rockmesh-n",
-      "name": "T Rock Mesh N",
-      "assetType": "texture",
-      "category": "Textures",
-      "path": "assets/starter-content/Textures/T_RockMesh_N.png",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Textures",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 394260
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "t-single-tile-n",
       "name": "T Single Tile N",
       "assetType": "texture",
@@ -3620,10 +3382,10 @@
     },
     {
       "id": "red-material",
-      "name": "Red.Material",
+      "name": "M_Red",
       "assetType": "material",
       "category": "Materials",
-      "path": "assets/starter-content/Materials/Red.material.json",
+      "path": "assets/starter-content/Materials/M_Red.material.json",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -3684,6 +3446,1432 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 264
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-chair-m",
+      "name": "T Chair M",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Chair_M.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 63301
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-chair-n",
+      "name": "T Chair N",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Chair_N.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 181580
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-chair-material",
+      "name": "M Chair.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Chair.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 600
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "sm-chair",
+      "name": "SM Chair",
+      "assetType": "staticMesh",
+      "category": "Props",
+      "path": "assets/starter-content/StaticMeshes/Props/SM_Chair.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Props",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 58996
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-cone",
+      "name": "Shape Cone",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Cone.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 9400
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-cube",
+      "name": "Shape Cube",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Cube.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3932
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-cylinder",
+      "name": "Shape Cylinder",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Cylinder.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 17936
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-narrowcapsule",
+      "name": "Shape Narrow Capsule",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_NarrowCapsule.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 33824
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-pipe",
+      "name": "Shape Pipe",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Pipe.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 10116
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-pipe-90",
+      "name": "Shape Pipe 90",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Pipe_90.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 21600
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-pipe-180",
+      "name": "Shape Pipe 180",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Pipe_180.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 36880
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-quadpyramid",
+      "name": "Shape Quad Pyramid",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_QuadPyramid.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2232
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-sphere",
+      "name": "Shape Sphere",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Sphere.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 29632
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-torus",
+      "name": "Shape Torus",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Torus.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 64172
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-trim",
+      "name": "Shape Trim",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Trim.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 8000
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-trim-90-in",
+      "name": "Shape Trim 90 In",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Trim_90_In.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 15472
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-trim-90-out",
+      "name": "Shape Trim 90 Out",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Trim_90_Out.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 15476
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-tripyramid",
+      "name": "Shape Tri Pyramid",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_TriPyramid.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2024
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-tube",
+      "name": "Shape Tube",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Tube.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 27308
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-wedge-a",
+      "name": "Shape Wedge A",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Wedge_A.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2528
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-wedge-b",
+      "name": "Shape Wedge B",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Wedge_B.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2528
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-widecapsule",
+      "name": "Shape Wide Capsule",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_WideCapsule.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 26144
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shape-plane",
+      "name": "Shape Plane",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/Shape_Plane.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2692
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "floor-400x400",
+      "name": "Floor 400x400",
+      "assetType": "staticMesh",
+      "category": "Architecture",
+      "path": "assets/starter-content/StaticMeshes/Architecture/Floor_400x400.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Architecture",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2508
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "pillar-50x500",
+      "name": "Pillar 50x500",
+      "assetType": "staticMesh",
+      "category": "Architecture",
+      "path": "assets/starter-content/StaticMeshes/Architecture/Pillar_50x500.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Architecture",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3624
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "sm-assetplatform",
+      "name": "SM Asset Platform",
+      "assetType": "staticMesh",
+      "category": "Architecture",
+      "path": "assets/starter-content/StaticMeshes/Architecture/SM_AssetPlatform.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Architecture",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 95604
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wall-400x200",
+      "name": "Wall 400x200",
+      "assetType": "staticMesh",
+      "category": "Architecture",
+      "path": "assets/starter-content/StaticMeshes/Architecture/Wall_400x200.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Architecture",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2504
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wall-400x300",
+      "name": "Wall 400x300",
+      "assetType": "staticMesh",
+      "category": "Architecture",
+      "path": "assets/starter-content/StaticMeshes/Architecture/Wall_400x300.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Architecture",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2504
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wall-400x400",
+      "name": "Wall 400x400",
+      "assetType": "staticMesh",
+      "category": "Architecture",
+      "path": "assets/starter-content/StaticMeshes/Architecture/Wall_400x400.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Architecture",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2504
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wall-500x500",
+      "name": "Wall 500x500",
+      "assetType": "staticMesh",
+      "category": "Architecture",
+      "path": "assets/starter-content/StaticMeshes/Architecture/Wall_500x500.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Architecture",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 7120
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wall-door-400x300",
+      "name": "Wall Door 400x300",
+      "assetType": "staticMesh",
+      "category": "Architecture",
+      "path": "assets/starter-content/StaticMeshes/Architecture/Wall_Door_400x300.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Architecture",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4312
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wall-door-400x400",
+      "name": "Wall Door 400x400",
+      "assetType": "staticMesh",
+      "category": "Architecture",
+      "path": "assets/starter-content/StaticMeshes/Architecture/Wall_Door_400x400.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Architecture",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4312
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wall-window-400x300",
+      "name": "Wall Window 400x300",
+      "assetType": "staticMesh",
+      "category": "Architecture",
+      "path": "assets/starter-content/StaticMeshes/Architecture/Wall_Window_400x300.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Architecture",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 5076
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wall-window-400x400",
+      "name": "Wall Window 400x400",
+      "assetType": "staticMesh",
+      "category": "Architecture",
+      "path": "assets/starter-content/StaticMeshes/Architecture/Wall_Window_400x400.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Architecture",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 5072
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-smoke-subuv",
+      "name": "T Smoke Sub UV",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Smoke_SubUV.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 155936
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-smoke-tiled-d",
+      "name": "T Smoke Tiled D",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Smoke_Tiled_D.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 43987
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-spark-core",
+      "name": "T Spark Core",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Spark_Core.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 33892
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-tech-dot-m",
+      "name": "T Tech Dot M",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Tech_Dot_M.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 29959
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-tech-dot-n",
+      "name": "T Tech Dot N",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Tech_Dot_N.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 51657
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-tech-hex-tile-m",
+      "name": "T Tech Hex Tile M",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Tech_Hex_Tile_M.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 217356
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-tech-hex-tile-n",
+      "name": "T Tech Hex Tile N",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Tech_Hex_Tile_N.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 159959
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-tech-panel-m",
+      "name": "T Tech Panel M",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Tech_Panel_M.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 110295
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-tech-panel-n",
+      "name": "T Tech Panel N",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Tech_Panel_N.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 73249
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-water-m",
+      "name": "T Water M",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Water_M.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 140273
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-water-n",
+      "name": "T Water N",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Water_N.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 128538
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-wood-floor-walnut-d",
+      "name": "T Wood Floor Walnut D",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Wood_Floor_Walnut_D.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 286603
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-wood-floor-walnut-m",
+      "name": "T Wood Floor Walnut M",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Wood_Floor_Walnut_M.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 270009
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-wood-floor-walnut-n",
+      "name": "T Wood Floor Walnut N",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Wood_Floor_Walnut_N.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 170012
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-wood-oak-d",
+      "name": "T Wood Oak D",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Wood_Oak_D.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 335634
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-wood-oak-n",
+      "name": "T Wood Oak N",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Wood_Oak_N.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 302894
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-wood-pine-d",
+      "name": "T Wood Pine D",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Wood_Pine_D.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 412891
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-wood-pine-n",
+      "name": "T Wood Pine N",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Wood_Pine_N.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 301356
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-wood-walnut-d",
+      "name": "T Wood Walnut D",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Wood_Walnut_D.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 267716
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-wood-walnut-n",
+      "name": "T Wood Walnut N",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Wood_Walnut_N.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 282545
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-wood-floor-material",
+      "name": "M Wood Floor.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Wood_Floor.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 605
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-wood-oak-material",
+      "name": "M Wood Oak.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Wood_Oak.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 603
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-wood-oak-m",
+      "name": "T Wood Oak M",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Wood_Oak_M.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 215115
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-wood-pine-material",
+      "name": "M Wood Pine.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Wood_Pine.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 604
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-wood-pine-m",
+      "name": "T Wood Pine M",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Wood_Pine_M.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 247350
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-wood-walnut-material",
+      "name": "M Wood Walnut.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Wood_Walnut.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 606
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-wood-walnut-m",
+      "name": "T Wood Walnut M",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Wood_Walnut_M.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 174737
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-techpanel-material",
+      "name": "M Tech Panel.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_TechPanel.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 604
       },
       "license": "Unknown"
     }

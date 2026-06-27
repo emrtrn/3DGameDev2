@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "M_TechPanel",
+  "baseColor": "#ffbb00",
+  "baseColorTexture": null,
+  "normalTexture": "t-tech-panel-n",
+  "maskTexture": null,
+  "roughnessTexture": "t-tech-panel-m",
+  "metalnessTexture": "t-tech-panel-m",
+  "aoTexture": "t-tech-panel-m",
+  "opacityTexture": null,
+  "emissiveTexture": null,
+  "ormTexture": null,
+  "uvTiling": {
+    "x": 1,
+    "y": 1
+  },
+  "roughness": 1,
+  "metalness": 1,
+  "aoIntensity": 1,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "layerBlend": {
+    "layer1": {
+      "baseColor": "#75acf5",
+      "baseColorTexture": null,
+      "normalTexture": null,
+      "roughnessTexture": null,
+      "metalnessTexture": null,
+      "opacityTexture": null,
+      "emissiveTexture": null,
+      "aoTexture": null,
+      "roughness": 1,
+      "metalness": 0,
+      "opacity": 1,
+      "emissive": "#ffffff",
+      "emissiveIntensity": 0.5,
+      "aoIntensity": 1,
+      "uvTiling": {
+        "x": 1,
+        "y": 1
+      }
+    },
+    "driver": "maskTexture",
+    "amount": 1,
+    "min": 1,
+    "max": 1,
+    "contrast": 1,
+    "maskTexture": "t-tech-panel-m"
+  }
+}
