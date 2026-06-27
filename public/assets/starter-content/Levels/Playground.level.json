@@ -85,18 +85,7 @@
     },
     {
       "assetId": "shape-cube",
-      "placements": [
-        {
-          "position": [
-            0,
-            3.21,
-            0
-          ],
-          "materialSlot": "m-techpanel-material",
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "shape-cylender",
@@ -217,6 +206,50 @@
             -90,
             0
           ],
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "sm-coin",
+      "placements": []
+    },
+    {
+      "assetId": "coin",
+      "placements": []
+    },
+    {
+      "assetId": "sm-pickup-health",
+      "placements": []
+    },
+    {
+      "assetId": "sm-pickup-coin",
+      "placements": []
+    },
+    {
+      "assetId": "sm-picku-health",
+      "placements": [
+        {
+          "position": [
+            0,
+            0.5,
+            0
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "sm-trigger-pad",
+      "placements": [
+        {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotationYDeg": 0,
           "scale": 1
         }
       ]
