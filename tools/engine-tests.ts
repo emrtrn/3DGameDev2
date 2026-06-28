@@ -6277,6 +6277,7 @@ check("tps mode maps authored SpringArm and Camera components to runtime camera"
         farClip: 250,
         isOrthographic: false,
         orthoWidth: 10,
+        enableSprintCameraShake: true,
       },
     },
   };
@@ -6307,6 +6308,34 @@ check("tps mode maps authored SpringArm and Camera components to runtime camera"
   const debug = session.getCameraDebug?.();
   assert.equal(debug?.cameraSource, "spring arm component");
   assert.ok(Math.abs((debug?.controlYawDeg ?? 0) - (-0.3 * 180 / Math.PI)) < 1e-6);
+});
+
+check("tps mode can disable sprint camera shake from the authored Camera component", () => {
+  const camera = new PerspectiveCamera();
+  const entity: Entity = {
+    id: actorInstanceEntityId(0),
+    components: {
+      Camera: {
+        fieldOfView: 44,
+        nearClip: 0.1,
+        farClip: 100,
+        enableSprintCameraShake: false,
+      },
+    },
+  };
+  const characters = [makeCharacterRef(0, { actorMovement: true, entity })];
+  characters[0].object.position.set(1, 0, -4);
+  const locomotion = new Map<string, LocomotionInput>([
+    [actorInstanceEntityId(0), { planarSpeed: 5, grounded: true, velocityY: 0 }],
+  ]);
+  const { context } = makeGameModeContext({ camera, characters, locomotion });
+  const session = tpsCharacterGameMode.createSession(context);
+  session.spawnDefaultPawn();
+  session.possess();
+  session.update(0.1);
+
+  assert.deepEqual(camera.position.toArray(), [1, 1.2, -1.4]);
+  assert.ok(camera.fov > 44);
 });
 
 check("tps mode applies analog look axes to control rotation", () => {
@@ -8865,7 +8894,14 @@ check("readCameraComponent reads authored projection, else runtime-camera defaul
         id: "cam",
         parent: "root",
         component: "Camera",
-        props: { fieldOfView: 60, nearClip: 0.5, farClip: 200, isOrthographic: true, orthoWidth: 14 },
+        props: {
+          fieldOfView: 60,
+          nearClip: 0.5,
+          farClip: 200,
+          isOrthographic: true,
+          orthoWidth: 14,
+          enableSprintCameraShake: false,
+        },
       },
     ],
   });
@@ -8876,6 +8912,7 @@ check("readCameraComponent reads authored projection, else runtime-camera defaul
     farClip: 200,
     isOrthographic: true,
     orthoWidth: 14,
+    enableSprintCameraShake: false,
   });
 
   // Empty props fall back to the runtime camera defaults (FOV 44, near 0.1, far 100).
@@ -8893,6 +8930,7 @@ check("readCameraComponent reads authored projection, else runtime-camera defaul
     farClip: 100,
     isOrthographic: false,
     orthoWidth: 10,
+    enableSprintCameraShake: true,
   });
 });
 

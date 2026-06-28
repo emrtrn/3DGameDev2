@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "sockets": [],
+  "animationSet": {
+    "idle": "Idle_Loop",
+    "walk": "Walk_Loop",
+    "run": "Sprint_Loop",
+    "jump": "Jump_Loop",
+    "fall": "Jump_Land"
+  },
+  "blendSpaces": [
+    {
+      "name": "BlendSpace",
+      "type": "1d",
+      "axisX": {
+        "name": "Speed",
+        "min": 0,
+        "max": 4
+      },
+      "samples": []
+    }
+  ],
+  "notifies": [],
+  "montages": [],
+  "physicsBodies": [],
+  "physicsConstraints": [],
+  "preview": {
+    "selectedClip": "Jog_Fwd_Loop"
+  }
+}

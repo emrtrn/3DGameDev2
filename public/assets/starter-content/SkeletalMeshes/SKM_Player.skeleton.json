@@ -5,19 +5,32 @@
     "idle": "Armature.447|[n_40] idle",
     "walk": "Armature.447|[n_40] walk_1",
     "run": "Armature.447|[n_40] run_1",
-    "jump": "Armature.447|[n_40] land_1",
+    "jump": "Armature.447|[n_40] switch_out",
     "fall": "Armature.447|[n_40] land_1"
   },
   "blendSpaces": [
     {
-      "name": "BlendSpace",
+      "name": "Locomotion",
       "type": "1d",
       "axisX": {
         "name": "Speed",
         "min": 0,
         "max": 4
       },
-      "samples": []
+      "samples": [
+        {
+          "clip": "Armature.447|[n_40] idle",
+          "x": 0
+        },
+        {
+          "clip": "Armature.447|[n_40] walk_1",
+          "x": 2
+        },
+        {
+          "clip": "Armature.447|[n_40] run_1",
+          "x": 4
+        }
+      ]
     }
   ],
   "notifies": [],
@@ -25,6 +38,6 @@
   "physicsBodies": [],
   "physicsConstraints": [],
   "preview": {
-    "selectedClip": "Armature.447|[n_40] greeting_1"
+    "selectedClip": "Armature.447|Armature.270Action.001"
   }
 }

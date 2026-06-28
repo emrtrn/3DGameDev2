@@ -387,7 +387,7 @@ export class TpsCharacterSession implements GameModeSession {
       player.object.position.z,
     ];
     const authored = this.authoredCamera(player);
-    this.updateGameplayCameraEffects(player);
+    this.updateGameplayCameraEffects(player, authored.camera);
     if (authored.springArm) {
       this.activeCameraSource = "spring arm component";
       const desired = desiredSpringArmCameraPose({
@@ -483,17 +483,21 @@ export class TpsCharacterSession implements GameModeSession {
     layered.update(deltaSeconds);
   }
 
-  private updateGameplayCameraEffects(player: RuntimeCharacterRef): void {
+  private updateGameplayCameraEffects(
+    player: RuntimeCharacterRef,
+    camera: CameraComponent | undefined,
+  ): void {
     const report = this.context.getLocomotion(player.entityId);
     const sprinting =
       report !== undefined &&
       classifyLocomotion(report, DEFAULT_LOCOMOTION_THRESHOLDS) === "run";
+    const shakeEnabled = camera?.enableSprintCameraShake ?? true;
     this.controller.cameraManager.setGameplayEffects(
       sprinting
         ? {
             fovOffset: SPRINT_FOV_OFFSET,
-            shakeAmplitude: SPRINT_SHAKE_AMPLITUDE,
-            shakeFrequencyHz: SPRINT_SHAKE_FREQUENCY_HZ,
+            shakeAmplitude: shakeEnabled ? SPRINT_SHAKE_AMPLITUDE : 0,
+            shakeFrequencyHz: shakeEnabled ? SPRINT_SHAKE_FREQUENCY_HZ : 0,
           }
         : {},
     );

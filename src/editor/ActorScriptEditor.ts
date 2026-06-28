@@ -1258,6 +1258,15 @@ export class ActorScriptEditor {
       this.markDirty();
       this.renderDetails();
     });
+    const sprintShake = this.detailsHost.querySelector<HTMLInputElement>(
+      "[data-as-camera-sprint-shake]",
+    );
+    sprintShake?.addEventListener("change", () => {
+      if (sprintShake.checked) delete node.props.enableSprintCameraShake;
+      else node.props.enableSprintCameraShake = false;
+      this.markDirty();
+      this.renderDetails();
+    });
   }
 
   /**
@@ -2064,6 +2073,12 @@ function cameraFields(node: ComponentTemplateNode): string {
       <span>Orthographic</span>
     </label>
     ${ortho ? numberPropField(props, "orthoWidth", "Ortho Width", 10, 'step="0.5" min="0.1"') : ""}
+    <label class="as-field as-check">
+      <input type="checkbox" data-as-camera-sprint-shake ${
+        props.enableSprintCameraShake === false ? "" : "checked"
+      } />
+      <span>Enable Sprint Camera Shake</span>
+    </label>
   `;
 }
 
@@ -2092,7 +2107,7 @@ function defaultComponentProps(kind: ActorComponentKind): Record<string, SceneJs
     return { targetArmLength: 3, enableCameraLag: true, cameraLagSpeed: 10 };
   }
   if (kind === "Camera") {
-    return { fieldOfView: 44, nearClip: 0.1, farClip: 100 };
+    return { fieldOfView: 44, nearClip: 0.1, farClip: 100, enableSprintCameraShake: true };
   }
   return {};
 }

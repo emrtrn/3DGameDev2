@@ -248,10 +248,9 @@ export interface CharacterMovementComponent {
 }
 
 /**
- * A camera viewpoint authored on an actor (Unreal's `UCameraComponent`). Draft
- * for the next gameplay phase (Faz 5): the runtime still frames the player with
- * the Game Mode follow camera, but a possessed pawn carrying this — typically as
- * a {@link SpringArmComponent} child — will drive the play camera's projection.
+ * A camera viewpoint authored on an actor (Unreal's `UCameraComponent`). A
+ * possessed pawn carrying this, typically as a {@link SpringArmComponent} child,
+ * drives the play camera's projection and camera-specific gameplay effects.
  * `fieldOfView` is the vertical FOV in degrees; clip planes are in world units;
  * `orthoWidth` applies only when `isOrthographic`. Defaults mirror the current
  * runtime camera (FOV 44, near 0.1, far 100) so the next phase maps 1:1.
@@ -262,14 +261,13 @@ export interface CameraComponent {
   farClip: number;
   isOrthographic: boolean;
   orthoWidth: number;
+  enableSprintCameraShake: boolean;
 }
 
 /**
- * A camera boom authored on an actor (Unreal's `USpringArmComponent`). Draft for
- * the next gameplay phase (Faz 5): it holds a {@link CameraComponent} at a fixed
- * distance behind a pivot, optionally lagging and collision-probing. Today the
- * values are authored + persisted only; the next phase maps them onto the Game
- * Mode follow camera.
+ * A camera boom authored on an actor (Unreal's `USpringArmComponent`). It holds a
+ * {@link CameraComponent} at a fixed distance behind a pivot, optionally lagging
+ * and collision-probing in the TPS Game Mode.
  *  - `targetArmLength`: distance from the pivot to the camera socket (world units).
  *  - `socketOffset`: offset applied at the camera socket (end of the arm).
  *  - `targetOffset`: offset applied to the pivot the arm orbits.
@@ -675,6 +673,7 @@ export function readCameraComponent(entity: Entity): CameraComponent | undefined
     farClip: readFiniteNumber(data.farClip, 100, 0),
     isOrthographic: data.isOrthographic === true,
     orthoWidth: readFiniteNumber(data.orthoWidth, 10, 0),
+    enableSprintCameraShake: data.enableSprintCameraShake !== false,
   };
 }
 

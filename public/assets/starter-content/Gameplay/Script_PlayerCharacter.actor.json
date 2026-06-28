@@ -14,7 +14,7 @@
       "id": "meshRenderer",
       "component": "MeshRenderer",
       "props": {
-        "assetId": "skm-player"
+        "assetId": "ual1-standard-rm"
       },
       "parent": "collider"
     },
@@ -26,11 +26,16 @@
         "enableCameraLag": true,
         "cameraLagSpeed": 10,
         "socketOffset": [
-          3,
+          0,
           2,
           -2
         ],
-        "doCollisionTest": false
+        "doCollisionTest": false,
+        "targetOffset": [
+          0,
+          1,
+          0
+        ]
       },
       "parent": "collider"
     },
@@ -40,7 +45,8 @@
       "props": {
         "fieldOfView": 44,
         "nearClip": 0.1,
-        "farClip": 100
+        "farClip": 100,
+        "enableSprintCameraShake": false
       },
       "parent": "springArm"
     },
@@ -60,7 +66,7 @@
       "id": "characterMovement",
       "component": "CharacterMovement",
       "props": {
-        "maxWalkSpeed": 3,
+        "maxWalkSpeed": 2,
         "sprintMultiplier": 2,
         "jumpSpeed": 4,
         "gravityScale": 1,
