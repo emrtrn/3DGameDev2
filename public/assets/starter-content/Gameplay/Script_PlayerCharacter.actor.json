@@ -24,7 +24,13 @@
       "props": {
         "targetArmLength": 3,
         "enableCameraLag": true,
-        "cameraLagSpeed": 10
+        "cameraLagSpeed": 10,
+        "socketOffset": [
+          3,
+          2,
+          -2
+        ],
+        "doCollisionTest": false
       },
       "parent": "collider"
     },

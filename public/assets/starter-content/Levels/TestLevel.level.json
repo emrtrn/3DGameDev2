@@ -12,12 +12,13 @@
       "placements": [
         {
           "position": [
-            -2.35,
-            0.2,
-            0.3
+            0,
+            0,
+            0
           ],
+          "scaleLocked": true,
           "rotationYDeg": 0,
-          "scale": 1
+          "scale": 3
         }
       ]
     },
@@ -28,22 +29,28 @@
     {
       "assetId": "sm-pickup-coin",
       "placements": []
-    }
-  ],
-  "characters": [
+    },
     {
-      "assetId": "adventurer",
-      "position": [
-        -0.48,
-        0.2,
-        1.9
-      ],
-      "animation": "idle",
-      "name": "adventurer",
-      "rotationYDeg": 0,
-      "scale": 0.42
+      "assetId": "marker:playerStart",
+      "placements": [
+        {
+          "position": [
+            6.38,
+            0,
+            5.88
+          ],
+          "name": "Player Start",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
     }
   ],
+  "characters": [],
+  "worldSettings": {
+    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json"
+  },
   "skyAtmosphere": {
     "rayleigh": 1,
     "turbidity": 1,

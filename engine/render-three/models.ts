@@ -1,5 +1,6 @@
 import { Group, InstancedMesh, Matrix4, Object3D } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { clone as cloneSkeletonHierarchy } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import type { Entity } from "@engine/scene/entity";
 import { readMeshRendererComponent, readTransformComponent } from "@engine/scene/components";
@@ -170,7 +171,7 @@ export function createCharacterSceneObject(
   item: CharacterRenderItem,
 ): Object3D {
   ensureVertexNormals(gltf.scene);
-  const character = gltf.scene.clone();
+  const character = cloneSkeletonHierarchy(gltf.scene);
   character.name = item.name;
   character.position.set(...item.position);
   applyEulerDegrees(character, item.rotation);

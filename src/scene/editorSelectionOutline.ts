@@ -3,6 +3,7 @@ import {
   Group,
   Mesh,
   MeshBasicMaterial,
+  SkinnedMesh,
   Vector2,
 } from "three";
 import type {
@@ -12,6 +13,7 @@ import type {
   Scene,
 } from "three";
 import { OutlinePass } from "three/examples/jsm/postprocessing/OutlinePass.js";
+import { clone as cloneSkeletonHierarchy } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import { isRenderableMesh } from "@engine/render-three/materials";
 import type { PostProcessPipeline } from "@engine/render-three/postProcess";
@@ -73,6 +75,22 @@ export class EditorSelectionOutline {
   }
 
   cloneRenderableMeshes(source: Object3D): Object3D | null {
+    if (containsSkinnedMesh(source)) {
+      const clone = cloneSkeletonHierarchy(source);
+      clone.name = `${source.name || "selection"}-outline-proxy`;
+      source.updateMatrixWorld(true);
+      source.matrixWorld.decompose(clone.position, clone.quaternion, clone.scale);
+      clone.traverse((object) => {
+        object.raycast = () => {};
+        if (!isRenderableMesh(object)) return;
+        object.material = this.invisibleMaterial;
+        object.frustumCulled = false;
+        object.castShadow = false;
+        object.receiveShadow = false;
+      });
+      return clone;
+    }
+
     const group = new Group();
     group.name = `${source.name || "selection"}-outline-proxy`;
     source.updateMatrixWorld(true);
@@ -103,4 +121,12 @@ export class EditorSelectionOutline {
       this.proxyRoot.remove(child);
     }
   }
+}
+
+function containsSkinnedMesh(source: Object3D): boolean {
+  let result = false;
+  source.traverse((object) => {
+    if (object instanceof SkinnedMesh) result = true;
+  });
+  return result;
 }

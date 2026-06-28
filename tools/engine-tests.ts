@@ -124,7 +124,7 @@ import { parseEffectDefinition } from "../engine/render-three/particleEffect";
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
 import { collectSubtreeNodeNames, splitClipsByUpperBody } from "../engine/render-three/bodyMask";
 import { LayeredCharacterAnimator } from "../engine/render-three/layeredCharacterAnimator";
-import { entityCharacterItem } from "../engine/render-three/models";
+import { createCharacterSceneObject, entityCharacterItem } from "../engine/render-three/models";
 import {
   DEFAULT_GAME_MODE_ID,
   GAME_MODE_OPTIONS,
@@ -390,6 +390,7 @@ import {
   AmbientLight,
   AnimationClip,
   ACESFilmicToneMapping,
+  Bone,
   Box3,
   BoxGeometry,
   Color,
@@ -404,6 +405,8 @@ import {
   PerspectiveCamera,
   Quaternion,
   Scene,
+  Skeleton,
+  SkinnedMesh,
   Vector3,
   VectorKeyframeTrack,
 } from "three";
@@ -756,6 +759,54 @@ check("scene runtime creates a character mixer only for a matching clip", () => 
   assert.ok(createSceneCharacterMixer(character, gltf, "Idle"));
   assert.equal(createSceneCharacterMixer(character, gltf, "Missing"), null);
   assert.equal(createSceneCharacterMixer(character, gltf, undefined), null);
+});
+
+check("character scene object deep-clones skinned skeletons under the placed root", () => {
+  const sourceRoot = new Object3D();
+  sourceRoot.name = "source-character";
+  const hip = new Bone();
+  hip.name = "hip";
+  const spine = new Bone();
+  spine.name = "spine";
+  hip.add(spine);
+  sourceRoot.add(hip);
+
+  const sourceMesh = new SkinnedMesh(new BoxGeometry(1, 1, 1));
+  sourceMesh.name = "body";
+  sourceRoot.add(sourceMesh);
+  sourceMesh.bind(new Skeleton([hip, spine]));
+
+  const character = createCharacterSceneObject(
+    { scene: sourceRoot, animations: [] } as unknown as GLTF,
+    {
+      name: "placed-character",
+      position: [3, 2, 1],
+      rotation: [0, 90, 0],
+      scale: [0.5, 0.5, 0.5],
+      hidden: true,
+      castShadow: false,
+    },
+  );
+
+  let clonedMesh: SkinnedMesh | null = null;
+  character.traverse((object) => {
+    if (object instanceof SkinnedMesh) clonedMesh = object;
+  });
+  assert.ok(clonedMesh);
+  const clonedHip = character.getObjectByName("hip");
+  const clonedSpine = character.getObjectByName("spine");
+  assert.ok(clonedHip);
+  assert.ok(clonedSpine);
+  assert.notEqual(clonedHip, hip);
+  assert.notEqual(clonedSpine, spine);
+  assert.equal(clonedMesh.skeleton.bones[0], clonedHip);
+  assert.equal(clonedMesh.skeleton.bones[1], clonedSpine);
+  assert.notEqual(clonedMesh.skeleton.bones[0], hip);
+  assert.deepEqual(character.position.toArray(), [3, 2, 1]);
+  assert.deepEqual(character.scale.toArray(), [0.5, 0.5, 0.5]);
+  assert.equal(character.visible, false);
+  assert.equal(clonedMesh.castShadow, false);
+  assert.equal(clonedMesh.receiveShadow, true);
 });
 
 check("scene runtime tags a light record root and descendants with its index", () => {
