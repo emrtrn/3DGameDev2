@@ -170,6 +170,16 @@
           "simulatePhysics": true,
           "rotationYDeg": 0,
           "scale": 1
+        },
+        {
+          "position": [
+            0.77,
+            2.54,
+            2.1
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": 1
         }
       ]
     },
@@ -331,10 +341,10 @@
   },
   "cloudLayer": {
     "color": "#ffffff",
-    "coverage": 0.3,
-    "density": 0.3,
-    "softness": 0.3,
-    "scale": 3,
+    "coverage": 0.4,
+    "density": 0.4,
+    "softness": 0.4,
+    "scale": 4,
     "speed": 0.2
   },
   "postProcess": {
