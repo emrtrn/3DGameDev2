@@ -83,6 +83,7 @@ import {
   facingYawFromMove,
   planarMoveStep,
   planarMoveStepRelativeToYaw,
+  rotateYawToward,
 } from "../src/game/playerMovement";
 import { createBehaviorRegistry } from "../src/game/behaviors";
 import { CharacterMovementSubsystem } from "../src/game/characterMovementSystem";
@@ -4087,6 +4088,13 @@ check("facingYawFromMove: no movement returns null so facing is held", () => {
   assert.equal(facingYawFromMove(0, 0), null);
 });
 
+check("rotateYawToward: turns by a capped shortest-path step", () => {
+  yawApproxEqual(rotateYawToward(0, 90, 15), 15);
+  yawApproxEqual(rotateYawToward(80, 90, 15), 90);
+  yawApproxEqual(rotateYawToward(170, -170, 15), -175);
+  yawApproxEqual(rotateYawToward(45, 180, 0), 45);
+});
+
 check("input-move behavior: normalizes diagonal travel, faces it, holds facing idle", () => {
   const registry = createBehaviorRegistry();
   const actions = new ActionMap({
@@ -6636,6 +6644,40 @@ check("CharacterMovement subsystem can orient a character to controller yaw", ()
   yawApproxEqual(transform.rotation[1], -90);
 });
 
+check("CharacterMovement subsystem applies Rotation Rate Z to smooth yaw turns", () => {
+  const actions = new ActionMap({ KeyS: "move-back" });
+  actions.handleDown("KeyS");
+  actions.advance();
+  const entity: Entity = {
+    id: "actor:turn",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 180, 0], scale: [1, 1, 1] },
+      CharacterMovement: {
+        maxWalkSpeed: 4,
+        sprintMultiplier: 2,
+        jumpSpeed: 5,
+        gravityScale: 1,
+        rotationRate: [0, 0, 90],
+        orientRotationToMovement: true,
+      },
+    },
+  };
+
+  let transform: TransformComponent | null = null;
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      transform = next;
+    },
+    undefined,
+    { isPlayerControlled: () => true },
+  );
+  movement.setEntities([entity]);
+  movement.update({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 });
+  assert.ok(transform);
+  yawApproxEqual(transform.rotation[1], -171);
+});
+
 check("CharacterMovement subsystem applies jump and gravity from component props", () => {
   const actions = new ActionMap({ Space: "jump" });
   actions.handleDown("Space");
@@ -8798,7 +8840,11 @@ check("actor save payload preserves CharacterMovement control-orientation props"
           id: "move",
           parent: "root",
           component: "CharacterMovement",
-          props: { orientRotationToMovement: false, orientRotationToControl: true },
+          props: {
+            rotationRate: [0, 0, 270],
+            orientRotationToMovement: false,
+            orientRotationToControl: true,
+          },
         },
       ],
     },
@@ -8806,6 +8852,7 @@ check("actor save payload preserves CharacterMovement control-orientation props"
   const movement = (payload.actor.components as Array<{ component: string; props: Record<string, unknown> }>).find(
     (node) => node.component === "CharacterMovement",
   );
+  assert.deepEqual(movement?.props.rotationRate, [0, 0, 270]);
   assert.equal(movement?.props.orientRotationToMovement, false);
   assert.equal(movement?.props.orientRotationToControl, true);
 });
@@ -8856,7 +8903,12 @@ check("actorInstanceToEntity flattens a class + placement into one entity", () =
         id: "move",
         parent: "root",
         component: "CharacterMovement",
-        props: { maxWalkSpeed: 4, jumpSpeed: 6, orientRotationToControl: true },
+        props: {
+          maxWalkSpeed: 4,
+          jumpSpeed: 6,
+          rotationRate: [0, 0, 360],
+          orientRotationToControl: true,
+        },
       },
       // Second MeshRenderer is ignored: first node of each kind wins (flat entity).
       { id: "mesh2", parent: "root", component: "MeshRenderer", props: { assetId: "ignored" } },
@@ -8897,6 +8949,7 @@ check("actorInstanceToEntity flattens a class + placement into one entity", () =
   const movement = readCharacterMovementComponent(entity);
   assert.equal(movement?.maxWalkSpeed, 4);
   assert.equal(movement?.jumpSpeed, 6);
+  assert.deepEqual(movement?.rotationRate, [0, 0, 360]);
   assert.equal(movement?.orientRotationToControl, true);
   // The first event binding compiles to the single Behavior.
   const behavior = readBehaviorComponent(entity);

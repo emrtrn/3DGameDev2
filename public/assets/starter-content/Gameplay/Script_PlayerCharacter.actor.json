@@ -14,7 +14,7 @@
       "id": "meshRenderer",
       "component": "MeshRenderer",
       "props": {
-        "assetId": "ual1-standard-rm"
+        "assetId": "hilda-regular-00"
       },
       "parent": "collider"
     },
@@ -30,7 +30,6 @@
           2,
           -2
         ],
-        "doCollisionTest": false,
         "targetOffset": [
           0,
           1,
@@ -58,7 +57,7 @@
         "isStatic": false,
         "isSensor": false,
         "capsuleRadius": 0.3,
-        "capsuleHalfHeight": 0.9
+        "capsuleHalfHeight": 0.7
       },
       "parent": "root"
     },
@@ -66,7 +65,7 @@
       "id": "characterMovement",
       "component": "CharacterMovement",
       "props": {
-        "maxWalkSpeed": 3,
+        "maxWalkSpeed": 2,
         "sprintMultiplier": 2,
         "jumpSpeed": 4,
         "gravityScale": 1,
@@ -74,6 +73,11 @@
         "acceleration": 30,
         "brakingDeceleration": 24,
         "groundFriction": 8,
+        "rotationRate": [
+          0,
+          0,
+          500
+        ],
         "orientRotationToMovement": true,
         "orientRotationToControl": false,
         "movementMode": "walking",

@@ -89,3 +89,26 @@ export function facingYawFromMove(dx: number, dz: number): number | null {
   if (dx === 0 && dz === 0) return null;
   return Math.atan2(dx, dz) * RAD_TO_DEG;
 }
+
+/** Normalizes yaw to Forge's authored -180..180 degree range. */
+export function normalizeYawDeg(yaw: number): number {
+  if (!Number.isFinite(yaw)) return 0;
+  const normalized = ((((yaw + 180) % 360) + 360) % 360) - 180;
+  return normalized === -180 ? 180 : normalized;
+}
+
+/** Shortest signed delta from the current yaw to a target yaw, in degrees. */
+export function shortestYawDeltaDeg(current: number, target: number): number {
+  return normalizeYawDeg(target - current);
+}
+
+/** Steps current yaw toward target yaw by at most `maxDeltaDeg`. */
+export function rotateYawToward(current: number, target: number, maxDeltaDeg: number): number {
+  if (!Number.isFinite(current) || !Number.isFinite(target)) return current;
+  if (!Number.isFinite(maxDeltaDeg)) return normalizeYawDeg(target);
+  const maxDelta = Math.max(0, maxDeltaDeg);
+  const delta = shortestYawDeltaDeg(current, target);
+  if (Math.abs(delta) <= maxDelta) return normalizeYawDeg(target);
+  if (maxDelta === 0) return normalizeYawDeg(current);
+  return normalizeYawDeg(current + Math.sign(delta) * maxDelta);
+}

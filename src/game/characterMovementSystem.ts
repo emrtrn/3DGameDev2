@@ -8,6 +8,7 @@ import {
   facingYawFromMove,
   planarMoveStep,
   planarMoveStepRelativeToYaw,
+  rotateYawToward,
 } from "./playerMovement";
 import { groundedAt, stepVerticalMotion, type VerticalMotionState } from "./verticalMotion";
 import { resolvePlanarMovement, type PlanarDelta } from "./collision";
@@ -108,14 +109,23 @@ export class CharacterMovementSubsystem implements Subsystem {
     runtime.transform.position[0] += dx;
     runtime.transform.position[2] += dz;
     const yaw = facingYawFromMove(dx, dz);
+    let targetYaw: number | null = null;
     if (
       movement.orientRotationToControl &&
       typeof controlYaw === "number" &&
       Number.isFinite(controlYaw)
     ) {
-      runtime.transform.rotation[1] = controlYawToCharacterYaw(controlYaw);
+      targetYaw = controlYawToCharacterYaw(controlYaw);
     } else if (movement.orientRotationToMovement && yaw !== null) {
-      runtime.transform.rotation[1] = yaw;
+      targetYaw = yaw;
+    }
+    if (targetYaw !== null) {
+      const yawRate = Math.max(0, movement.rotationRate[2]);
+      runtime.transform.rotation[1] = rotateYawToward(
+        runtime.transform.rotation[1],
+        targetYaw,
+        yawRate * engine.deltaSeconds,
+      );
     }
 
     const vertical = this.updateVertical(runtime, engine);

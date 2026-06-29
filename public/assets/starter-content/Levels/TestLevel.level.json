@@ -73,9 +73,9 @@
       "id": "sun",
       "type": "directional",
       "position": [
-        3,
-        9,
-        4
+        5,
+        4,
+        5
       ],
       "name": "Sun",
       "rotation": [

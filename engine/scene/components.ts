@@ -240,6 +240,7 @@ export interface CharacterMovementComponent {
   acceleration: number;
   brakingDeceleration: number;
   groundFriction: number;
+  rotationRate: Vec3;
   orientRotationToMovement: boolean;
   orientRotationToControl: boolean;
   movementMode: CharacterMovementMode;
@@ -655,6 +656,7 @@ export function readCharacterMovementComponent(
     acceleration: readFiniteNumber(data.acceleration, 30, 0),
     brakingDeceleration: readFiniteNumber(data.brakingDeceleration, 24, 0),
     groundFriction: readFiniteNumber(data.groundFriction, 8, 0),
+    rotationRate: readVec3(data.rotationRate) ?? [0, 0, 500],
     orientRotationToMovement: data.orientRotationToMovement !== false,
     orientRotationToControl: data.orientRotationToControl === true,
     movementMode: mode,

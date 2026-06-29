@@ -155,6 +155,15 @@ tutkalı shell'lerde ince kalır.
   tasiyacak sekilde guncellendi. Gate: `npx tsc --noEmit` temiz, engine
   testleri **240 check**.
 
+- *2026-06-29* - **CharacterMovement Rotation Rate karari.** Forge
+  `CharacterMovement` artik Unreal'daki `Rotation Rate` vektorunu sade bir
+  authored prop olarak tasir. Runtime sadece Z eksenini derece/saniye yaw hizi
+  olarak kullanir; `orientRotationToMovement` veya `orientRotationToControl`
+  hedef yaw urettiginde karakter artik hedefe tek frame'de snap etmek yerine
+  `rotationRate[2] * dt` kadar en kisa yoldan doner. Varsayilan `[0, 0, 500]`;
+  daha sert arcade davranisi icin Z yukseltilebilir, 0 ise hedefe donusu
+  durdurur.
+
 ## Mevcut runtime taban çizgisi (kanıt)
 
 - Davranışlar saf game kodu: `src/game/behaviors.ts` — `spin`, `input-move`

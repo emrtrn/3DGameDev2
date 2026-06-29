@@ -25195,29 +25195,6 @@
       "license": "Unknown"
     },
     {
-      "id": "skm-player",
-      "name": "SKM Player",
-      "assetType": "skeletalMesh",
-      "category": "SkeletalMeshes",
-      "path": "assets/starter-content/SkeletalMeshes/SKM_Player.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "character",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "SkeletalMeshes",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 11753504
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "script-gamemode-actor",
       "name": "Script Game Mode.Actor",
       "assetType": "prefab",
@@ -25264,29 +25241,6 @@
       "license": "Unknown"
     },
     {
-      "id": "adventurer",
-      "name": "Adventurer",
-      "assetType": "skeletalMesh",
-      "category": "SkeletalMeshes",
-      "path": "assets/starter-content/SkeletalMeshes/Adventurer.gltf",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "character",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "SkeletalMeshes",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 3671456
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "ual1-standard-rm",
       "name": "UAL1 Standard RM",
       "assetType": "skeletalMesh",
@@ -25310,29 +25264,6 @@
       "license": "Unknown"
     },
     {
-      "id": "casual",
-      "name": "Casual",
-      "assetType": "skeletalMesh",
-      "category": "SkeletalMeshes",
-      "path": "assets/starter-content/SkeletalMeshes/Casual.gltf",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "character",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "SkeletalMeshes",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 3131788
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "ual2-standard",
       "name": "UAL2 Standard",
       "assetType": "skeletalMesh",
@@ -25352,6 +25283,29 @@
         "receiveShadow": true,
         "collision": true,
         "bytes": 8091444
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "hilda-regular-00",
+      "name": "Hilda Regular 00",
+      "assetType": "skeletalMesh",
+      "category": "SkeletalMeshes",
+      "path": "assets/starter-content/SkeletalMeshes/hilda_regular_00.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "SkeletalMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 10794472
       },
       "license": "Unknown"
     }
