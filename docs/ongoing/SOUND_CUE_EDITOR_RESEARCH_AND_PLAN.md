@@ -262,17 +262,25 @@ Cue playback; saf graph evaluator + ince Web Audio compiler olarak ayrılmalı. 
 ### Faz 1 - Sound Cue Lite
 
 - [x] `soundCue` asset type ve `*.soundcue.json` manifest desteği ekle.
-- [ ] Cue schema, normalize/validate ve loader/store katmanını ekle.
-- [ ] `SoundCueEditor` kabuğunu ekle.
-- [ ] Source, Output, Mixer, Random, Modulator, Loop, Delay node'larını destekle.
-- [ ] Editor preview play/stop akışını ekle.
+- [x] Cue schema, normalize/validate ve loader/store katmanını ekle.
+  (`engine/audio/soundCueTypes.ts`, `src/editor/soundCueStore.ts`,
+   `tools/saveValidator.ts#validateSoundCueAsset`, `/__save-soundcue` endpoint)
+- [x] `SoundCueEditor` kabuğunu ekle.
+  (`src/editor/SoundCueEditor.ts`, CSS `src/editor/editorUi.css`)
+- [x] Source, Output, Mixer, Random, Modulator, Loop, Delay node'larını destekle.
+  (evaluator + editor UI)
+- [x] Editor preview play/stop akışını ekle.
+  (`SoundCueEditor.preview()` / `stopPreview()`)
 - [ ] Runtime cue evaluator'ı headless testlerle doğrula.
-- [ ] Audio component'ten `soundCue` seçip Game Mode'da çal.
+  (`engine/audio/soundCueEvaluator.ts` yazıldı; `tools/engine-tests.ts` testleri eklenecek)
+- [x] Audio component'ten `soundCue` seçip Game Mode'da çal.
+  (`LayoutAudio.sourceId/sourceType`, `RuntimeSceneApp.playAutoPlayAudio`)
 - [ ] `npm run build:verify` gate'ini geçir.
 
 ### Faz 2 - Audio component ve spatial v1
 
-- [ ] `sourceId/sourceType` modelini `clipId` uyumluluğunu koruyarak ekle.
+- [x] `sourceId/sourceType` modelini `clipId` uyumluluğunu koruyarak ekle.
+  (Faz 1 ile birlikte tamamlandı: `layout.ts`, `components.ts`, `adapter`, `saveValidator`)
 - [x] Playback handle ile loop stop/fade desteği ekle.
 - [x] `spatial: true` için Web Audio `PannerNode` uygula. (emitter pozisyonu
   behavior/autoPlay üzerinden geçiyor; `AudioPlayOptions.position`)

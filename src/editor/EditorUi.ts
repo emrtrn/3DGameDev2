@@ -1579,6 +1579,7 @@ export class EditorUi {
     if (item.type === "material") return () => void this.openMaterialEditor(item);
     if (isUiWidgetItem(item)) return () => void this.openUiWidgetEditor(item);
     if (isActorScriptItem(item)) return () => void this.openActorScriptEditor(item);
+    if (item.type === "soundCue") return () => void this.openSoundCueEditor(item);
     if (item.type !== "file" && isModelAssetType(item.type)) {
       return () => void this.openMeshEditor(item);
     }
@@ -2065,6 +2066,33 @@ export class EditorUi {
     } catch (error) {
       this.setStatus(
         `Could not open UI Widget editor: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
+  }
+
+  /**
+   * Opens the node-graph Sound Cue editor for a `*.soundcue.json` asset.
+   * Kept behind a dynamic import like the other asset editors.
+   */
+  private async openSoundCueEditor(item: BrowserAssetItem): Promise<void> {
+    try {
+      const { SoundCueEditor } = await import("@/editor/SoundCueEditor");
+      await SoundCueEditor.open({
+        path: item.path,
+        label: item.label.replace(/\.soundcue\.json$/i, ""),
+        assets: this.editableAssets.map((asset) => ({
+          id: asset.id,
+          name: asset.displayName ?? asset.name,
+          assetType: assetType(asset),
+          path: assetPath(asset),
+        })),
+        onStatus: (message, tone) => this.setStatus(message, tone),
+        onSaved: () => this.renderContentAssets(),
+      });
+    } catch (error) {
+      this.setStatus(
+        `Could not open Sound Cue editor: ${error instanceof Error ? error.message : String(error)}`,
         "error",
       );
     }
@@ -3287,15 +3315,17 @@ export class EditorUi {
   }
 
   private renderAudioFields(audio: LayoutAudio): string {
+    const isCue = audio.sourceType === "soundCue";
     const sounds = this.editableAssets.filter((asset) => assetType(asset) === "sound");
-    const inList = sounds.some((asset) => asset.id === audio.clipId);
-    // Preserve the current clip as an option even if it is not a manifest sound
-    // asset (e.g. a built-in tone like "collision-chime") so it is not lost.
-    const preserved = inList
+    const cues = this.editableAssets.filter((asset) => assetType(asset) === "soundCue");
+
+    // Raw clip dropdown (used when sourceType is "sound" or absent)
+    const clipInList = sounds.some((asset) => asset.id === audio.clipId);
+    const clipPreserved = clipInList
       ? ""
       : `<option value="${escapeHtml(audio.clipId)}" selected>${escapeHtml(audio.clipId)}</option>`;
-    const options =
-      preserved +
+    const clipOptions =
+      clipPreserved +
       sounds
         .map(
           (asset) =>
@@ -3304,11 +3334,41 @@ export class EditorUi {
             }>${escapeHtml(asset.displayName)}</option>`,
         )
         .join("");
+
+    // Sound Cue dropdown (used when sourceType is "soundCue")
+    const cueId = audio.sourceId ?? "";
+    const cueInList = cues.some((asset) => asset.id === cueId);
+    const cuePreserved = !cueInList && cueId
+      ? `<option value="${escapeHtml(cueId)}" selected>${escapeHtml(cueId)}</option>`
+      : "";
+    const cueOptions =
+      cuePreserved +
+      cues
+        .map(
+          (asset) =>
+            `<option value="${escapeHtml(asset.id)}" ${
+              asset.id === cueId ? "selected" : ""
+            }>${escapeHtml(asset.displayName)}</option>`,
+        )
+        .join("");
+
     return `
       <label class="detail-row">
-        <span>Clip</span>
-        <select data-audio="clipId">${options}</select>
+        <span>Source Type</span>
+        <select data-audio="sourceType">
+          <option value="sound"${!isCue ? " selected" : ""}>Sound (Raw Clip)</option>
+          <option value="soundCue"${isCue ? " selected" : ""}>Sound Cue (Graph)</option>
+        </select>
       </label>
+      ${isCue ? `
+      <label class="detail-row">
+        <span>Cue</span>
+        <select data-audio="sourceId">${cueOptions}</select>
+      </label>` : `
+      <label class="detail-row">
+        <span>Clip</span>
+        <select data-audio="clipId">${clipOptions}</select>
+      </label>`}
       <label class="detail-row">
         <span>Volume</span>
         <input type="number" data-audio="volume" min="0" max="1" step="0.05"
@@ -3460,12 +3520,25 @@ export class EditorUi {
   }
 
   private commitAudioInput(): void {
-    const clip = this.detailsBody.querySelector<HTMLSelectElement | HTMLInputElement>(
-      '[data-audio="clipId"]',
-    );
-    const clipId = clip?.value.trim();
-    if (!clipId) return;
-    const audio: LayoutAudio = { clipId };
+    const sourceTypeEl = this.detailsBody.querySelector<HTMLSelectElement>('[data-audio="sourceType"]');
+    const sourceType = sourceTypeEl?.value as "sound" | "soundCue" | undefined;
+    const isCue = sourceType === "soundCue";
+
+    let audio: LayoutAudio;
+    if (isCue) {
+      const sourceIdEl = this.detailsBody.querySelector<HTMLSelectElement>('[data-audio="sourceId"]');
+      const sourceId = sourceIdEl?.value.trim() ?? "";
+      // Keep clipId as legacy fallback (empty string is fine for cue-sourced audio)
+      audio = { clipId: "", sourceId, sourceType: "soundCue" };
+    } else {
+      const clip = this.detailsBody.querySelector<HTMLSelectElement | HTMLInputElement>(
+        '[data-audio="clipId"]',
+      );
+      const clipId = clip?.value.trim();
+      if (!clipId) return;
+      audio = { clipId };
+    }
+
     const volumeRaw = this.detailsBody
       .querySelector<HTMLInputElement>('[data-audio="volume"]')
       ?.value.trim();

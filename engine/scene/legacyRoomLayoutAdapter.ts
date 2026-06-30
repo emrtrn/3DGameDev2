@@ -668,6 +668,8 @@ function audioComponent(audio: LayoutAudio | undefined): AudioComponent | null {
     loop: audio.loop ?? false,
     spatial: audio.spatial ?? false,
   };
+  if (audio.sourceId !== undefined) component.sourceId = audio.sourceId;
+  if (audio.sourceType !== undefined) component.sourceType = audio.sourceType;
   if (audio.autoPlay !== undefined) component.autoPlay = audio.autoPlay;
   return component;
 }

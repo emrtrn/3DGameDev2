@@ -23,6 +23,8 @@ import {
 } from "@engine/behavior/behaviorSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
+import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
+import type { SoundCueAsset } from "@engine/audio/soundCueTypes";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { GamepadInputSource } from "@/input/gamepadInputSource";
 import { TouchInputSource, isTouchLikely } from "@/input/touchInputSource";
@@ -305,6 +307,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly characterMovementSubsystem: CharacterMovementSubsystem;
   /** Manifest sound asset id -> fetchable file URL, filled after the manifest loads. */
   private readonly soundUrlById = new Map<string, string>();
+  /** Manifest soundCue asset id -> fetchable file URL. */
+  private readonly soundCueUrlById = new Map<string, string>();
+  /** Parsed soundCue assets, cached by id. */
+  private readonly soundCueDefs = new Map<string, SoundCueAsset | null>();
   /** Manifest effect (`.effect.json`) asset id -> fetchable file URL. */
   private readonly effectUrlById = new Map<string, string>();
   /** Parsed effect definitions, cached by effect id. */
@@ -1222,14 +1228,32 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     );
   }
 
-  /** Maps manifest `sound` + effect (`.effect.json`) asset ids to fetchable file URLs. */
+  /** Maps manifest `sound`, `soundCue`, and effect asset ids to fetchable file URLs. */
   private async populateAssetUrls(): Promise<void> {
     if (!this.assetLoader) return;
     const manifest = await this.assetLoader.loadManifest();
     for (const asset of manifest.assets) {
       const path = assetPath(asset);
       if (assetType(asset) === "sound") this.soundUrlById.set(asset.id, projectFileUrl(path));
+      if (assetType(asset) === "soundCue") this.soundCueUrlById.set(asset.id, projectFileUrl(path));
       if (path.endsWith(".effect.json")) this.effectUrlById.set(asset.id, projectFileUrl(path));
+    }
+  }
+
+  /** Fetches and caches a soundCue asset by id. Returns null on failure. */
+  private async loadSoundCue(cueId: string): Promise<SoundCueAsset | null> {
+    if (this.soundCueDefs.has(cueId)) return this.soundCueDefs.get(cueId) ?? null;
+    const url = this.soundCueUrlById.get(cueId);
+    if (!url) { this.soundCueDefs.set(cueId, null); return null; }
+    try {
+      const response = await fetch(url, { cache: "no-cache" });
+      if (!response.ok) { this.soundCueDefs.set(cueId, null); return null; }
+      const data = (await response.json()) as SoundCueAsset;
+      this.soundCueDefs.set(cueId, data);
+      return data;
+    } catch {
+      this.soundCueDefs.set(cueId, null);
+      return null;
     }
   }
 
@@ -1239,12 +1263,38 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const audio = readAudioComponent(entity);
       if (!audio?.autoPlay) continue;
       const position = audio.spatial ? readTransformComponent(entity)?.position : undefined;
-      this.audioSubsystem.playOneShot(audio.clipId, {
-        volume: audio.volume,
-        loop: audio.loop,
-        spatial: audio.spatial,
-        ...(position ? { position: [position[0], position[1], position[2]] as const } : {}),
-      });
+      const spatialOpts = position
+        ? ({ position: [position[0], position[1], position[2]] as const } as const)
+        : {};
+
+      if (audio.sourceType === "soundCue" && audio.sourceId) {
+        // Async: load cue, evaluate graph, fire each resolved event.
+        void this.loadSoundCue(audio.sourceId).then((cue) => {
+          if (!cue) return;
+          const events = evaluateSoundCue(cue);
+          for (const ev of events) {
+            const opts = {
+              volume: ev.volume * audio.volume,
+              loop: ev.loop || audio.loop,
+              pitch: ev.pitch,
+              spatial: audio.spatial,
+              ...spatialOpts,
+            };
+            if (ev.delaySeconds > 0) {
+              setTimeout(() => this.audioSubsystem.playOneShot(ev.clipId, opts), ev.delaySeconds * 1000);
+            } else {
+              this.audioSubsystem.playOneShot(ev.clipId, opts);
+            }
+          }
+        });
+      } else {
+        this.audioSubsystem.playOneShot(audio.clipId, {
+          volume: audio.volume,
+          loop: audio.loop,
+          spatial: audio.spatial,
+          ...spatialOpts,
+        });
+      }
     }
   }
 

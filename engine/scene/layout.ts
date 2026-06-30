@@ -30,7 +30,19 @@ export interface LayoutBehavior {
 }
 
 export interface LayoutAudio {
+  /**
+   * Raw sound clip ID (manifest `sound` asset). Legacy field; use `sourceId` +
+   * `sourceType` for new authoring. When `sourceType` is absent or `"sound"`,
+   * `clipId` is the active reference.
+   */
   clipId: string;
+  /**
+   * Explicit source asset ID when overriding the legacy `clipId` path.
+   * Use together with `sourceType` to point at a Sound Cue or raw sound.
+   */
+  sourceId?: string;
+  /** Distinguishes a raw `"sound"` asset from a `"soundCue"` graph asset. */
+  sourceType?: "sound" | "soundCue";
   volume?: number;
   loop?: boolean;
   spatial?: boolean;

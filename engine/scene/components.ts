@@ -184,6 +184,10 @@ export interface ColliderComponent {
 
 export interface AudioComponent {
   clipId: string;
+  /** Explicit source asset ID; overrides `clipId` when present. */
+  sourceId?: string;
+  /** `"soundCue"` when the source is a Sound Cue graph asset; `"sound"` or absent = raw clip. */
+  sourceType?: "sound" | "soundCue";
   volume: number;
   loop: boolean;
   spatial: boolean;
