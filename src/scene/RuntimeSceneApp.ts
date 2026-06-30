@@ -1278,6 +1278,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
               loop: ev.loop || audio.loop,
               pitch: ev.pitch,
               spatial: audio.spatial,
+              // Route the cue through its authored mix bus (default master).
+              ...(cue.output.bus ? { bus: cue.output.bus } : {}),
               ...spatialOpts,
             };
             if (ev.delaySeconds > 0) {

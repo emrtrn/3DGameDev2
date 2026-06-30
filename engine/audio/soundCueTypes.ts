@@ -11,8 +11,11 @@
  * V2+ additions: Switch/Branch, Crossfade, Attenuation preset reference.
  */
 
-export const SOUND_CUE_BUS_IDS = ["master", "music", "sfx", "ui", "ambience"] as const;
-export type SoundCueBusId = (typeof SOUND_CUE_BUS_IDS)[number];
+import { AUDIO_BUS_IDS, type AudioBusId } from "./audioBus";
+
+/** A cue's output routes to one of the engine's mix buses (see `audioBus.ts`). */
+export const SOUND_CUE_BUS_IDS = AUDIO_BUS_IDS;
+export type SoundCueBusId = AudioBusId;
 
 export const SOUND_CUE_NODE_KINDS = [
   "output",

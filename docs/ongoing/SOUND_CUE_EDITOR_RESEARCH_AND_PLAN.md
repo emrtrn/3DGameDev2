@@ -296,11 +296,21 @@ Cue playback; saf graph evaluator + ince Web Audio compiler olarak ayrılmalı. 
 
 ### Faz 3 - Audio Bus Lite
 
-- [ ] `master`, `music`, `sfx`, `ui`, `ambience` bus'larını ekle.
-- [ ] Cue output'u bus'a route et.
-- [ ] Bus gain kontrolleri ve mix snapshot desteği ekle.
-- [ ] Pause/menu ducking örneği ekle.
-- [ ] Bus davranışını gerçek audio output olmadan test et.
+- [x] `master`, `music`, `sfx`, `ui`, `ambience` bus'larını ekle.
+  (`engine/audio/audioBus.ts` saf model + `AudioSubsystem` lazy GainNode graph:
+   `master` → destination, diğerleri → `master`)
+- [x] Cue output'u bus'a route et.
+  (`AudioPlayOptions.bus`; `connectSpatialOutput` bus node'una bağlanıyor;
+   `RuntimeSceneApp.playAutoPlayAudio` `cue.output.bus`'ı geçiyor)
+- [x] Bus gain kontrolleri ve mix snapshot desteği ekle.
+  (`getBusVolume` / `setBusVolume(fade)` / `applyMixSnapshot` / `resetMix`,
+   saf `mergeMixSnapshot` + `effectiveBusGain`)
+- [x] Pause/menu ducking örneği ekle.
+  (`MENU_DUCK_MIX` snapshot + `applyMixSnapshot`/`resetMix` duck→restore döngüsü;
+   somut pause UI'ına bağlama proje tarafında)
+- [x] Bus davranışını gerçek audio output olmadan test et.
+  (`tools/engine-tests.ts` — 13 check: saf bus modeli + headless subsystem
+   gain/snapshot/duck/route)
 
 ### Faz 4 - İleri Unreal parity adayları
 

@@ -80,6 +80,15 @@ import {
 import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/audio";
 import { evaluateSoundCue, validateSoundCueGraph } from "../engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "../engine/audio/soundCueTypes";
+import {
+  AUDIO_BUS_IDS,
+  MENU_DUCK_MIX,
+  createDefaultBusVolumes,
+  effectiveBusGain,
+  isAudioBusId,
+  mergeMixSnapshot,
+  normalizeBusVolume,
+} from "../engine/audio/audioBus";
 import { KeyboardInputSource } from "../src/input/keyboardInputSource";
 import {
   facingYawFromMove,
@@ -2132,6 +2141,90 @@ check("starter SC_Footstep_Stone cue validates and evaluates to one clip", () =>
   assert.deepEqual(validateSoundCueGraph(raw), []);
   assert.deepEqual(evaluateSoundCue(raw), [
     { clipId: "starter-snd-footstep-stone", volume: 1, pitch: 1, loop: false, delaySeconds: 0 },
+  ]);
+});
+
+// --- Audio Bus Lite (pure mix model) ------------------------------------------
+
+check("createDefaultBusVolumes seeds every bus at unity", () => {
+  assert.deepEqual(createDefaultBusVolumes(), {
+    master: 1,
+    music: 1,
+    sfx: 1,
+    ui: 1,
+    ambience: 1,
+  });
+});
+
+check("normalizeBusVolume clamps to non-negative, defaults junk to 1", () => {
+  assert.equal(normalizeBusVolume(0.5), 0.5);
+  assert.equal(normalizeBusVolume(0), 0);
+  assert.equal(normalizeBusVolume(-2), 0);
+  assert.equal(normalizeBusVolume(undefined), 1);
+  assert.equal(normalizeBusVolume(Number.NaN), 1);
+});
+
+check("effectiveBusGain folds a sub-bus through master, master stands alone", () => {
+  const v = { ...createDefaultBusVolumes(), master: 0.5, music: 0.4 };
+  assert.equal(effectiveBusGain(v, "master"), 0.5);
+  assert.equal(effectiveBusGain(v, "music"), 0.2); // 0.4 × 0.5
+  assert.equal(effectiveBusGain(v, "sfx"), 0.5); // 1 × 0.5
+});
+
+check("mergeMixSnapshot overrides only listed buses without mutating the base", () => {
+  const base = createDefaultBusVolumes();
+  const merged = mergeMixSnapshot(base, { music: 0.25, sfx: -1 });
+  assert.equal(merged.music, 0.25);
+  assert.equal(merged.sfx, 0); // negative normalized to 0
+  assert.equal(merged.ui, 1);
+  assert.equal(base.music, 1); // base table untouched
+  assert.notStrictEqual(merged, base);
+});
+
+check("isAudioBusId guards the bus id union", () => {
+  assert.equal(isAudioBusId("music"), true);
+  assert.equal(isAudioBusId("master"), true);
+  assert.equal(isAudioBusId("nope"), false);
+  assert.equal(isAudioBusId(3), false);
+});
+
+check("MENU_DUCK_MIX ducks music/ambience/sfx but leaves ui and master", () => {
+  const ducked = mergeMixSnapshot(createDefaultBusVolumes(), MENU_DUCK_MIX);
+  assert.ok(ducked.music < 1 && ducked.ambience < 1 && ducked.sfx < 1);
+  assert.equal(ducked.ui, 1);
+  assert.equal(ducked.master, 1);
+});
+
+// --- Audio Bus Lite (subsystem, headless) -------------------------------------
+
+check("audio subsystem seeds every mix bus at unity", () => {
+  const audio = new AudioSubsystem();
+  for (const id of AUDIO_BUS_IDS) assert.equal(audio.getBusVolume(id), 1);
+});
+
+check("audio subsystem setBusVolume stores and clamps without a context", () => {
+  const audio = new AudioSubsystem();
+  audio.setBusVolume("music", 0.3);
+  assert.equal(audio.getBusVolume("music"), 0.3);
+  audio.setBusVolume("sfx", -5);
+  assert.equal(audio.getBusVolume("sfx"), 0);
+});
+
+check("audio subsystem mix snapshot ducks, resetMix restores", () => {
+  const audio = new AudioSubsystem();
+  audio.applyMixSnapshot(MENU_DUCK_MIX);
+  assert.equal(audio.getBusVolume("music"), 0.25);
+  assert.equal(audio.getBusVolume("ui"), 1); // untouched by the duck
+  audio.resetMix();
+  for (const id of AUDIO_BUS_IDS) assert.equal(audio.getBusVolume(id), 1);
+});
+
+check("audio subsystem play routes its bus into the recorded request", () => {
+  const audio = new AudioSubsystem();
+  audio.play("music-loop", { bus: "music", loop: true });
+  audio.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  assert.deepEqual(audio.playedRequests(), [
+    { clipId: "music-loop", bus: "music", loop: true },
   ]);
 });
 
