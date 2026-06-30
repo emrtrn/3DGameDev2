@@ -491,6 +491,19 @@ function listPublicFiles(root: string): string[] {
   return files.sort((a, b) => a.localeCompare(b));
 }
 
+function findManifestStaticMeshFixture(manifest: AssetManifest): AssetRecord {
+  const fixture = manifest.assets.find(
+    (asset) =>
+      assetType(asset) === "staticMesh" &&
+      assetPath(asset).endsWith(".glb") &&
+      asset.runtime &&
+      typeof asset.runtime.loadGroup === "string" &&
+      typeof asset.runtime.bytes === "number",
+  );
+  if (!fixture) throw new Error("Expected at least one static mesh fixture in the asset manifest.");
+  return fixture;
+}
+
 // 1. Entity ids must stay byte-for-byte in sync with editor selectionId.
 check("instance id matches selectionId", () => {
   assert.equal(
@@ -517,6 +530,11 @@ check("actor id matches selectionId", () => {
   assert.equal(actorInstanceEntityId(4), selectionId({ kind: "actor", index: 4 }));
 });
 
+const assetManifest = JSON.parse(
+  readFileSync("public/assets/manifest.json", "utf8"),
+) as AssetManifest;
+const staticMeshFixture = findManifestStaticMeshFixture(assetManifest);
+
 // 2. Round-trip on a self-contained, project-agnostic fixture that exercises the
 // same legacy-adapter paths a real saved scene would: a placed static mesh (mesh +
 // transform components), a default directional light, and a scripted character
@@ -527,7 +545,7 @@ const layout: RoomLayout = {
   schema: 1,
   name: "legacy-adapter-fixture",
   loadGroups: [],
-  instances: [{ assetId: "starter-sm-crate", placements: [{ position: [0, 0, 0] }] }],
+  instances: [{ assetId: staticMeshFixture.id, placements: [{ position: [0, 0, 0] }] }],
   characters: [
     {
       assetId: "demo-character",
@@ -541,9 +559,6 @@ const layout: RoomLayout = {
   worldSettings: { staticObjectsCastShadow: true, ambientIntensity: 1, killZ: -30 },
 };
 ensureDefaultSceneLights(layout);
-const assetManifest = JSON.parse(
-  readFileSync("public/assets/manifest.json", "utf8"),
-) as AssetManifest;
 const doc = roomLayoutToSceneDocument(layout);
 check("asset manifest validates against the public assets tree", () => {
   const report = validateAssetManifest(assetManifest, {
@@ -556,15 +571,44 @@ check("asset manifest validates against the public assets tree", () => {
   assert.equal(report.assetCount, assetManifest.assets.length);
 });
 check("asset manifest helpers expose canonical path, load group, and byte size", () => {
-  const crate = assetManifest.assets.find((asset) => asset.id === "starter-sm-crate");
-  assert.ok(crate);
-  assert.equal(assetType(crate), "staticMesh");
-  assert.equal(
-    assetPath(crate),
-    "assets/starter-content/StaticMeshes/Props/SM_Prototype_Crate.glb",
-  );
-  assert.equal(assetLoadGroup(crate), "starter-static-meshes");
-  assert.equal(assetByteSize(crate), 2024);
+  assert.equal(assetType(staticMeshFixture), "staticMesh");
+  assert.equal(assetPath(staticMeshFixture), staticMeshFixture.path);
+  assert.equal(assetLoadGroup(staticMeshFixture), staticMeshFixture.runtime.loadGroup);
+  assert.equal(assetByteSize(staticMeshFixture), staticMeshFixture.runtime.bytes);
+});
+check("asset manifest rejects stale DevelopmentContent parent texture variants", () => {
+  const report = validateAssetManifest({
+    version: 1,
+    generated: "2026-06-30",
+    ktx2: false,
+    assets: [
+      {
+        id: "stale-lightmask",
+        name: "Stale Lightmask",
+        assetType: "texture",
+        category: "LightMasks",
+        path: "assets/DevelopmentContent/Textures/LightMasks/circle_a.png",
+        tags: [],
+        placeable: false,
+        placement: {
+          surface: "floor",
+          snapToWall: false,
+          allowRotation: false,
+          allowScale: false,
+        },
+        runtime: {
+          loadGroup: "LightMasks",
+          castShadow: false,
+          receiveShadow: false,
+          collision: false,
+          bytes: 1,
+        },
+        license: "Unknown",
+      },
+    ],
+  });
+  assert.equal(report.errorCount, 1);
+  assert.equal(report.issues[0]?.code, "asset-texture-variant-parent");
 });
 check("asset manifest classifies Sound Cue assets separately from prefab JSON", () => {
   const cue = assetManifest.assets.find((asset) => asset.id === "sc-footstep-stone");
