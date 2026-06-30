@@ -314,17 +314,17 @@
       "placements": [
         {
           "position": [
-            3.75,
+            0.34,
             -0.08,
-            -4.06
+            1.05
           ],
           "name": "Ambient Sound",
           "collision": false,
           "audio": {
-            "clipId": "starter-snd-birds-01",
-            "volume": 1,
+            "clipId": "",
+            "sourceId": "cue-birds-soundcue",
+            "sourceType": "soundCue",
             "loop": true,
-            "spatial": true,
             "autoPlay": true
           },
           "rotationYDeg": 0,

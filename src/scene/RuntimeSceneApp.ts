@@ -853,7 +853,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
-    this.playAutoPlayAudio(sceneDocument);
+    // Auto-play audio/particles must never abort scene start: a single bad cue or
+    // emitter cannot be allowed to stop the game mode + UI (lines below) from
+    // initialising, which would look like "Play won't start".
+    try {
+      this.playAutoPlayAudio(sceneDocument);
+    } catch (error) {
+      console.error("[runtime] auto-play audio failed:", error);
+    }
     void this.playAutoPlayParticles(sceneDocument);
 
     // Character skeletal metadata (blend spaces / anim-set) drives the Game Mode's
@@ -1262,8 +1269,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Plays every Audio component flagged `autoPlay` once the scene is built (ambient). */
   private playAutoPlayAudio(document: SceneDocument): void {
     for (const entity of document.entities) {
+      try {
+        this.playAutoPlayAudioEntity(entity);
+      } catch (error) {
+        // One unplayable emitter must not stop the rest (or the scene start).
+        console.error(`[runtime] auto-play audio failed for ${entity.id}:`, error);
+      }
+    }
+  }
+
+  private playAutoPlayAudioEntity(entity: Entity): void {
+    {
       const audio = readAudioComponent(entity);
-      if (!audio?.autoPlay) continue;
+      if (!audio?.autoPlay) return;
       const position = audio.spatial ? readTransformComponent(entity)?.position : undefined;
       // Spatial placement + authored sphere-attenuation overrides for the PannerNode.
       const spatialOpts =

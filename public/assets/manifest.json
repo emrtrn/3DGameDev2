@@ -19926,6 +19926,29 @@
         "bytes": 346
       },
       "license": "Unknown"
+    },
+    {
+      "id": "cue-birds-soundcue",
+      "name": "Cue Birds.Soundcue",
+      "assetType": "soundCue",
+      "category": "Sounds",
+      "path": "assets/starter-content/Sounds/Cue_Birds.soundcue.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 265
+      },
+      "license": "Unknown"
     }
   ]
 }

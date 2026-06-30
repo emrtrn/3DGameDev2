@@ -570,18 +570,27 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
   return component;
 }
 
-/** Reads a typed audio cue from an entity's serializable component data. */
+/**
+ * Reads a typed audio cue from an entity's serializable component data.
+ *
+ * Tolerant of partial component data: an Actor Blueprint Audio component stores
+ * only the props the author set (no adapter defaults are applied on the actor
+ * path), so `volume`/`loop`/`spatial` may be absent and default here (1/false/
+ * false). The only hard requirement is something to play — a raw `clipId` OR a
+ * Sound Cue `sourceId` (a cue resolves its own clips, so `clipId` may be absent).
+ */
 export function readAudioComponent(entity: Entity): AudioComponent | undefined {
   const data = entity.components[AUDIO_COMPONENT];
   if (!data) return undefined;
-  if (typeof data.clipId !== "string" || data.clipId.length === 0) return undefined;
-  if (typeof data.volume !== "number" || !Number.isFinite(data.volume)) return undefined;
-  if (typeof data.loop !== "boolean" || typeof data.spatial !== "boolean") return undefined;
+  const clipId = typeof data.clipId === "string" ? data.clipId : "";
+  const isCueSource =
+    data.sourceType === "soundCue" && typeof data.sourceId === "string" && data.sourceId.length > 0;
+  if (clipId.length === 0 && !isCueSource) return undefined;
   const component: AudioComponent = {
-    clipId: data.clipId,
-    volume: data.volume,
-    loop: data.loop,
-    spatial: data.spatial,
+    clipId,
+    volume: typeof data.volume === "number" && Number.isFinite(data.volume) ? data.volume : 1,
+    loop: data.loop === true,
+    spatial: data.spatial === true,
   };
   if (typeof data.sourceId === "string" && data.sourceId.length > 0) component.sourceId = data.sourceId;
   if (data.sourceType === "sound" || data.sourceType === "soundCue") {

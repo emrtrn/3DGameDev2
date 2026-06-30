@@ -420,8 +420,16 @@ export class AudioSubsystem implements Subsystem, AudioBus {
         continue;
       }
       this.played.push(request);
-      if (this.backend === "web-audio") this.playWebAudio(request, handle);
-      else if (!request.loop) handle.stop();
+      if (this.backend === "web-audio") {
+        // A failed clip (bad node param, decode error, etc.) must never throw out
+        // of the per-frame update and kill the engine loop.
+        try {
+          this.playWebAudio(request, handle);
+        } catch (error) {
+          console.error(`[audio] playback failed for "${request.clipId}":`, error);
+          handle.stop();
+        }
+      } else if (!request.loop) handle.stop();
     }
   }
 

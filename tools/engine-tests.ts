@@ -1766,6 +1766,40 @@ check("readAudioComponent surfaces cue source + pitch + spatial attenuation over
   });
 });
 
+check("readAudioComponent tolerates partial Actor Blueprint props (cue, no clipId/volume)", () => {
+  // An Actor Blueprint Audio component stores only the props the author set, with
+  // no adapter defaults (actorInstanceToEntity copies props verbatim). A cue source
+  // typically has no `clipId` and no `volume`; the reader must still surface it
+  // (defaulting volume/loop/spatial) rather than returning undefined — otherwise
+  // the actor is silent in Play.
+  const entity = {
+    id: "actor:0",
+    components: {
+      Audio: {
+        sourceType: "soundCue",
+        sourceId: "denemecue-soundcue",
+        loop: true,
+        spatial: true,
+        autoPlay: true,
+      },
+    },
+  };
+  assert.deepEqual(readAudioComponent(entity as never), {
+    clipId: "",
+    sourceId: "denemecue-soundcue",
+    sourceType: "soundCue",
+    volume: 1,
+    loop: true,
+    spatial: true,
+    autoPlay: true,
+  });
+  // Still rejects an Audio component with neither a clip nor a cue source.
+  assert.equal(
+    readAudioComponent({ id: "x", components: { Audio: { loop: true } } } as never),
+    undefined,
+  );
+});
+
 // 3 Actors & Components: the official component list now includes
 // ParticleEmitter and Interaction. They have no adapter authoring path yet
 // (next slice), so these check the reader validation directly off a hand-built

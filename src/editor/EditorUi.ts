@@ -2862,6 +2862,12 @@ export class EditorUi {
 
     this.detailsScale = [...selection.scale];
 
+    // An Ambient Sound emitter is a transform + Audio component only: it has no
+    // mesh/material, no collision/physics, and no pivot/placement affordances, so
+    // those Details sections are hidden to keep the panel focused on the sound.
+    const isAmbientSound =
+      selection.kind === "instance" && selection.assetId === AMBIENT_SOUND_ASSET_ID;
+
     const lockedAttr = selection.locked ? "disabled" : "";
     const wallDisabled = selection.locked || selection.kind === "character" ? "disabled" : "";
     const castShadowToggle =
@@ -2892,8 +2898,8 @@ export class EditorUi {
       ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
       ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
       ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
-      ${pivotRow(selection.pivot, selection.locked, this.app.isPivotEditMode())}
-      ${this.renderMaterialSection(selection)}
+      ${isAmbientSound ? "" : pivotRow(selection.pivot, selection.locked, this.app.isPivotEditMode())}
+      ${isAmbientSound ? "" : this.renderMaterialSection(selection)}
       <div class="detail-section">
         <div class="detail-actions-row">
           <button type="button" data-detail-action="reset" ${lockedAttr}
@@ -2904,7 +2910,10 @@ export class EditorUi {
             title="Paste the copied transform">Paste</button>
         </div>
       </div>
-      <div class="detail-section">
+      ${
+        isAmbientSound
+          ? ""
+          : `<div class="detail-section">
         <div class="detail-section-title">Placement</div>
         <div class="detail-actions-row">
           <button type="button" data-detail-action="snap-floor" ${lockedAttr}
@@ -2917,9 +2926,10 @@ export class EditorUi {
           <span>Lock Movement</span>
         </label>
         ${castShadowToggle}
-      </div>
-      ${this.renderCollisionSection(selection)}
-      ${this.renderPhysicsSection(selection, selection.locked)}
+      </div>`
+      }
+      ${isAmbientSound ? "" : this.renderCollisionSection(selection)}
+      ${isAmbientSound ? "" : this.renderPhysicsSection(selection, selection.locked)}
       ${this.renderComponentsSection(selection)}
       ${this.renderMetadataSections(selection)}
     `;
@@ -3576,7 +3586,15 @@ export class EditorUi {
     let audio: LayoutAudio;
     if (isCue) {
       const sourceIdEl = this.detailsBody.querySelector<HTMLSelectElement>('[data-audio="sourceId"]');
-      const sourceId = sourceIdEl?.value.trim() ?? "";
+      // The cue dropdown may not be mounted yet (the user just toggled Source Type,
+      // so the panel still shows the clip dropdown): fall back to the prior cue,
+      // else the first available cue. A cue source with an empty sourceId fails
+      // save validation ("sourceId is required"), which aborts Play.
+      const sourceId =
+        sourceIdEl?.value.trim() ||
+        this.selected?.audio?.sourceId ||
+        this.editableAssets.find((asset) => assetType(asset) === "soundCue")?.id ||
+        "";
       // Keep clipId as legacy fallback (empty string is fine for cue-sourced audio)
       audio = { clipId: "", sourceId, sourceType: "soundCue" };
     } else {

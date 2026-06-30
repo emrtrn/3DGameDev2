@@ -13,7 +13,13 @@
     {
       "id": "audio",
       "component": "Audio",
-      "props": {},
+      "props": {
+        "sourceType": "soundCue",
+        "sourceId": "denemecue-soundcue",
+        "loop": true,
+        "autoPlay": true,
+        "spatial": true
+      },
       "parent": "root"
     }
   ],
