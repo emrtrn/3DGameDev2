@@ -1435,6 +1435,12 @@ export class EditorUi {
         void this.openMaterialEditor(item);
       });
     }
+    if (item.type === "soundCue") {
+      card.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        void this.openSoundCueEditor(item);
+      });
+    }
     if (isLevelItem(item) && !activeLevel) {
       card.addEventListener("dblclick", (event) => {
         event.preventDefault();

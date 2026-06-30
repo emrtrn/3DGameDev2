@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "type": "soundCue",
+  "name": "DenemeCue",
+  "output": {
+    "volume": 1,
+    "pitch": 1,
+    "bus": "sfx"
+  },
+  "nodes": [
+    {
+      "id": "output",
+      "kind": "output",
+      "volume": 1,
+      "pitch": 1
+    },
+    {
+      "id": "source-1",
+      "kind": "source",
+      "clipId": "starter-snd-fire-01",
+      "volume": 1,
+      "pitch": 1
+    },
+    {
+      "id": "mixer-2",
+      "kind": "mixer"
+    }
+  ],
+  "connections": []
+}
