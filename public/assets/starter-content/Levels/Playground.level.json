@@ -95,7 +95,17 @@
     },
     {
       "assetId": "shape-cube",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            0.32,
+            0,
+            1.17
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
     },
     {
       "assetId": "shape-cylender",
@@ -152,16 +162,6 @@
     {
       "assetId": "shape-sphere",
       "placements": [
-        {
-          "position": [
-            -0.56,
-            2.54,
-            2.1
-          ],
-          "simulatePhysics": true,
-          "rotationYDeg": 0,
-          "scale": 1
-        },
         {
           "position": [
             0.77,
@@ -314,9 +314,9 @@
       "placements": [
         {
           "position": [
-            0.34,
+            4.29,
             -0.08,
-            1.05
+            -4.91
           ],
           "name": "Ambient Sound",
           "collision": false,
@@ -444,32 +444,7 @@
       "resolution": 512
     }
   ],
-  "reflectionCaptures": [
-    {
-      "id": "reflection-capture-1",
-      "position": [
-        0,
-        1,
-        0
-      ],
-      "name": "Sphere Reflection Capture",
-      "radius": 6,
-      "intensity": 0.8,
-      "resolution": 256,
-      "near": 0.1,
-      "parallax": true
-    }
-  ],
-  "blockingVolumes": [
-    {
-      "id": "blocking-volume-1",
-      "position": [
-        0,
-        1,
-        0
-      ],
-      "name": "Blocking Volume"
-    }
-  ],
+  "reflectionCaptures": [],
+  "blockingVolumes": [],
   "actors": []
 }
