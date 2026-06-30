@@ -271,11 +271,14 @@ Cue playback; saf graph evaluator + ince Web Audio compiler olarak ayrılmalı. 
   (evaluator + editor UI)
 - [x] Editor preview play/stop akışını ekle.
   (`SoundCueEditor.preview()` / `stopPreview()`)
-- [ ] Runtime cue evaluator'ı headless testlerle doğrula.
-  (`engine/audio/soundCueEvaluator.ts` yazıldı; `tools/engine-tests.ts` testleri eklenecek)
+- [x] Runtime cue evaluator'ı headless testlerle doğrula.
+  (`engine/audio/soundCueEvaluator.ts`; `tools/engine-tests.ts` — 13 check:
+   source/output gain, mixer, weighted random, modulator, loop, delay,
+   `validateSoundCueGraph` ve gerçek `SC_Footstep_Stone` fixture'ı)
 - [x] Audio component'ten `soundCue` seçip Game Mode'da çal.
   (`LayoutAudio.sourceId/sourceType`, `RuntimeSceneApp.playAutoPlayAudio`)
-- [ ] `npm run build:verify` gate'ini geçir.
+- [x] `npm run build:verify` gate'ini geçir.
+  (build + 418 engine check + strict `verify:dist` yeşil)
 
 ### Faz 2 - Audio component ve spatial v1
 

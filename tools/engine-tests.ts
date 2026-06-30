@@ -78,6 +78,8 @@ import {
   resolveSpatialPannerConfig,
 } from "../engine/audio/audioSubsystem";
 import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/audio";
+import { evaluateSoundCue, validateSoundCueGraph } from "../engine/audio/soundCueEvaluator";
+import type { SoundCueAsset } from "../engine/audio/soundCueTypes";
 import { KeyboardInputSource } from "../src/input/keyboardInputSource";
 import {
   facingYawFromMove,
@@ -1903,6 +1905,233 @@ check("audio subsystem records a spatial play's position; listener pose is safe 
   audio.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
   assert.deepEqual(audio.playedRequests(), [
     { clipId: "footstep", spatial: true, position: [4, 0, -2] },
+  ]);
+});
+
+// --- Sound Cue evaluator (pure, headless) -------------------------------------
+//
+// A deterministic [0,1) generator: returns the queued values in order, then 0.
+// Pass it as the evaluator's `rng` so random/modulator/delay picks are exact.
+const seqRng = (...values: number[]): (() => number) => {
+  let i = 0;
+  return () => values[i++] ?? 0;
+};
+
+// Minimal cue builder: just the node/connection lists with sensible defaults.
+const makeCue = (
+  nodes: SoundCueAsset["nodes"],
+  connections: SoundCueAsset["connections"],
+  output: SoundCueAsset["output"] = {},
+): SoundCueAsset => ({ schema: 1, type: "soundCue", name: "test-cue", output, nodes, connections });
+
+check("sound cue evaluator emits a single event for source → output", () => {
+  const cue = makeCue(
+    [
+      { id: "out", kind: "output" },
+      { id: "src", kind: "source", clipId: "clipA", volume: 0.5, pitch: 1.2 },
+    ],
+    [{ from: "src", to: "out" }],
+  );
+  assert.deepEqual(evaluateSoundCue(cue), [
+    { clipId: "clipA", volume: 0.5, pitch: 1.2, loop: false, delaySeconds: 0 },
+  ]);
+});
+
+check("sound cue evaluator scales by output node, then by cue.output", () => {
+  // Output node volume/pitch override and multiply the source.
+  const viaNode = makeCue(
+    [
+      { id: "out", kind: "output", volume: 0.5, pitch: 2 },
+      { id: "src", kind: "source", clipId: "c" },
+    ],
+    [{ from: "src", to: "out" }],
+  );
+  assert.deepEqual(evaluateSoundCue(viaNode), [
+    { clipId: "c", volume: 0.5, pitch: 2, loop: false, delaySeconds: 0 },
+  ]);
+
+  // When the output node omits volume, cue.output.volume is used as the scale.
+  const viaOutput = makeCue(
+    [
+      { id: "out", kind: "output" },
+      { id: "src", kind: "source", clipId: "c" },
+    ],
+    [{ from: "src", to: "out" }],
+    { volume: 0.25 },
+  );
+  assert.equal(evaluateSoundCue(viaOutput)[0]?.volume, 0.25);
+});
+
+check("sound cue evaluator plays every mixer input simultaneously", () => {
+  const cue = makeCue(
+    [
+      { id: "out", kind: "output" },
+      { id: "mix", kind: "mixer" },
+      { id: "a", kind: "source", clipId: "clipA" },
+      { id: "b", kind: "source", clipId: "clipB" },
+    ],
+    [
+      { from: "a", to: "mix" },
+      { from: "b", to: "mix" },
+      { from: "mix", to: "out" },
+    ],
+  );
+  const events = evaluateSoundCue(cue);
+  assert.deepEqual(
+    events.map((e) => e.clipId),
+    ["clipA", "clipB"],
+  );
+  assert.ok(events.every((e) => e.delaySeconds === 0 && e.loop === false));
+});
+
+check("sound cue evaluator random picks one input by weight and rng", () => {
+  const cue = makeCue(
+    [
+      { id: "out", kind: "output" },
+      { id: "rnd", kind: "random", weights: [3, 1] },
+      { id: "a", kind: "source", clipId: "clipA" },
+      { id: "b", kind: "source", clipId: "clipB" },
+    ],
+    [
+      { from: "a", to: "rnd" },
+      { from: "b", to: "rnd" },
+      { from: "rnd", to: "out" },
+    ],
+  );
+  // total weight 4: cursor < 3 → first input, else second.
+  assert.deepEqual(
+    evaluateSoundCue(cue, seqRng(0.7)).map((e) => e.clipId),
+    ["clipA"],
+  );
+  assert.deepEqual(
+    evaluateSoundCue(cue, seqRng(0.9)).map((e) => e.clipId),
+    ["clipB"],
+  );
+});
+
+check("sound cue evaluator modulator applies deterministic vol/pitch range", () => {
+  const cue = makeCue(
+    [
+      { id: "out", kind: "output" },
+      { id: "mod", kind: "modulator", volumeMin: 0.5, volumeMax: 1.5, pitchMin: 1, pitchMax: 2 },
+      { id: "src", kind: "source", clipId: "c" },
+    ],
+    [
+      { from: "src", to: "mod" },
+      { from: "mod", to: "out" },
+    ],
+  );
+  // rng 0.5 for volume → 1.0, rng 0.5 for pitch → 1.5 (consumed in that order).
+  assert.deepEqual(evaluateSoundCue(cue, seqRng(0.5, 0.5)), [
+    { clipId: "c", volume: 1, pitch: 1.5, loop: false, delaySeconds: 0 },
+  ]);
+});
+
+check("sound cue evaluator loop node forces downstream loop", () => {
+  const cue = makeCue(
+    [
+      { id: "out", kind: "output" },
+      { id: "loop", kind: "loop" },
+      { id: "src", kind: "source", clipId: "c", loop: false },
+    ],
+    [
+      { from: "src", to: "loop" },
+      { from: "loop", to: "out" },
+    ],
+  );
+  assert.equal(evaluateSoundCue(cue)[0]?.loop, true);
+});
+
+check("sound cue evaluator source.loop is honoured without a loop node", () => {
+  const cue = makeCue(
+    [
+      { id: "out", kind: "output" },
+      { id: "src", kind: "source", clipId: "c", loop: true },
+    ],
+    [{ from: "src", to: "out" }],
+  );
+  assert.equal(evaluateSoundCue(cue)[0]?.loop, true);
+});
+
+check("sound cue evaluator delay offsets downstream events", () => {
+  const cue = makeCue(
+    [
+      { id: "out", kind: "output" },
+      { id: "delay", kind: "delay", secondsMin: 0.5, secondsMax: 0.5 },
+      { id: "src", kind: "source", clipId: "c" },
+    ],
+    [
+      { from: "src", to: "delay" },
+      { from: "delay", to: "out" },
+    ],
+  );
+  assert.equal(evaluateSoundCue(cue)[0]?.delaySeconds, 0.5);
+});
+
+check("sound cue evaluator returns nothing without an output node", () => {
+  const cue = makeCue([{ id: "src", kind: "source", clipId: "c" }], []);
+  assert.deepEqual(evaluateSoundCue(cue), []);
+});
+
+check("validateSoundCueGraph accepts a well-formed cue", () => {
+  const cue = makeCue(
+    [
+      { id: "out", kind: "output" },
+      { id: "src", kind: "source", clipId: "c" },
+    ],
+    [{ from: "src", to: "out" }],
+  );
+  assert.deepEqual(validateSoundCueGraph(cue), []);
+});
+
+check("validateSoundCueGraph reports structural problems", () => {
+  const missingOutput = makeCue([{ id: "src", kind: "source", clipId: "c" }], []);
+  assert.deepEqual(validateSoundCueGraph(missingOutput), ["Missing output node"]);
+
+  const twoOutputs = makeCue(
+    [
+      { id: "out1", kind: "output" },
+      { id: "out2", kind: "output" },
+      { id: "src", kind: "source", clipId: "c" },
+    ],
+    [{ from: "src", to: "out1" }],
+  );
+  assert.ok(validateSoundCueGraph(twoOutputs).includes("Multiple output nodes"));
+
+  const dangling = makeCue(
+    [
+      { id: "out", kind: "output" },
+      { id: "src", kind: "source", clipId: "c" },
+    ],
+    [
+      { from: "src", to: "out" },
+      { from: "ghost", to: "out" },
+    ],
+  );
+  assert.ok(
+    validateSoundCueGraph(dangling).includes("Connection references missing node: ghost"),
+  );
+
+  const noClip = makeCue(
+    [
+      { id: "out", kind: "output" },
+      { id: "src", kind: "source", clipId: "" },
+    ],
+    [{ from: "src", to: "out" }],
+  );
+  assert.ok(validateSoundCueGraph(noClip).includes('Source node "src" has no clipId'));
+
+  const orphanOutput = makeCue([{ id: "out", kind: "output" }], []);
+  assert.ok(validateSoundCueGraph(orphanOutput).includes("Output node has no connected inputs"));
+});
+
+check("starter SC_Footstep_Stone cue validates and evaluates to one clip", () => {
+  const raw = JSON.parse(
+    readFileSync("public/assets/starter-content/Sounds/SC_Footstep_Stone.soundcue.json", "utf8"),
+  ) as SoundCueAsset;
+  assert.deepEqual(validateSoundCueGraph(raw), []);
+  assert.deepEqual(evaluateSoundCue(raw), [
+    { clipId: "starter-snd-footstep-stone", volume: 1, pitch: 1, loop: false, delaySeconds: 0 },
   ]);
 });
 

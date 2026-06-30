@@ -2256,29 +2256,6 @@
       "license": "Unknown"
     },
     {
-      "id": "warning",
-      "name": "Warning",
-      "assetType": "prefab",
-      "category": "Sounds",
-      "path": "assets/starter-content/Sounds/Warning.sound.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Sounds",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 72
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "sc-footstep-stone",
       "name": "SC Footstep Stone",
       "assetType": "soundCue",
@@ -3295,29 +3272,6 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 367
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "newsound-soundcue",
-      "name": "New Sound.Soundcue",
-      "assetType": "soundCue",
-      "category": "Sounds",
-      "path": "assets/starter-content/Sounds/NewSound.soundcue.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Sounds",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 264
       },
       "license": "Unknown"
     },
