@@ -1,6 +1,7 @@
 import type {
   LayoutActorInstance,
   LayoutBehavior,
+  LayoutBlockingVolume,
   LayoutCharacter,
   LayoutLightActor,
   LayoutMetadata,
@@ -284,6 +285,27 @@ export function cloneSphereReflectionCapture(
   if (capture.far !== undefined) clone.far = capture.far;
   if (capture.parallax !== undefined) clone.parallax = capture.parallax;
   if (capture.priority !== undefined) clone.priority = capture.priority;
+  return clone;
+}
+
+export function cloneBlockingVolume(volume: LayoutBlockingVolume): LayoutBlockingVolume {
+  const clone: LayoutBlockingVolume = {
+    id: volume.id,
+    position: [...volume.position],
+  };
+  if (volume.name !== undefined) clone.name = volume.name;
+  if (volume.hidden !== undefined) clone.hidden = volume.hidden;
+  if (volume.locked !== undefined) clone.locked = volume.locked;
+  if (volume.scaleLocked !== undefined) clone.scaleLocked = volume.scaleLocked;
+  if (volume.groupId !== undefined) clone.groupId = volume.groupId;
+  if (volume.nodeId !== undefined) clone.nodeId = volume.nodeId;
+  if (volume.parentId !== undefined) clone.parentId = volume.parentId;
+  if (volume.rotation !== undefined) clone.rotation = [...volume.rotation];
+  if (volume.scale !== undefined) clone.scale = [...volume.scale];
+  if (volume.brushShape !== undefined) clone.brushShape = volume.brushShape;
+  if (volume.size !== undefined) clone.size = [...volume.size];
+  if (volume.renderInGame !== undefined) clone.renderInGame = volume.renderInGame;
+  if (volume.color !== undefined) clone.color = volume.color;
   return clone;
 }
 

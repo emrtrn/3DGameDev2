@@ -140,6 +140,13 @@ import {
   type ReflectiveSurfaceObject,
   type ReflectiveSurfaceRenderItem,
 } from "@engine/render-three/reflectiveSurface";
+import {
+  createRuntimeBlockingVolumeObject,
+  disposeBlockingVolumeObject,
+  resolveBlockingVolume,
+  type BlockingVolumeObject,
+  type BlockingVolumeRenderItem,
+} from "@engine/render-three/blockingVolume";
 import { readRotation, readScale } from "@engine/scene/transform";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
@@ -158,6 +165,7 @@ import type {
   LayoutCharacter,
   LayoutLightActor,
   LayoutPlacement,
+  LayoutBlockingVolume,
   LayoutReflectionPlane,
   LayoutReflectiveSurface,
   LayoutSphereReflectionCapture,
@@ -360,6 +368,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly instanceProbeMaterials = new Map<string, Material[]>();
   /** Planar Reflection (mirror) reflectors built from `layout.reflectionPlanes`. */
   private reflectionPlaneObjects: ReflectionPlaneObject[] = [];
+  /** Solid grey-box meshes for `renderInGame` Blocking Volumes (collision is separate). */
+  private blockingVolumeObjects: BlockingVolumeObject[] = [];
   /** Textured reflective-surface meshes built from `layout.reflectiveSurfaces`. */
   private reflectiveSurfaceObjects: ReflectiveSurfaceObject[] = [];
   private characterObjects: Object3D[] = [];
@@ -644,6 +654,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeReflectiveSurfaceObject(surface);
     }
     this.reflectiveSurfaceObjects = [];
+    for (const volume of this.blockingVolumeObjects) {
+      this.scene.remove(volume);
+      disposeBlockingVolumeObject(volume);
+    }
+    this.blockingVolumeObjects = [];
     this.disposeInstanceProbeMaterials();
     this.interactionPromptElement.remove();
     void this.engineApp.dispose();
@@ -819,6 +834,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Planar reflections come last so they don't leak into the probe cubemaps.
     this.buildRuntimeReflectionPlanes();
     this.buildRuntimeReflectiveSurfaces();
+    this.buildRuntimeBlockingVolumes();
 
     const bytes = await this.assetLoader.totalBytesForGroups(this.layout.loadGroups);
     const materialStats = collectMaterialStats(this.models);
@@ -2135,6 +2151,33 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const surface = createReflectiveSurfaceObject(item, this.reflectiveSurfaceMaterial(item.material));
       this.reflectiveSurfaceObjects.push(surface);
       this.scene.add(surface);
+    });
+  }
+
+  /** Resolved brush settings + world transform for a blocking-volume layout actor. */
+  private blockingVolumeItem(actor: LayoutBlockingVolume): BlockingVolumeRenderItem {
+    return {
+      ...resolveBlockingVolume(actor),
+      position: [...actor.position],
+      rotation: readRotation(actor),
+      scale: readScale(actor),
+    };
+  }
+
+  /**
+   * Builds the Blocking Volume grey-boxes (`layout.blockingVolumes`) for Play. Each
+   * volume already blocks via its collider (built in the SceneDocument adapter);
+   * here it only draws a solid grey-box when `renderInGame` is set — otherwise it
+   * stays invisible (the true Unreal BlockingVolume). `hidden` always hides it.
+   */
+  private buildRuntimeBlockingVolumes(): void {
+    const volumes = this.layout?.blockingVolumes ?? [];
+    volumes.forEach((actor) => {
+      const item = this.blockingVolumeItem(actor);
+      const object = createRuntimeBlockingVolumeObject(item);
+      object.visible = item.renderInGame && !item.hidden;
+      this.blockingVolumeObjects.push(object);
+      this.scene.add(object);
     });
   }
 

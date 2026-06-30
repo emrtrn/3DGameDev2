@@ -33,6 +33,7 @@
 import {
   type LayoutBehavior,
   type LayoutAudio,
+  type LayoutBlockingVolume,
   type LayoutCharacter,
   type LayoutInteraction,
   type LayoutLightActor,
@@ -44,6 +45,7 @@ import {
   type RoomLayout,
   type Vec3,
 } from "./layout";
+import { blockingVolumeCollisionDef, resolveBlockingVolume } from "./blockingVolume";
 import {
   collisionInteractionGroups,
   resolveCollisionProfile,
@@ -133,6 +135,11 @@ export function characterEntityId(index: number): string {
 /** Mirrors `editor/core/selection.ts#selectionId` for the light kind. */
 export function lightEntityId(index: number): string {
   return `light:${index}`;
+}
+
+/** Mirrors `editor/core/selection.ts#selectionId` for the blocking-volume kind. */
+export function blockingVolumeEntityId(index: number): string {
+  return `blockingVolume:${index}`;
 }
 
 /**
@@ -248,6 +255,18 @@ export function roomLayoutToSceneDocument(
     pending.push({ entity, legacyParentId: light.parentId });
   });
 
+  // Blocking Volumes are collision-only in the SceneDocument (transform + collider,
+  // no mesh renderer); the runtime draws their grey-box separately. They always
+  // block, independent of the editor/Play `renderInGame` toggle.
+  (layout.blockingVolumes ?? []).forEach((volume, index) => {
+    const id = blockingVolumeEntityId(index);
+    registerNode(id, volume.nodeId);
+    pending.push({
+      entity: buildEntity(id, volume.name, blockingVolumeComponents(volume), flagTags(volume)),
+      legacyParentId: volume.parentId,
+    });
+  });
+
   for (const item of pending) {
     if (item.legacyParentId === undefined) continue;
     const parentEntityId = nodeIdToEntityId.get(item.legacyParentId);
@@ -342,6 +361,36 @@ function lightComponents(light: LayoutLightActor): EntityComponentMap {
     [TRANSFORM_COMPONENT]: toData(transformComponent(light)),
     [LIGHT_COMPONENT]: toData(lightComponent(light)),
   };
+}
+
+/**
+ * Collision-only components for a Blocking Volume: a transform plus a static
+ * solid collider whose primitive matches the brush shape, sized to the brush
+ * `size` and baked by the transform scale (so the collider tracks the rendered
+ * grey-box exactly). The `blockAll` preset from {@link blockingVolumeCollisionDef}
+ * makes it a solid blocker.
+ */
+function blockingVolumeComponents(volume: LayoutBlockingVolume): EntityComponentMap {
+  const resolved = resolveBlockingVolume(volume);
+  const components: EntityComponentMap = {
+    [TRANSFORM_COMPONENT]: toData(transformComponent(volume)),
+  };
+  const source: ColliderTransformSource & { collision?: boolean } = {
+    position: volume.position,
+    collision: true,
+  };
+  if (volume.rotation !== undefined) source.rotation = volume.rotation;
+  if (volume.scale !== undefined) source.scale = volume.scale;
+  const collider = colliderComponent(
+    "blocking-volume",
+    source,
+    true,
+    undefined,
+    blockingVolumeCollisionDef(resolved.brushShape, resolved.size),
+    undefined,
+  );
+  if (collider) components[COLLIDER_COMPONENT] = toData(collider);
+  return components;
 }
 
 function transformComponent(source: {

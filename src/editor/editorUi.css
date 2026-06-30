@@ -117,6 +117,50 @@ body.editor-mode #debug-stats {
   text-align: left;
 }
 
+/* Unreal-style "Place Actors" categories: each row reveals a flyout submenu. */
+.add-actor-category {
+  position: relative;
+}
+
+.editor-shell .add-actor-category > .add-actor-category-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.add-actor-category > .add-actor-category-label::after {
+  content: "›";
+  color: #9aa4a9;
+  font-weight: 700;
+}
+
+.add-actor-category:hover > .add-actor-category-label,
+.add-actor-category:focus-within > .add-actor-category-label {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.add-actor-submenu {
+  position: absolute;
+  top: -6px;
+  right: 100%;
+  margin-right: 4px;
+  z-index: 81;
+  min-width: 200px;
+  display: none;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(19, 22, 25, 0.98);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.add-actor-category:hover > .add-actor-submenu,
+.add-actor-category:focus-within > .add-actor-submenu {
+  display: grid;
+  gap: 4px;
+}
+
 .show-menu {
   position: relative;
 }

@@ -351,6 +351,20 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-30* - **Blocking Volume (parametrik blockout brush) + kategorili Add-Actor menüsü.**
+  Unreal'ın BlockingVolume'ü: yeni `blockingVolumes[]` placed-actor tipi (reflection-plane şablonu,
+  **instanced değil**). `brushShape` (box/cylinder/cone/sphere) + `size` Vec3 + `renderInGame` toggle +
+  brush `color`. Edit yeni dosyalar `engine/scene/blockingVolume.ts` (defaults/resolve/
+  `blockingVolumeCollisionDef`) + `engine/render-three/blockingVolume.ts` (editör turuncu yarı-saydam
+  brush + wireframe; runtime katı grey-box). Tam hat: layout tipi, `validateBlockingVolume` (allowlist),
+  selection/sceneObjects/layoutSnapshots/editableScene/picking, SceneApp (build/insert/remove/refresh/
+  rebuild/add/setBlockingVolume + tüm selection switch'leri), EditorUi Brush Settings paneli, kategorili
+  flyout submenu UI + CSS. **Çarpışma:** `legacyRoomLayoutAdapter` her volume için collision-only entity
+  (transform + `blockAll` collider, mesh renderer yok); collider primitive `size`'tan, transform scale
+  baked → grey-box ile birebir; `renderInGame`'den bağımsız her zaman bloklar. Runtime grey-box yalnız
+  `renderInGame && !hidden` görünür (gerçek Unreal BlockingVolume = görünmez ama bloklar). Karar: merdiven/
+  spiral builder'lar kapsam dışı. Gate: tsc temiz, test:engine **437** (+6), build:verify temiz (dist
+  runtime-only). **Sınır:** elle Play doğrulaması kullanıcıda; outliner kind-ikonu jenerik.
 - *2026-06-24* - **Ragdoll cone/twist açısal limiti (floppy → stiff).** Ragdoll joint'leri artık açısal
   limitli. Sorun: rapier3d-compat 0.19 typed `SphericalImpulseJoint`'te limit API yok. Çözüm: spherical
   joint kurulduktan sonra **raw** `world.impulseJoints.raw.jointSetLimits(handle, axis, min, max)` ile

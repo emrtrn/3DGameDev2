@@ -27,6 +27,7 @@ import {
 } from "three";
 import { Pass } from "three/examples/jsm/postprocessing/Pass.js";
 import {
+  blockingVolumeEntityId,
   characterEntity,
   characterEntityId,
   instanceEntitiesForAsset,
@@ -258,6 +259,7 @@ import {
   validateReflectionPlane,
   validateReflectiveSurface,
   validateSphereReflectionCapture,
+  validateBlockingVolume,
   validatePostProcess,
   validateSaveActorPayload,
   validateSaveUiPayload,
@@ -365,6 +367,16 @@ import {
   uniqueReflectiveSurfaceName,
   REFLECTIVE_SURFACE_DEFAULTS,
 } from "../engine/render-three/reflectiveSurface";
+import {
+  applyBlockingVolumeTransform,
+  blockingVolumeCollisionDef,
+  createBlockingVolumeObject,
+  createRuntimeBlockingVolumeObject,
+  resolveBlockingVolume,
+  uniqueBlockingVolumeId,
+  uniqueBlockingVolumeName,
+  BLOCKING_VOLUME_DEFAULTS,
+} from "../engine/render-three/blockingVolume";
 import {
   applySphereReflectionCaptureTransform,
   assignProbeEnvMapMaterial,
@@ -10238,6 +10250,134 @@ check("validateReflectionPlane allowlists fields and round-trips through validat
   }) as RoomLayout;
   assert.deepEqual(layout.reflectionPlanes, [{ id: "rp1", position: [0, 0, 0] }]);
   assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("resolveBlockingVolume fills defaults and overrides per field", () => {
+  assert.deepEqual(resolveBlockingVolume(null), BLOCKING_VOLUME_DEFAULTS);
+  const resolved = resolveBlockingVolume({
+    id: "bv",
+    position: [0, 0, 0],
+    brushShape: "cylinder",
+    size: [3, 5, 3],
+    renderInGame: true,
+    color: "#102030",
+  });
+  assert.equal(resolved.brushShape, "cylinder");
+  assert.deepEqual(resolved.size, [3, 5, 3]);
+  assert.equal(resolved.renderInGame, true);
+  assert.equal(resolved.color, "#102030");
+  // Unset fields fall back to defaults; an invalid shape falls back to box.
+  assert.equal(resolved.name, BLOCKING_VOLUME_DEFAULTS.name);
+  assert.equal(
+    resolveBlockingVolume({ id: "x", position: [0, 0, 0], brushShape: "stairs" as never }).brushShape,
+    "box",
+  );
+});
+
+check("uniqueBlockingVolumeId/Name avoid collisions", () => {
+  const volumes = [{ id: "blocking-volume-1", name: "Blocking Volume", position: [0, 0, 0] }];
+  assert.equal(uniqueBlockingVolumeId(volumes), "blocking-volume-2");
+  assert.equal(uniqueBlockingVolumeName("Blocking Volume", volumes), "Blocking Volume 2");
+});
+
+check("blockingVolumeCollisionDef builds one solid primitive per shape", () => {
+  assert.deepEqual(blockingVolumeCollisionDef("box", [2, 3, 4]), {
+    primitives: [{ shape: "box", size: [2, 3, 4] }],
+    complexity: "projectDefault",
+    preset: "blockAll",
+  });
+  assert.equal(blockingVolumeCollisionDef("cylinder", [2, 2, 2]).primitives[0]!.shape, "cylinder");
+});
+
+check("createBlockingVolumeObject builds an oriented brush; runtime variant is a solid box", () => {
+  const item = {
+    name: "Volume",
+    hidden: false,
+    brushShape: "box" as const,
+    size: [2, 2, 2] as [number, number, number],
+    renderInGame: false,
+    color: "#ff8c1a",
+    position: [1, 2, 3] as [number, number, number],
+    rotation: [0, 45, 0] as [number, number, number],
+    scale: [2, 1, 1] as [number, number, number],
+  };
+  const brush = createBlockingVolumeObject(item);
+  assert.equal(brush.name, "Volume");
+  assert.equal(brush.position.x, 1);
+  assert.equal(brush.scale.x, 2);
+  assert.equal(brush.visible, true);
+  // Hidden hides the brush via the shared transform path.
+  applyBlockingVolumeTransform(brush, { ...item, hidden: true });
+  assert.equal(brush.visible, false);
+  // The runtime variant is a single grey-box group (no wireframe handle).
+  const runtime = createRuntimeBlockingVolumeObject(item);
+  assert.equal(runtime.children.length, 1);
+});
+
+check("validateBlockingVolume allowlists fields and round-trips through validateLayout", () => {
+  const volume = validateBlockingVolume({
+    id: "bv1",
+    position: [1, 2, 3],
+    name: "Wall",
+    brushShape: "cylinder",
+    size: [4, 8, 4],
+    renderInGame: true,
+    color: "#102030",
+    rotation: [0, 90, 0],
+    scale: [2, 1, 1],
+    bogusField: "dropped",
+  });
+  assert.deepEqual(volume, {
+    id: "bv1",
+    position: [1, 2, 3],
+    name: "Wall",
+    rotation: [0, 90, 0],
+    scale: [2, 1, 1],
+    brushShape: "cylinder",
+    size: [4, 8, 4],
+    renderInGame: true,
+    color: "#102030",
+  });
+  // A missing id rejects; an invalid brush shape rejects the save.
+  assert.throws(() => validateBlockingVolume({ position: [0, 0, 0] }));
+  assert.throws(() =>
+    validateBlockingVolume({ id: "x", position: [0, 0, 0], brushShape: "stairs" }),
+  );
+
+  const layout = validateLayout({
+    schema: 1,
+    name: "WithVolume",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    blockingVolumes: [{ id: "bv1", position: [0, 0, 0] }],
+  }) as RoomLayout;
+  assert.deepEqual(layout.blockingVolumes, [{ id: "bv1", position: [0, 0, 0] }]);
+  assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("roomLayoutToSceneDocument gives a blocking volume a static blocking collider", () => {
+  const document = roomLayoutToSceneDocument({
+    schema: 1,
+    name: "blockout",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    blockingVolumes: [
+      { id: "bv1", position: [0, 1, 0], size: [2, 2, 2] },
+      { id: "bv2", position: [5, 1, 0], brushShape: "cylinder", size: [2, 4, 2], scale: [2, 1, 1] },
+    ],
+  });
+  const box = document.entities.find((entity) => entity.id === blockingVolumeEntityId(0));
+  const collider = box ? readColliderComponent(box) : undefined;
+  assert.ok(collider, "blocking volume should produce a collider");
+  assert.equal(collider!.isStatic, true);
+  assert.equal(collider!.isSensor, false);
+  assert.deepEqual(collider!.primitives, [{ shape: "box", size: [2, 2, 2] }]);
+  // Transform scale bakes into the collider primitive (collider tracks the grey-box).
+  const cyl = document.entities.find((entity) => entity.id === blockingVolumeEntityId(1));
+  const cylCollider = cyl ? readColliderComponent(cyl) : undefined;
+  assert.deepEqual(cylCollider!.primitives, [{ shape: "cylinder", size: [4, 4, 2] }]);
 });
 
 check("resolveReflectiveSurface fills defaults and overrides per field", () => {

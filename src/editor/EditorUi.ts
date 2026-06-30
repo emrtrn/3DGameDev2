@@ -29,6 +29,7 @@ import {
   type MetadataSchema,
 } from "@engine/scene/metadataSchema";
 import type {
+  BrushShape,
   LayoutAudio,
   LayoutBehavior,
   LayoutCloudLayer,
@@ -41,6 +42,7 @@ import type {
   MetadataValue,
   Vec3,
 } from "@engine/scene/layout";
+import { BRUSH_SHAPES } from "@engine/scene/blockingVolume";
 import {
   AMBIENT_SOUND_ASSET_ID,
   isShapePrimitiveType,
@@ -375,30 +377,60 @@ export class EditorUi {
           <div class="add-actor-menu">
             <button type="button" data-add-actor-button title="Add actor">+ Add Actor</button>
             <div class="add-actor-popover" data-add-actor-popover>
-              <div class="add-actor-section-title">Lights</div>
-              <button type="button" data-add-actor="directional">Directional Light</button>
-              <button type="button" data-add-actor="point">Point Light</button>
-              <button type="button" data-add-actor="spot">Spot Light</button>
-              <div class="add-actor-section-title">Shapes</div>
-              <button type="button" data-add-shape="cube">Cube</button>
-              <button type="button" data-add-shape="sphere">Sphere</button>
-              <button type="button" data-add-shape="cylinder">Cylinder</button>
-              <button type="button" data-add-shape="cone">Cone</button>
-              <button type="button" data-add-shape="plane">Plane</button>
-              <div class="add-actor-section-title">Visual Effects</div>
-              <button type="button" data-add-sky-atmosphere>Sky Atmosphere</button>
-              <button type="button" data-add-height-fog>Exponential Height Fog</button>
-              <button type="button" data-add-cloud-layer>Cloud Layer</button>
-              <button type="button" data-add-reflection-plane>Mirror Plane</button>
-              <button type="button" data-add-reflective-surface>Reflective Surface</button>
-              <button type="button" data-add-reflection-capture>Sphere Reflection Capture</button>
-              <button type="button" data-add-post-process>Post Process</button>
-              <div class="add-actor-section-title">Sounds</div>
-              <button type="button" data-add-ambient-sound>Ambient Sound</button>
-              <div class="add-actor-section-title">UI</div>
-              <button type="button" data-add-world-widget>World Widget</button>
-              <div class="add-actor-section-title">Gameplay</div>
-              <button type="button" data-add-player-start>Player Start</button>
+              <div class="add-actor-category">
+                <button type="button" class="add-actor-category-label">Lights</button>
+                <div class="add-actor-submenu">
+                  <button type="button" data-add-actor="directional">Directional Light</button>
+                  <button type="button" data-add-actor="point">Point Light</button>
+                  <button type="button" data-add-actor="spot">Spot Light</button>
+                </div>
+              </div>
+              <div class="add-actor-category">
+                <button type="button" class="add-actor-category-label">Shapes</button>
+                <div class="add-actor-submenu">
+                  <button type="button" data-add-shape="cube">Cube</button>
+                  <button type="button" data-add-shape="sphere">Sphere</button>
+                  <button type="button" data-add-shape="cylinder">Cylinder</button>
+                  <button type="button" data-add-shape="cone">Cone</button>
+                  <button type="button" data-add-shape="plane">Plane</button>
+                </div>
+              </div>
+              <div class="add-actor-category">
+                <button type="button" class="add-actor-category-label">Volumes</button>
+                <div class="add-actor-submenu">
+                  <button type="button" data-add-blocking-volume>Blocking Volume</button>
+                </div>
+              </div>
+              <div class="add-actor-category">
+                <button type="button" class="add-actor-category-label">Visual Effects</button>
+                <div class="add-actor-submenu">
+                  <button type="button" data-add-sky-atmosphere>Sky Atmosphere</button>
+                  <button type="button" data-add-height-fog>Exponential Height Fog</button>
+                  <button type="button" data-add-cloud-layer>Cloud Layer</button>
+                  <button type="button" data-add-reflection-plane>Mirror Plane</button>
+                  <button type="button" data-add-reflective-surface>Reflective Surface</button>
+                  <button type="button" data-add-reflection-capture>Sphere Reflection Capture</button>
+                  <button type="button" data-add-post-process>Post Process</button>
+                </div>
+              </div>
+              <div class="add-actor-category">
+                <button type="button" class="add-actor-category-label">Sounds</button>
+                <div class="add-actor-submenu">
+                  <button type="button" data-add-ambient-sound>Ambient Sound</button>
+                </div>
+              </div>
+              <div class="add-actor-category">
+                <button type="button" class="add-actor-category-label">UI</button>
+                <div class="add-actor-submenu">
+                  <button type="button" data-add-world-widget>World Widget</button>
+                </div>
+              </div>
+              <div class="add-actor-category">
+                <button type="button" class="add-actor-category-label">Gameplay</button>
+                <div class="add-actor-submenu">
+                  <button type="button" data-add-player-start>Player Start</button>
+                </div>
+              </div>
             </div>
           </div>
           <div class="show-menu">
@@ -725,6 +757,13 @@ export class EditorUi {
       .querySelector<HTMLButtonElement>("[data-add-reflection-capture]")
       ?.addEventListener("click", () => {
         this.app.addReflectionCapture();
+      });
+
+    // Blocking Volume (parametric blockout brush) is a placed actor with a transform.
+    this.root
+      .querySelector<HTMLButtonElement>("[data-add-blocking-volume]")
+      ?.addEventListener("click", () => {
+        this.app.addBlockingVolume();
       });
 
     // Post Process is a transform-less singleton environment actor.
@@ -2851,6 +2890,10 @@ export class EditorUi {
       this.renderReflectiveSurfaceDetails(selection);
       return;
     }
+    if (selection.kind === "blockingVolume" && selection.blockingVolume) {
+      this.renderBlockingVolumeDetails(selection);
+      return;
+    }
     if (selection.kind === "reflectionCapture" && selection.reflectionCapture) {
       this.renderReflectionCaptureDetails(selection);
       return;
@@ -3706,6 +3749,7 @@ export class EditorUi {
       selection.kind === "reflectionPlane" ||
       selection.kind === "reflectiveSurface" ||
       selection.kind === "reflectionCapture" ||
+      selection.kind === "blockingVolume" ||
       selection.kind === "worldWidget" ||
       selection.kind === "post"
     ) {
@@ -3891,6 +3935,7 @@ export class EditorUi {
       this.selected.kind === "reflectionPlane" ||
       this.selected.kind === "reflectiveSurface" ||
       this.selected.kind === "reflectionCapture" ||
+      this.selected.kind === "blockingVolume" ||
       this.selected.kind === "worldWidget" ||
       this.selected.kind === "post"
     ) {
@@ -4313,6 +4358,164 @@ export class EditorUi {
           this.handleDetailToggle(toggle.dataset.detailToggle ?? "", toggle.checked),
         );
       });
+  }
+
+  /**
+   * Details panel for a placed Blocking Volume actor: a full transform plus a Brush
+   * Settings section (Unreal-style) — a Brush Shape dropdown (box / cylinder / cone /
+   * sphere), X/Y/Z brush dimensions, a Render in Game toggle, and a brush colour.
+   * The volume always blocks collision; Render in Game only controls whether it draws
+   * as a solid grey-box in Play (off = invisible-but-blocking).
+   */
+  private renderBlockingVolumeDetails(selection: EditableSelection): void {
+    const volume = selection.blockingVolume;
+    if (!volume) return;
+    this.detailsScale = [...selection.scale];
+    const lockedAttr = selection.locked ? "disabled" : "";
+    const shapeOptions = BRUSH_SHAPES.map(
+      (shape) =>
+        `<option value="${shape}" ${volume.brushShape === shape ? "selected" : ""}>${
+          formatBrushShapeLabel(shape)
+        }</option>`,
+    ).join("");
+    this.detailsBody.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>volume / blocking volume</span>
+      </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
+          placeholder="Blocking Volume" />
+      </label>
+      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
+      ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
+      ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
+      <div class="detail-section">
+        <div class="detail-section-title">Brush Settings</div>
+        <label class="detail-row">
+          <span>Brush Shape</span>
+          <select data-brush-shape ${lockedAttr}>${shapeOptions}</select>
+        </label>
+        <label class="detail-row">
+          <span>X</span>
+          <input data-brush-size="0" type="number" min="0.01" step="0.1"
+            value="${volume.size[0]}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Y</span>
+          <input data-brush-size="1" type="number" min="0.01" step="0.1"
+            value="${volume.size[1]}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Z</span>
+          <input data-brush-size="2" type="number" min="0.01" step="0.1"
+            value="${volume.size[2]}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Color</span>
+          <input data-brush-color type="color" value="${escapeHtml(volume.color)}" ${lockedAttr} />
+        </label>
+        <div class="detail-hint">Brush dimensions are world units; the transform scale multiplies them.</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Actor</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-brush-render-in-game ${volume.renderInGame ? "checked" : ""} />
+          <span>Render in Game</span>
+        </label>
+        <label class="detail-toggle">
+          <input type="checkbox" data-detail-toggle="locked" ${selection.locked ? "checked" : ""} />
+          <span>Lock Movement</span>
+        </label>
+      </div>
+    `;
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>('input[data-detail="pr"]')
+      .forEach((input) => {
+        input.addEventListener("focus", () => this.beginDetailsEdit());
+        input.addEventListener("input", () => {
+          this.beginDetailsEdit();
+          this.applyDetails();
+        });
+        input.addEventListener("change", () => this.commitDetailsEdit());
+      });
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>('input[data-detail="scale"]')
+      .forEach((input) => {
+        input.addEventListener("focus", () => this.beginDetailsEdit());
+        input.addEventListener("input", () => {
+          this.beginDetailsEdit();
+          this.applyScaleInput(input);
+          this.applyDetails();
+        });
+        input.addEventListener("change", () => this.commitDetailsEdit());
+      });
+
+    this.detailsBody
+      .querySelector<HTMLButtonElement>("[data-scale-lock]")
+      ?.addEventListener("click", () => {
+        this.app.setSelectionScaleLocked(!selection.scaleLocked);
+      });
+
+    const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-detail-name]");
+    nameInput?.addEventListener("change", () => {
+      this.app.renameSceneObject(selection.id, nameInput.value);
+    });
+
+    this.detailsBody
+      .querySelector<HTMLSelectElement>("[data-brush-shape]")
+      ?.addEventListener("change", (event) => {
+        const value = (event.currentTarget as HTMLSelectElement).value as BrushShape;
+        this.app.setSelectedBlockingVolume({ brushShape: value });
+      });
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>("[data-brush-size]")
+      .forEach((input) => {
+        input.addEventListener("change", () => {
+          const size = this.readBrushSize(volume.size);
+          if (size) this.app.setSelectedBlockingVolume({ size });
+        });
+      });
+
+    this.detailsBody
+      .querySelector<HTMLInputElement>("[data-brush-color]")
+      ?.addEventListener("change", (event) => {
+        this.app.setSelectedBlockingVolume({
+          color: (event.currentTarget as HTMLInputElement).value,
+        });
+      });
+
+    this.detailsBody
+      .querySelector<HTMLInputElement>("[data-brush-render-in-game]")
+      ?.addEventListener("change", (event) => {
+        this.app.setSelectedBlockingVolume({
+          renderInGame: (event.currentTarget as HTMLInputElement).checked,
+        });
+      });
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>("[data-detail-toggle]")
+      .forEach((toggle) => {
+        toggle.addEventListener("change", () =>
+          this.handleDetailToggle(toggle.dataset.detailToggle ?? "", toggle.checked),
+        );
+      });
+  }
+
+  /** Reads the three `[data-brush-size]` inputs into a Vec3, falling back per axis. */
+  private readBrushSize(fallback: Vec3): Vec3 | null {
+    const size: Vec3 = [fallback[0], fallback[1], fallback[2]];
+    for (let i = 0; i < 3; i += 1) {
+      const input = this.detailsBody.querySelector<HTMLInputElement>(`[data-brush-size="${i}"]`);
+      if (!input) continue;
+      const value = Number(input.value);
+      if (Number.isFinite(value) && value > 0) size[i] = value;
+    }
+    return size;
   }
 
   /**
@@ -5746,6 +5949,10 @@ function formatLightTypeLabel(type: "directional" | "point" | "spot"): string {
   if (type === "directional") return "Directional Light";
   if (type === "point") return "Point Light";
   return "Spot Light";
+}
+
+function formatBrushShapeLabel(shape: BrushShape): string {
+  return shape.charAt(0).toUpperCase() + shape.slice(1);
 }
 
 function parseOptionalBoolean(value: string): boolean | undefined {

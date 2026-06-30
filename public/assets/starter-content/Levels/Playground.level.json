@@ -460,5 +460,16 @@
       "parallax": true
     }
   ],
+  "blockingVolumes": [
+    {
+      "id": "blocking-volume-1",
+      "position": [
+        0,
+        1,
+        0
+      ],
+      "name": "Blocking Volume"
+    }
+  ],
   "actors": []
 }

@@ -29,6 +29,7 @@ import {
   type AssetRecord,
   type AssetType,
 } from "../engine/assets/manifest";
+import { isBrushShape } from "../engine/scene/blockingVolume";
 import {
   defaultForgeMaterialDef,
   isForgeMaterialPreset,
@@ -933,6 +934,66 @@ export function validateSphereReflectionCapture(value: unknown): Record<string, 
 }
 
 /**
+ * Allowlist validator for one placed Blocking Volume (parametric blockout brush)
+ * actor. Mirrors {@link validateReflectionPlane}: a required `id` + `position`, the
+ * shared transform/hierarchy/flag fields, plus the brush `brushShape` / `size` /
+ * `renderInGame` / `color`. Any new field must be added here or it is silently
+ * dropped on save (see the CLAUDE.md allowlist gotcha).
+ */
+export function validateBlockingVolume(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") throw new Error("blocking volume must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.id !== "string" || input.id.length === 0) {
+    throw new Error("blocking volume id must be a string");
+  }
+  if (!isNumberTuple(input.position)) throw new Error("invalid blocking volume position");
+
+  const volume: Record<string, unknown> = {
+    id: input.id,
+    position: input.position.map((number) => Number(number.toFixed(3))),
+  };
+  if (typeof input.name === "string") volume.name = input.name;
+  if (input.hidden === true) volume.hidden = true;
+  if (input.locked === true) volume.locked = true;
+  if (input.scaleLocked === true) volume.scaleLocked = true;
+  if (typeof input.groupId === "string") volume.groupId = input.groupId;
+  if (typeof input.nodeId === "string") volume.nodeId = input.nodeId;
+  if (typeof input.parentId === "string") volume.parentId = input.parentId;
+  if (input.rotation !== undefined) {
+    if (!isNumberTuple(input.rotation)) throw new Error("invalid blocking volume rotation");
+    volume.rotation = input.rotation.map((axis) =>
+      validateRotationDeg(axis, "blocking volume rotation component"),
+    );
+  }
+  if (input.scale !== undefined) {
+    if (!isNumberTuple(input.scale)) throw new Error("invalid blocking volume scale");
+    volume.scale = input.scale.map((axis) =>
+      validateScaleValue(axis, "blocking volume scale component"),
+    );
+  }
+  if (input.brushShape !== undefined) {
+    if (!isBrushShape(input.brushShape)) throw new Error("invalid blocking volume brushShape");
+    volume.brushShape = input.brushShape;
+  }
+  if (input.size !== undefined) {
+    if (!isNumberTuple(input.size)) throw new Error("invalid blocking volume size");
+    volume.size = input.size.map((axis) =>
+      validateScaleValue(axis, "blocking volume size component"),
+    );
+  }
+  if (input.renderInGame !== undefined) {
+    if (typeof input.renderInGame !== "boolean") {
+      throw new Error("blocking volume renderInGame must be boolean");
+    }
+    if (input.renderInGame) volume.renderInGame = true;
+  }
+  if (typeof input.color === "string" && /^#[0-9a-fA-F]{6}$/.test(input.color)) {
+    volume.color = input.color;
+  }
+  return volume;
+}
+
+/**
  * Allowlist validator for the singleton Sky Atmosphere actor. Every field that
  * survives a save is copied explicitly; omitted/out-of-range values are dropped
  * so the runtime falls back to {@link resolveSkyAtmosphere} defaults. Returns null
@@ -1303,6 +1364,13 @@ export function validateLayout(value: unknown): unknown {
       : (() => {
           throw new Error("reflectionCaptures must be an array");
         })();
+  const blockingVolumes = layout.blockingVolumes === undefined
+    ? null
+    : Array.isArray(layout.blockingVolumes)
+      ? layout.blockingVolumes.map(validateBlockingVolume)
+      : (() => {
+          throw new Error("blockingVolumes must be an array");
+        })();
 
   const instances = layout.instances.map((instance) => {
     if (!instance || typeof instance !== "object") {
@@ -1382,6 +1450,7 @@ export function validateLayout(value: unknown): unknown {
   if (reflectionPlanes) output.reflectionPlanes = reflectionPlanes;
   if (reflectiveSurfaces) output.reflectiveSurfaces = reflectiveSurfaces;
   if (reflectionCaptures) output.reflectionCaptures = reflectionCaptures;
+  if (blockingVolumes) output.blockingVolumes = blockingVolumes;
   if (actors) output.actors = actors;
   if (worldWidgets) output.worldWidgets = worldWidgets;
   return output;

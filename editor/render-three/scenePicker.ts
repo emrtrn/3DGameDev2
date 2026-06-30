@@ -3,6 +3,7 @@ import type { Intersection, Object3D, PerspectiveCamera } from "three";
 
 import {
   findParentActor,
+  findParentBlockingVolume,
   findParentCharacter,
   findParentInstancedMesh,
   findParentLight,
@@ -117,6 +118,12 @@ export class ScenePicker {
         if (Number.isInteger(index)) return { kind: "reflectionCapture", index };
       }
 
+      const blockingVolume = findParentBlockingVolume(hit.object);
+      if (blockingVolume) {
+        const index = Number(blockingVolume.userData.blockingVolumeIndex);
+        if (Number.isInteger(index)) return { kind: "blockingVolume", index };
+      }
+
       const worldWidget = findParentWorldWidget(hit.object);
       if (worldWidget) {
         const index = Number(worldWidget.userData.worldWidgetIndex);
@@ -196,6 +203,10 @@ export class ScenePicker {
     if (selection.kind === "reflectionCapture") {
       const capture = findParentReflectionCapture(hit.object);
       return capture ? Number(capture.userData.reflectionCaptureIndex) === selection.index : false;
+    }
+    if (selection.kind === "blockingVolume") {
+      const volume = findParentBlockingVolume(hit.object);
+      return volume ? Number(volume.userData.blockingVolumeIndex) === selection.index : false;
     }
     if (selection.kind === "worldWidget") {
       const widget = findParentWorldWidget(hit.object);

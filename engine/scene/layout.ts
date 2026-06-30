@@ -8,6 +8,11 @@ import type { WorldUiWidget } from "../ui/uiWorldWidget";
 
 export type Vec3 = [number, number, number];
 export type LayoutLightType = "directional" | "point" | "spot";
+/**
+ * Brush shape of a Blocking Volume (à la Unreal's brush builders). Faz 1 supports
+ * the four primitive builders; stair/spiral builders are intentionally out of scope.
+ */
+export type BrushShape = "box" | "cylinder" | "cone" | "sphere";
 /** Particle blend mode (authoring + runtime VFX). */
 export type ParticleMaterialMode = "additive" | "alpha";
 
@@ -656,6 +661,41 @@ export interface LayoutSphereReflectionCapture {
   priority?: number;
 }
 
+/**
+ * Placed Blocking Volume actor (à la Unreal's BlockingVolume / brush volumes): a
+ * parametric primitive used for blockout / grey-boxing. Unlike a `shape:<type>`
+ * instance it is **non-instanced** and carries its own brush dimensions (`size`),
+ * so it can be reshaped (box / cylinder / cone / sphere) and resized numerically
+ * from the Details "Brush Settings" panel. It always blocks collision; `renderInGame`
+ * toggles whether it draws as a solid grey-box in Play (off = invisible-but-blocking,
+ * the true Unreal BlockingVolume). In the editor it always shows as a translucent
+ * orange brush + wireframe. Optional fields read defaults from
+ * `engine/scene/blockingVolume.ts`.
+ */
+export interface LayoutBlockingVolume {
+  id: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  scaleLocked?: boolean;
+  groupId?: string;
+  nodeId?: string;
+  parentId?: string;
+  position: Vec3;
+  /** Full Euler rotation (XYZ order) in degrees. */
+  rotation?: Vec3;
+  /** Per-axis transform scale (multiplied onto the brush `size`). */
+  scale?: Vec3;
+  /** Brush primitive shape. Absent means `box`. */
+  brushShape?: BrushShape;
+  /** Brush dimensions in world units (`[x, y, z]`). Absent reads the default size. */
+  size?: Vec3;
+  /** Draw as a solid grey-box in Play. Absent/false means invisible-but-blocking. */
+  renderInGame?: boolean;
+  /** Editor brush tint (hex `#rrggbb`). */
+  color?: string;
+}
+
 export interface RoomLayout {
   schema: 1;
   name: string;
@@ -678,6 +718,8 @@ export interface RoomLayout {
   reflectiveSurfaces?: LayoutReflectiveSurface[];
   /** Placed Sphere Reflection Capture (local cubemap probe) actors. */
   reflectionCaptures?: LayoutSphereReflectionCapture[];
+  /** Placed Blocking Volume (parametric blockout brush) actors. */
+  blockingVolumes?: LayoutBlockingVolume[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];
   /** Placed Actor Script class instances (resolved + spawned at runtime). */

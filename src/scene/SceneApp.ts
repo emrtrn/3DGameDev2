@@ -140,6 +140,16 @@ import {
   type ReflectiveSurfaceRenderItem,
 } from "@engine/render-three/reflectiveSurface";
 import {
+  applyBlockingVolumeTransform,
+  createBlockingVolumeObject,
+  disposeBlockingVolumeObject,
+  resolveBlockingVolume,
+  uniqueBlockingVolumeId,
+  uniqueBlockingVolumeName,
+  type BlockingVolumeObject,
+  type BlockingVolumeRenderItem,
+} from "@engine/render-three/blockingVolume";
+import {
   applyProbeEnvMapToObject,
   applySphereReflectionCaptureTransform,
   assignProbeEnvMapMaterial,
@@ -233,6 +243,7 @@ import type {
   LayoutPlacement,
   LayoutPhysics,
   LayoutPostProcess,
+  LayoutBlockingVolume,
   LayoutReflectionPlane,
   LayoutReflectiveSurface,
   LayoutSkyAtmosphere,
@@ -280,6 +291,7 @@ import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/acto
 import type { MetadataSchema } from "@engine/scene/metadataSchema";
 import {
   cloneActorInstance,
+  cloneBlockingVolume,
   cloneCharacter,
   cloneLightActor,
   clonePlacement,
@@ -439,6 +451,8 @@ export class SceneApp {
   private reflectionPlaneIcons: Sprite[] = [];
   /** Live textured reflective-surface meshes for placed Reflective Surface actors, by index. */
   private reflectiveSurfaceObjects: ReflectiveSurfaceObject[] = [];
+  /** Editor brush objects (translucent + wireframe) for placed Blocking Volume actors, by index. */
+  private blockingVolumeObjects: BlockingVolumeObject[] = [];
   /** Editor wireframe-sphere helpers for placed Sphere Reflection Capture actors, by index. */
   private reflectionCaptureObjects: SphereReflectionCaptureObject[] = [];
   /** Billboard icons (clickable handles) for placed Sphere Reflection Capture actors, by index. */
@@ -657,6 +671,7 @@ export class SceneApp {
         objects.push(...this.reflectionPlaneObjects);
         objects.push(...this.reflectionPlaneIcons);
         objects.push(...this.reflectiveSurfaceObjects);
+        objects.push(...this.blockingVolumeObjects);
         // The influence sphere never picks — it only previews the radius while the
         // probe is selected. The probe is selected through its billboard icon.
         objects.push(...this.reflectionCaptureIcons);
@@ -1634,6 +1649,13 @@ export class SceneApp {
       return;
     }
     if (
+      this.selection?.kind === "blockingVolume" &&
+      this.editorSceneController.selectedCount <= 1
+    ) {
+      this.removeBlockingVolume(this.selection.index);
+      return;
+    }
+    if (
       this.selection?.kind === "worldWidget" &&
       this.editorSceneController.selectedCount <= 1
     ) {
@@ -2122,6 +2144,7 @@ export class SceneApp {
     this.buildReflectionPlanes();
     this.buildReflectiveSurfaces();
     this.buildReflectionCaptures();
+    this.buildBlockingVolumes();
     this.buildWorldWidgetMarkers();
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();
@@ -2475,6 +2498,11 @@ export class SceneApp {
 
     if (selection.kind === "reflectionCapture") {
       this.refreshReflectionCaptureObject(selection.index);
+      return;
+    }
+
+    if (selection.kind === "blockingVolume") {
+      this.refreshBlockingVolumeObject(selection.index);
       return;
     }
 
@@ -3232,6 +3260,192 @@ export class SceneApp {
     this.setReflectiveSurface(this.selection.index, patch);
   }
 
+  // --- Blocking Volume (parametric blockout brush) actors -------------------
+
+  /** Resolved brush settings + world transform for a blocking-volume layout actor. */
+  private blockingVolumeItem(actor: LayoutBlockingVolume): BlockingVolumeRenderItem {
+    return {
+      ...resolveBlockingVolume(actor),
+      position: [...actor.position],
+      rotation: readRotation(actor),
+      scale: readScale(actor),
+    };
+  }
+
+  /** Rebuilds every brush object from `layout.blockingVolumes` (used on load). */
+  private buildBlockingVolumes(): void {
+    for (const object of this.blockingVolumeObjects) {
+      this.scene.remove(object);
+      disposeBlockingVolumeObject(object);
+    }
+    this.blockingVolumeObjects = [];
+    const volumes = this.layout?.blockingVolumes ?? [];
+    volumes.forEach((actor, index) => {
+      const object = createBlockingVolumeObject(this.blockingVolumeItem(actor));
+      object.userData.blockingVolumeIndex = index;
+      this.blockingVolumeObjects.push(object);
+      this.scene.add(object);
+    });
+  }
+
+  /** Cheap transform/visibility sync for one brush (gizmo drag / Details transform). */
+  private refreshBlockingVolumeObject(index: number): void {
+    const actor = this.layout?.blockingVolumes?.[index];
+    const object = this.blockingVolumeObjects[index];
+    if (!actor || !object) return;
+    applyBlockingVolumeTransform(object, this.blockingVolumeItem(actor));
+  }
+
+  /** Recreates one brush (needed when shape/size/color change — baked into geometry). */
+  private rebuildBlockingVolumeObject(index: number): void {
+    const old = this.blockingVolumeObjects[index];
+    if (old) {
+      this.scene.remove(old);
+      disposeBlockingVolumeObject(old);
+    }
+    const actor = this.layout?.blockingVolumes?.[index];
+    if (!actor) return;
+    const object = createBlockingVolumeObject(this.blockingVolumeItem(actor));
+    object.userData.blockingVolumeIndex = index;
+    this.blockingVolumeObjects[index] = object;
+    this.scene.add(object);
+  }
+
+  private refreshBlockingVolumeIndices(): void {
+    this.blockingVolumeObjects.forEach((object, index) => {
+      object.userData.blockingVolumeIndex = index;
+    });
+  }
+
+  private insertBlockingVolume(index: number, actor: LayoutBlockingVolume): void {
+    if (!this.layout) return;
+    this.layout.blockingVolumes ??= [];
+    const insertionIndex = clampIndex(index, this.layout.blockingVolumes.length);
+    this.layout.blockingVolumes.splice(insertionIndex, 0, cloneBlockingVolume(actor));
+    const object = createBlockingVolumeObject(this.blockingVolumeItem(actor));
+    this.blockingVolumeObjects.splice(insertionIndex, 0, object);
+    this.scene.add(object);
+    this.refreshBlockingVolumeIndices();
+  }
+
+  private removeBlockingVolumeAt(index: number): LayoutBlockingVolume | null {
+    if (!this.layout?.blockingVolumes) return null;
+    const [removed] = this.layout.blockingVolumes.splice(index, 1);
+    const [object] = this.blockingVolumeObjects.splice(index, 1);
+    if (object) {
+      this.scene.remove(object);
+      disposeBlockingVolumeObject(object);
+    }
+    this.refreshBlockingVolumeIndices();
+    return removed ? cloneBlockingVolume(removed) : null;
+  }
+
+  /** Adds a Blocking Volume actor (default box brush) and selects it. */
+  addBlockingVolume(): void {
+    if (!this.layout) return;
+    const volumes = this.layout.blockingVolumes ?? [];
+    const actor: LayoutBlockingVolume = {
+      id: uniqueBlockingVolumeId(volumes),
+      name: uniqueBlockingVolumeName("Blocking Volume", volumes),
+      position: [0, 1, 0],
+    };
+    const index = volumes.length;
+    this.executeCommand({
+      label: "Add Blocking Volume",
+      redo: () => {
+        this.insertBlockingVolume(index, actor);
+        this.select({ kind: "blockingVolume", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.removeBlockingVolumeAt(index);
+        this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+    this.onStatus?.("Added Blocking Volume.", "info");
+  }
+
+  /** Removes a Blocking Volume actor (undoable). */
+  removeBlockingVolume(index: number): void {
+    const actor = this.layout?.blockingVolumes?.[index];
+    if (!actor) return;
+    const snapshot = cloneBlockingVolume(actor);
+    this.executeCommand({
+      label: "Delete Blocking Volume",
+      redo: () => {
+        this.removeBlockingVolumeAt(index);
+        if (this.selection?.kind === "blockingVolume") this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.insertBlockingVolume(index, snapshot);
+        this.select({ kind: "blockingVolume", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+  }
+
+  /**
+   * Applies a partial brush-settings edit (shape/size/renderInGame/color) to a
+   * blocking volume as one undoable command. Shape/size/color are baked into the
+   * geometry, so they rebuild the object; `renderInGame` only affects Play and
+   * needs no editor re-sync. Transform/name/hidden flow through the generic
+   * selection pipeline.
+   */
+  setBlockingVolume(
+    index: number,
+    patch: {
+      brushShape?: LayoutBlockingVolume["brushShape"];
+      size?: Vec3;
+      renderInGame?: boolean;
+      color?: string;
+    },
+    label = "Edit Blocking Volume",
+  ): void {
+    const actor = this.layout?.blockingVolumes?.[index];
+    if (!actor) return;
+    const previous = cloneBlockingVolume(actor);
+    const next = cloneBlockingVolume(actor);
+    if (patch.brushShape !== undefined) next.brushShape = patch.brushShape;
+    if (patch.size !== undefined) next.size = [...patch.size];
+    if (patch.renderInGame !== undefined) next.renderInGame = patch.renderInGame;
+    if (patch.color !== undefined) next.color = patch.color;
+
+    const needsRebuild =
+      patch.brushShape !== undefined || patch.size !== undefined || patch.color !== undefined;
+    const apply = (value: LayoutBlockingVolume): void => {
+      if (!this.layout?.blockingVolumes?.[index]) return;
+      this.layout.blockingVolumes[index] = cloneBlockingVolume(value);
+      if (needsRebuild) this.rebuildBlockingVolumeObject(index);
+      else this.refreshBlockingVolumeObject(index);
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+
+    this.executeCommand({
+      label,
+      redo: () => apply(next),
+      undo: () => apply(previous),
+    });
+  }
+
+  /** Edits the currently selected blocking volume's brush settings (Details panel). */
+  setSelectedBlockingVolume(patch: {
+    brushShape?: LayoutBlockingVolume["brushShape"];
+    size?: Vec3;
+    renderInGame?: boolean;
+    color?: string;
+  }): void {
+    if (this.selection?.kind !== "blockingVolume") return;
+    this.setBlockingVolume(this.selection.index, patch);
+  }
+
   // --- Sphere Reflection Capture (probe) actors ----------------------------
 
   /** Resolved settings + world transform for a reflection-capture layout actor. */
@@ -3432,6 +3646,7 @@ export class SceneApp {
     for (const reflector of this.reflectionPlaneObjects) hide(reflector);
     for (const icon of this.reflectionPlaneIcons) hide(icon);
     for (const surface of this.reflectiveSurfaceObjects) hide(surface);
+    for (const volume of this.blockingVolumeObjects) hide(volume);
     for (const record of this.lightObjects) hide(record.gizmo);
     try {
       return fn();
@@ -4665,6 +4880,10 @@ export class SceneApp {
       this.bakeReflectionCaptureAt(selection.index);
       return;
     }
+    if (selection.kind === "blockingVolume") {
+      this.refreshBlockingVolumeObject(selection.index);
+      return;
+    }
     // The Sky Atmosphere's visibility is applied through applySkyAtmosphere().
     if (selection.kind === "sky") {
       this.applySkyAtmosphere();
@@ -5160,6 +5379,10 @@ export class SceneApp {
       if (!options.includeHidden && capture.hidden) return;
       selections.push({ kind: "reflectionCapture", index });
     });
+    this.layout.blockingVolumes?.forEach((volume, index) => {
+      if (!options.includeHidden && volume.hidden) return;
+      selections.push({ kind: "blockingVolume", index });
+    });
     return selections;
   }
 
@@ -5188,6 +5411,9 @@ export class SceneApp {
       return resolveSphereReflectionCapture(
         this.layout?.reflectionCaptures?.[selection.index] ?? null,
       ).name;
+    }
+    if (selection.kind === "blockingVolume") {
+      return resolveBlockingVolume(this.layout?.blockingVolumes?.[selection.index] ?? null).name;
     }
     const transform = this.getMutableTransform(selection);
     if (selection.kind === "instance") {
@@ -5265,6 +5491,10 @@ export class SceneApp {
       const helper = this.reflectionCaptureObjects[selection.index];
       return helper ? new Box3().setFromObject(helper) : null;
     }
+    if (selection.kind === "blockingVolume") {
+      const object = this.blockingVolumeObjects[selection.index];
+      return object ? new Box3().setFromObject(object) : null;
+    }
     if (selection.kind === "worldWidget") {
       const icon = this.worldWidgetIcons[selection.index];
       return icon ? new Box3().setFromObject(icon) : null;
@@ -5327,6 +5557,13 @@ export class SceneApp {
       const actor = this.layout.reflectiveSurfaces?.[selection.index];
       if (!surface || actor?.hidden) return null;
       return this.selectionOutline.cloneRenderableMeshes(surface);
+    }
+
+    if (selection.kind === "blockingVolume") {
+      const object = this.blockingVolumeObjects[selection.index];
+      const actor = this.layout.blockingVolumes?.[selection.index];
+      if (!object || actor?.hidden) return null;
+      return this.selectionOutline.cloneRenderableMeshes(object);
     }
 
     if (selection.kind === "reflectionCapture") {
@@ -5666,6 +5903,7 @@ export class SceneApp {
     | LayoutReflectionPlane
     | LayoutReflectiveSurface
     | LayoutSphereReflectionCapture
+    | LayoutBlockingVolume
     | null {
     if (!this.layout) return null;
     if (selection.kind === "instance") {
@@ -5682,6 +5920,9 @@ export class SceneApp {
     }
     if (selection.kind === "reflectionCapture") {
       return this.layout.reflectionCaptures?.[selection.index] ?? null;
+    }
+    if (selection.kind === "blockingVolume") {
+      return this.layout.blockingVolumes?.[selection.index] ?? null;
     }
     // Environment singletons are transform-less (no gizmo / move target). World
     // widgets are placed via the Details panel + marker, not the gizmo (v1).
@@ -5867,6 +6108,9 @@ export class SceneApp {
     }
     if (selection.kind === "reflectionCapture") {
       return Boolean(this.layout.reflectionCaptures?.[selection.index]);
+    }
+    if (selection.kind === "blockingVolume") {
+      return Boolean(this.layout.blockingVolumes?.[selection.index]);
     }
     if (selection.kind === "worldWidget") {
       return Boolean(this.layout.worldWidgets?.[selection.index]);

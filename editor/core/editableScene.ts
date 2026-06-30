@@ -1,4 +1,5 @@
 import type {
+  BrushShape,
   LayoutAudio,
   LayoutBehavior,
   LayoutInteraction,
@@ -130,6 +131,20 @@ export interface EditableWorldWidget {
   maxDistance: number;
 }
 
+/**
+ * Resolved Blocking Volume fields for the Details panel. Like the Reflective
+ * Surface this is a placed actor with a transform; the brush settings ride
+ * alongside in {@link EditableSelection.blockingVolume}.
+ */
+export interface EditableBlockingVolume {
+  name: string;
+  hidden: boolean;
+  brushShape: BrushShape;
+  size: Vec3;
+  renderInGame: boolean;
+  color: string;
+}
+
 /** Resolved global Post Process fields for the Details panel. */
 export interface EditablePostProcess {
   name: string;
@@ -240,6 +255,8 @@ export interface EditableSelection {
   reflectionCapture?: EditableReflectionCapture;
   /** Resolved Reflective Surface settings; present only when `kind === "reflectiveSurface"`. */
   reflectiveSurface?: EditableReflectiveSurface;
+  /** Resolved Blocking Volume settings; present only when `kind === "blockingVolume"`. */
+  blockingVolume?: EditableBlockingVolume;
   /** Resolved Post Process settings; present only when `kind === "post"`. */
   post?: EditablePostProcess;
   /** Resolved world-space UI widget settings; present only when `kind === "worldWidget"`. */
