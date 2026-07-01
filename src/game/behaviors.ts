@@ -34,6 +34,7 @@ export const BEHAVIOR_SCRIPT_IDS = [
   "interact",
   "use-toggleable",
   "lamp-toggle",
+  "begin-conversation",
 ] as const;
 export type BehaviorScriptId = (typeof BEHAVIOR_SCRIPT_IDS)[number];
 
@@ -310,6 +311,17 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     context.messages.emit("Lamp.Toggled", { enabled });
   };
 
+  // Conversation bridge (§D3): emits the `start-conversation` script message the
+  // runtime's ConversationDirector subscribes to, using the `conversationId`
+  // param. Bind it to an NPC's interaction event (e.g. `Interaction.Talk`) via a
+  // Message Binding so talking to the NPC starts its conversation graph. Kept
+  // generic — no conversation content lives here, only the trigger.
+  const beginConversation: BehaviorUpdate = (context) => {
+    const conversationId = stringParam(context.params.conversationId);
+    if (!conversationId) return;
+    context.messages.emit("start-conversation", { conversationId });
+  };
+
   const behaviors = new Map<string, BehaviorUpdate>([
     ["spin", spin],
     ["input-move", inputMove],
@@ -318,6 +330,7 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     ["interact", interact],
     ["use-toggleable", useToggleable],
     ["lamp-toggle", lampToggle],
+    ["begin-conversation", beginConversation],
   ]);
   return { get: (scriptId) => behaviors.get(scriptId) };
 }

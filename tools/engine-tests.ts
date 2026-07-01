@@ -97,6 +97,16 @@ import type {
   DialogueVoiceAsset,
 } from "../engine/dialogue/dialogueTypes";
 import {
+  ConversationRunner,
+  validateConversation,
+  type ConversationEmittedEvent,
+} from "../engine/dialogue/conversationRunner";
+import {
+  ConversationDirector,
+  type ConversationChoiceView,
+} from "../engine/dialogue/conversationDirector";
+import type { ConversationAsset } from "../engine/dialogue/conversationTypes";
+import {
   AUDIO_BUS_IDS,
   MENU_DUCK_MIX,
   createDefaultBusVolumes,
@@ -2477,6 +2487,312 @@ check("starter dialogue assets classify, validate, and resolve", () => {
   assert.ok(
     assetManifest.assets.some((a) => a.id === "dl-welcome" && assetType(a) === "dialogueLine"),
   );
+});
+
+// --- Conversation (D3: runner + director + validation) ------------------------
+
+const convGraph: ConversationAsset = {
+  schema: 1,
+  type: "conversation",
+  id: "conv-test",
+  startNodeId: "intro",
+  nodes: [
+    { id: "intro", kind: "event", eventId: "conv-start", next: "greet" },
+    { id: "greet", kind: "line", lineId: "line-1", speakerVoiceId: "narrator", next: "second" },
+    { id: "second", kind: "line", lineId: "line-2", speakerVoiceId: "narrator", locale: "en", next: "ask" },
+    {
+      id: "ask",
+      kind: "choice",
+      prompt: "Pick",
+      choices: [
+        { text: "Yes", next: "yesEvent" },
+        { text: "No", next: "noLine" },
+      ],
+    },
+    { id: "yesEvent", kind: "event", eventId: "chose-yes", payload: { value: 1 }, next: "farewell" },
+    { id: "noLine", kind: "line", lineId: "line-3", speakerVoiceId: "narrator" },
+    { id: "farewell", kind: "line", lineId: "line-4", speakerVoiceId: "narrator" },
+  ],
+};
+
+check("ConversationRunner walks lines, fires en-route events, and branches on choice", () => {
+  const runner = new ConversationRunner(convGraph);
+  // advance/choose are no-ops before start.
+  assert.equal(runner.advance(), null);
+  assert.equal(runner.choose(0), null);
+
+  const start = runner.start();
+  assert.deepEqual(start.events.map((e) => e.eventId), ["conv-start"]);
+  assert.deepEqual(start.step, { kind: "line", nodeId: "greet", lineId: "line-1", speakerVoiceId: "narrator" });
+  assert.equal(runner.status(), "active");
+
+  // A line node cannot be "chosen"; only advanced.
+  assert.equal(runner.choose(0), null);
+
+  const second = runner.advance();
+  assert.deepEqual(second?.events, []);
+  assert.deepEqual(second?.step, {
+    kind: "line",
+    nodeId: "second",
+    lineId: "line-2",
+    speakerVoiceId: "narrator",
+    locale: "en",
+  });
+
+  const toChoice = runner.advance();
+  assert.equal(toChoice?.step.kind, "choice");
+  if (toChoice?.step.kind === "choice") {
+    assert.equal(toChoice.step.prompt, "Pick");
+    assert.deepEqual(toChoice.step.choices, [
+      { text: "Yes", next: "yesEvent" },
+      { text: "No", next: "noLine" },
+    ]);
+  }
+  // Out-of-range choice is rejected; the runner stays on the choice node.
+  assert.equal(runner.choose(5), null);
+
+  const chosen = runner.choose(0);
+  assert.deepEqual(chosen?.events, [{ nodeId: "yesEvent", eventId: "chose-yes", payload: { value: 1 } }]);
+  assert.deepEqual(chosen?.step, { kind: "line", nodeId: "farewell", lineId: "line-4", speakerVoiceId: "narrator" });
+
+  const end = runner.advance();
+  assert.deepEqual(end?.step, { kind: "end" });
+  assert.equal(runner.status(), "ended");
+  // Nothing advances past the end.
+  assert.equal(runner.advance(), null);
+});
+
+check("ConversationRunner takes the second branch and ends after a terminal line", () => {
+  const runner = new ConversationRunner(convGraph);
+  runner.start();
+  runner.advance();
+  runner.advance();
+  const chosen = runner.choose(1);
+  assert.deepEqual(chosen?.step, { kind: "line", nodeId: "noLine", lineId: "line-3", speakerVoiceId: "narrator" });
+  assert.deepEqual(chosen?.events, []);
+  const end = runner.advance();
+  assert.deepEqual(end?.step, { kind: "end" });
+});
+
+check("ConversationRunner ends instead of looping on an event cycle", () => {
+  const cyclic: ConversationAsset = {
+    schema: 1,
+    type: "conversation",
+    id: "cycle",
+    startNodeId: "a",
+    nodes: [
+      { id: "a", kind: "event", eventId: "ea", next: "b" },
+      { id: "b", kind: "event", eventId: "eb", next: "a" },
+    ],
+  };
+  const start = new ConversationRunner(cyclic).start();
+  assert.deepEqual(start.events.map((e) => e.eventId), ["ea", "eb"]);
+  assert.deepEqual(start.step, { kind: "end" });
+});
+
+check("validateConversation accepts a sound graph and flags structural problems", () => {
+  assert.deepEqual(
+    validateConversation(convGraph, {
+      lineIds: new Set(["line-1", "line-2", "line-3", "line-4"]),
+      voiceIds: new Set(["narrator"]),
+    }),
+    [],
+  );
+  // Unknown line/voice ids are reported when the known sets are supplied.
+  const missing = validateConversation(convGraph, {
+    lineIds: new Set(["line-1"]),
+    voiceIds: new Set([]),
+  });
+  assert.ok(missing.some((i) => i.includes("missing dialogue line: line-2")));
+  assert.ok(missing.some((i) => i.includes("missing speaker voice: narrator")));
+
+  const bad: ConversationAsset = {
+    schema: 1,
+    type: "conversation",
+    id: "bad",
+    startNodeId: "gone",
+    nodes: [
+      { id: "a", kind: "line", lineId: "", speakerVoiceId: "", next: "ghost" },
+      { id: "a", kind: "choice", choices: [] },
+      { id: "c", kind: "choice", choices: [{ text: "", next: "nowhere" }] },
+      { id: "d", kind: "event", eventId: "" },
+    ],
+  };
+  const issues = validateConversation(bad);
+  assert.ok(issues.some((i) => i.includes("startNodeId references missing node: gone")));
+  assert.ok(issues.some((i) => i.includes("repeats node id: a")));
+  assert.ok(issues.some((i) => i.includes('node "a" has no lineId')));
+  assert.ok(issues.some((i) => i.includes('node "a" has no speakerVoiceId')));
+  assert.ok(issues.some((i) => i.includes("next references missing node: ghost")));
+  assert.ok(issues.some((i) => i.includes('node "a" has no choices')));
+  assert.ok(issues.some((i) => i.includes("choice 0 has no text")));
+  assert.ok(issues.some((i) => i.includes("choice 0 next references missing node: nowhere")));
+  assert.ok(issues.some((i) => i.includes('node "d" has no eventId')));
+});
+
+interface DirectorSpies {
+  played: Array<{ lineId: string; locale?: string }>;
+  events: ConversationEmittedEvent[];
+  choices: ConversationChoiceView[];
+  hides: number;
+  stoppedLines: string[];
+  started: string[];
+  ended: string[];
+}
+
+function makeDirector(): { director: ConversationDirector; spy: DirectorSpies } {
+  const spy: DirectorSpies = {
+    played: [],
+    events: [],
+    choices: [],
+    hides: 0,
+    stoppedLines: [],
+    started: [],
+    ended: [],
+  };
+  const director = new ConversationDirector({
+    playLine: (lineId, context) =>
+      spy.played.push(context.locale ? { lineId, locale: context.locale } : { lineId }),
+    emitEvent: (event) => spy.events.push(event),
+    showChoices: (view) => spy.choices.push(view),
+    hideChoices: () => {
+      spy.hides += 1;
+    },
+    stopLine: (lineId) => spy.stoppedLines.push(lineId),
+    onStart: (id) => spy.started.push(id),
+    onEnd: (id) => spy.ended.push(id),
+  });
+  director.register(convGraph);
+  return { director, spy };
+}
+
+check("ConversationDirector plays lines, shows choices, emits events, and ends", () => {
+  const { director, spy } = makeDirector();
+  assert.equal(director.start("unknown"), false);
+  assert.equal(director.start("conv-test"), true);
+
+  assert.deepEqual(spy.started, ["conv-test"]);
+  assert.deepEqual(spy.events.map((e) => e.eventId), ["conv-start"]);
+  assert.deepEqual(spy.played, [{ lineId: "line-1" }]);
+  assert.equal(director.isActive(), true);
+  assert.equal(director.activeId(), "conv-test");
+
+  // A line-end for some other bark must not advance this conversation.
+  director.notifyLineEnd("other", false);
+  assert.equal(spy.played.length, 1);
+
+  director.notifyLineEnd("line-1", false);
+  assert.deepEqual(spy.played, [{ lineId: "line-1" }, { lineId: "line-2", locale: "en" }]);
+
+  director.notifyLineEnd("line-2", false);
+  assert.equal(spy.choices.length, 1);
+  assert.deepEqual(spy.choices[0], {
+    conversationId: "conv-test",
+    nodeId: "ask",
+    prompt: "Pick",
+    choices: [{ text: "Yes" }, { text: "No" }],
+  });
+
+  director.choose(0);
+  assert.equal(spy.hides, 1); // choosing hides the panel
+  assert.deepEqual(spy.events.map((e) => e.eventId), ["conv-start", "chose-yes"]);
+  assert.deepEqual(spy.events[1]?.payload, { value: 1 });
+  assert.deepEqual(spy.played.map((p) => p.lineId), ["line-1", "line-2", "line-4"]);
+
+  director.notifyLineEnd("line-4", false);
+  assert.equal(director.isActive(), false);
+  assert.deepEqual(spy.ended, ["conv-test"]);
+  assert.equal(spy.hides, 2); // ending hides the panel again
+});
+
+check("ConversationDirector ignores interrupted lines, and stop() halts a running line", () => {
+  const { director, spy } = makeDirector();
+  director.start("conv-test");
+  // An interrupted line does not advance (it was cut short elsewhere).
+  director.notifyLineEnd("line-1", true);
+  assert.deepEqual(spy.played.map((p) => p.lineId), ["line-1"]);
+  // A late natural end for the now-cleared line is ignored too.
+  director.notifyLineEnd("line-1", false);
+  assert.deepEqual(spy.played.map((p) => p.lineId), ["line-1"]);
+
+  // Starting a new conversation stops the current one (stops its waiting line).
+  const { director: d2, spy: s2 } = makeDirector();
+  d2.start("conv-test");
+  d2.start("conv-test");
+  assert.deepEqual(s2.stoppedLines, ["line-1"]);
+  assert.deepEqual(s2.ended, ["conv-test"]);
+  assert.deepEqual(s2.started, ["conv-test", "conv-test"]);
+
+  // choose/notify are no-ops once nothing is active.
+  const { director: d3, spy: s3 } = makeDirector();
+  d3.choose(0);
+  d3.notifyLineEnd("x", false);
+  assert.deepEqual(s3.played, []);
+});
+
+check("begin-conversation behavior emits start-conversation from its param", () => {
+  const registry = createBehaviorRegistry();
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined);
+  behavior.setEntities([
+    {
+      id: "npc",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Behavior: { scriptId: "begin-conversation", params: { conversationId: "conv-welcome" } },
+      },
+    },
+  ]);
+  // subscribeScriptMessage must come after setEntities (a rebuild clears the bus).
+  const started: string[] = [];
+  const unsub = behavior.subscribeScriptMessage("start-conversation", (envelope) => {
+    if (typeof envelope.payload.conversationId === "string") {
+      started.push(envelope.payload.conversationId);
+    }
+  });
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  assert.deepEqual(started, ["conv-welcome"]);
+  unsub();
+});
+
+check("starter conversation asset classifies, validates, and runs end to end", () => {
+  assert.equal(
+    inferAssetTypeFromPath("assets/x/CONV_Welcome.conversation.json"),
+    "conversation",
+  );
+  const conversation = JSON.parse(
+    readFileSync("public/assets/starter-content/Dialogue/CONV_Welcome.conversation.json", "utf8"),
+  ) as ConversationAsset;
+  const voice = JSON.parse(
+    readFileSync("public/assets/starter-content/Dialogue/DV_Narrator.dialoguevoice.json", "utf8"),
+  ) as DialogueVoiceAsset;
+  const dline = JSON.parse(
+    readFileSync("public/assets/starter-content/Dialogue/DL_Welcome.dialogue.json", "utf8"),
+  ) as DialogueLineAsset;
+  assert.deepEqual(
+    validateConversation(conversation, {
+      lineIds: new Set([dline.id]),
+      voiceIds: new Set([voice.id]),
+    }),
+    [],
+  );
+  assert.ok(
+    assetManifest.assets.some((a) => a.id === "conv-welcome" && assetType(a) === "conversation"),
+  );
+
+  const runner = new ConversationRunner(conversation);
+  const greet = runner.start();
+  assert.deepEqual(greet.step, {
+    kind: "line",
+    nodeId: "greet",
+    lineId: "dl-welcome",
+    speakerVoiceId: "dv-narrator",
+    locale: "en",
+  });
+  const choice = runner.advance();
+  assert.equal(choice?.step.kind, "choice");
+  const ready = runner.choose(0);
+  assert.deepEqual(ready?.events, [{ nodeId: "ready", eventId: "conversation-ready" }]);
+  assert.deepEqual(ready?.step, { kind: "end" });
 });
 
 // --- Audio Bus Lite (pure mix model) ------------------------------------------

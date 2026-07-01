@@ -7,6 +7,7 @@ export type AssetType =
   | "soundCue"
   | "dialogueVoice"
   | "dialogueLine"
+  | "conversation"
   | "animation"
   | "prefab"
   | "ui"
@@ -124,6 +125,7 @@ const SOUND_EXTENSIONS = new Set(["mp3", "ogg", "wav"]);
 const SOUND_CUE_EXTENSIONS = new Set(["soundcue.json"]);
 const DIALOGUE_VOICE_EXTENSIONS = new Set(["dialoguevoice.json"]);
 const DIALOGUE_LINE_EXTENSIONS = new Set(["dialogue.json"]);
+const CONVERSATION_EXTENSIONS = new Set(["conversation.json"]);
 const MATERIAL_EXTENSIONS = new Set(["material.json", "mat.json"]);
 const LEVEL_EXTENSIONS = new Set(["level.json", "layout.json"]);
 const UI_EXTENSIONS = new Set(["ui.json", "theme.json"]);
@@ -153,6 +155,7 @@ export const ASSET_TYPES: readonly AssetType[] = [
   "soundCue",
   "dialogueVoice",
   "dialogueLine",
+  "conversation",
   "animation",
   "prefab",
   "ui",
@@ -182,6 +185,7 @@ export function inferAssetTypeFromPath(path: string): AssetType | null {
   if (SOUND_EXTENSIONS.has(ext)) return "sound";
   if (SOUND_CUE_EXTENSIONS.has(compoundExtensionOf(lower))) return "soundCue";
   if (DIALOGUE_VOICE_EXTENSIONS.has(compoundExtensionOf(lower))) return "dialogueVoice";
+  if (CONVERSATION_EXTENSIONS.has(compoundExtensionOf(lower))) return "conversation";
   if (DIALOGUE_LINE_EXTENSIONS.has(compoundExtensionOf(lower))) return "dialogueLine";
   if (MATERIAL_EXTENSIONS.has(compoundExtensionOf(lower))) return "material";
   if (LEVEL_EXTENSIONS.has(compoundExtensionOf(lower))) return "level";
@@ -376,7 +380,7 @@ export function validateAssetManifest(
         code: "asset-type",
         assetId,
         message:
-          "`assetType` must be one of staticMesh, skeletalMesh, texture, material, sound, soundCue, dialogueVoice, dialogueLine, animation, prefab, ui, or level.",
+          "`assetType` must be one of staticMesh, skeletalMesh, texture, material, sound, soundCue, dialogueVoice, dialogueLine, conversation, animation, prefab, ui, or level.",
       });
     }
 

@@ -5888,6 +5888,7 @@ function isContentTypeFilter(value: string): value is ContentTypeFilter {
     value === "soundCue" ||
     value === "dialogueVoice" ||
     value === "dialogueLine" ||
+    value === "conversation" ||
     value === "animation" ||
     value === "prefab" ||
     value === "ui" ||
@@ -5905,6 +5906,7 @@ function formatContentTypeLabel(value: string): string {
   if (value === "soundCue") return "Sound Cues";
   if (value === "dialogueVoice") return "Dialogue Voices";
   if (value === "dialogueLine") return "Dialogue Lines";
+  if (value === "conversation") return "Conversations";
   if (value === "animation") return "Animations";
   if (value === "prefab") return "Prefabs";
   if (value === "level") return "Levels";
@@ -5940,6 +5942,7 @@ function formatContentTypeBadge(value: BrowserAssetItem["type"]): string {
   if (value === "soundCue") return "Sound Cue";
   if (value === "dialogueVoice") return "Dialogue Voice";
   if (value === "dialogueLine") return "Dialogue Line";
+  if (value === "conversation") return "Conversation";
   if (value === "animation") return "Animation";
   if (value === "prefab") return "Prefab";
   if (value === "ui") return "UI Widget";

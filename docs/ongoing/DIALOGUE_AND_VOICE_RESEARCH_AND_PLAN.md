@@ -1,8 +1,10 @@
 # Diyalog ve Voice Araştırması ve Forge Planı
 
-> Tarih: 2026-06-23 (Faz D1 uygulandı: 2026-07-01)
+> Tarih: 2026-06-23 (Faz D1/D2 uygulandı: 2026-07-01, Faz D3: 2026-07-01)
 > Kapsam: Unreal tarzı author edilmiş diyalog, dialogue voice metadata, altyazı, localization ve Sound Cue Lite ile ilişkisi.
-> Durum: Faz D1 (Dialogue Line + subtitle dikey kesiti) main üzerinde tamamlandı ve `build:verify` yeşil. Faz D2+ hâlâ planlama.
+> Durum: Faz D1 (Dialogue Line + subtitle), D2 (Dialogue editörü) ve D3 (Conversation
+> manager) main üzerinde tamamlandı ve `build:verify` yeşil (459 test). Faz D4
+> (localization/production pipeline) hâlâ planlama.
 
 ## Kısa sonuç
 
@@ -295,15 +297,54 @@ Minimum yararlı editor yüzeyi:
 - Editör hâlâ dinamik `?editor` import'unun arkasında; oyun paketine girmez
   (verify:dist strict yeşil).
 
-### Faz D3 - Conversation manager
+### Faz D3 - Conversation manager (TAMAMLANDI 2026-07-01)
 
-- [ ] `conversation` asset schema ekle.
-- [ ] Line sequence ve choice node modelini ekle.
-- [ ] Runtime conversation state machine ekle.
-- [ ] Existing script/message system üzerinden gameplay event hook'ları ekle.
-- [ ] Basit conversation UI ekle.
-- [ ] NPC interaction ile conversation başlatma örneği ekle.
-- [ ] Conversation flow testleri ekle.
+- [x] `conversation` asset schema ekle. (`engine/dialogue/conversationTypes.ts`:
+      `ConversationAsset` + `isConversationAsset`; manifest `conversation` tipi +
+      `.conversation.json` uzantısı)
+- [x] Line sequence ve choice node modelini ekle. (`ConversationNode` =
+      `line` | `choice` | `event`; line node `targetVoiceId`/`locale` ile resolver
+      context'ini besler, event node opsiyonel scalar `payload` taşır)
+- [x] Runtime conversation state machine ekle. (`conversationRunner.ts` saf/başsız
+      makine: `start`/`advance`/`choose` → `ConversationTransition`; event node'ları
+      duraklamadan yürür ve cycle guard ile sonlanır. `validateConversation` yapısal
+      doğrulama)
+- [x] Existing script/message system üzerinden gameplay event hook'ları ekle.
+      (`conversationDirector.ts` → `emitEvent` runtime'da `behaviorSubsystem.
+      emitScriptMessage(eventId, "conversation", payload)`; conversation
+      `start-conversation` script mesajıyla başlar)
+- [x] Basit conversation UI ekle. (`src/scene/conversationOverlay.ts` interaktif
+      seçenek paneli + `.forge-conversation` CSS; tıklama veya 1–9 tuşlarıyla seçim;
+      satır altyazısı hâlâ `SubtitleOverlay`'de)
+- [x] NPC interaction ile conversation başlatma örneği ekle. (`begin-conversation`
+      köprü behavior'ı `src/game/behaviors.ts` → NPC'nin `Interaction.Talk` gibi
+      olayına Message Binding ile bağlanır ve `start-conversation` yayınlar; starter
+      `CONV_Welcome.conversation.json`)
+- [x] Conversation flow testleri ekle. (`tools/engine-tests.ts`: runner walk/branch/
+      cycle, `validateConversation`, director orchestration/interrupt/stop/replace,
+      `begin-conversation` behavior, starter-asset uçtan uca — 459 test yeşil)
+
+**Uygulama notları / D4 için devir:**
+
+- Tetikleyiciler: `play-dialogue` (tek satır bark) ve `start-conversation`
+  (`payload: { conversationId }`) script mesajları. Runtime ikisini de
+  `behaviorSubsystem.subscribeScriptMessage` ile dinliyor; conversation için
+  `ConversationDirector` bir anda tek konuşma çalıştırır.
+- Satır ilerletme: `DialogueSubsystem.onLineEnd` → `director.notifyLineEnd`.
+  Director yalnızca beklediği satır **doğal** bittiğinde (`interrupted === false`)
+  bir sonraki node'a geçer; başka bir bark'ın/başka satırın bitişi veya kesinti
+  yok sayılır.
+- Event node'ları: fire-and-forget script mesajı olarak `conversation` source id'si
+  ile yayınlanır. Payload scalar (`string | number | boolean`) ile sınırlı.
+- Save-validator allowlist: D3'te conversation için editör save akışı **yok**
+  (görsel/list conversation editörü bilinçli olarak ertelendi — plandaki "Editor
+  ihtiyaçları" bölümüne bakınız). Bu yüzden `tools/saveValidator.ts` içine bir
+  conversation save-payload doğrulayıcısı eklenmedi; yalnızca `ASSET_TYPE_CATEGORY`'ye
+  `conversation: "dialogue"` girişi eklendi. D4/editör conversation save eklerken
+  CLAUDE.md save-validator gotcha'sı geçerli olacak.
+- Content Browser conversation asset'lerini tanır (badge/label/filter) ama henüz
+  bir "yeni conversation" stub'ı veya özel editör açmaz; `.conversation.json`
+  şimdilik elle/starter olarak yazılır.
 
 ### Faz D4 - Localization ve production pipeline
 

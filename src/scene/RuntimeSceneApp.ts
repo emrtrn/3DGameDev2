@@ -35,7 +35,10 @@ import {
   isDialogueVoiceAsset,
   type DialoguePlayContext,
 } from "@engine/dialogue/dialogueTypes";
+import { ConversationDirector } from "@engine/dialogue/conversationDirector";
+import { isConversationAsset } from "@engine/dialogue/conversationTypes";
 import { SubtitleOverlay } from "./subtitleOverlay";
+import { ConversationOverlay } from "./conversationOverlay";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { GamepadInputSource } from "@/input/gamepadInputSource";
 import { TouchInputSource, isTouchLikely } from "@/input/touchInputSource";
@@ -320,6 +323,12 @@ function mountSubtitleOverlay(): SubtitleOverlay | null {
   return host ? new SubtitleOverlay(host) : null;
 }
 
+/** Mounts the conversation choice overlay into `#ui-overlay`, or null when absent. */
+function mountConversationOverlay(): ConversationOverlay | null {
+  const host = typeof document !== "undefined" ? document.getElementById("ui-overlay") : null;
+  return host ? new ConversationOverlay(host) : null;
+}
+
 export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly renderer: WebGLRenderer;
   private readonly scene: Scene;
@@ -362,9 +371,41 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         ...(event.speakerName ? { speakerName: event.speakerName } : {}),
       }),
     onSubtitleHide: (lineId) => this.subtitleOverlay?.hide(lineId),
+    // Feeds line completion to the conversation director so it can advance a
+    // running conversation to the next node once a line's subtitle finishes.
+    onLineEnd: (info) => this.conversationDirector.notifyLineEnd(info.lineId, info.interrupted),
   });
   /** Unsubscribes the `play-dialogue` script-message trigger (released on dispose). */
   private dialogueUnsub: (() => void) | null = null;
+  /** Interactive choice panel for conversations (null when no #ui-overlay host). */
+  private readonly conversationOverlay = mountConversationOverlay();
+  /**
+   * Conversation runtime (Faz D3): walks authored `*.conversation.json` graphs,
+   * playing each line through {@link dialogueSubsystem}, showing choice UI, and
+   * emitting `event` nodes onto the script-message bus. Started by the
+   * `start-conversation` script message.
+   */
+  private readonly conversationDirector = new ConversationDirector({
+    playLine: (lineId, context) => this.dialogueSubsystem.playLine(lineId, context),
+    stopLine: (lineId) => this.dialogueSubsystem.stopLine(lineId),
+    emitEvent: (event) =>
+      this.behaviorSubsystem.emitScriptMessage(
+        event.eventId,
+        "conversation",
+        event.payload ?? {},
+      ),
+    showChoices: (view) =>
+      this.conversationOverlay?.show(
+        {
+          choices: view.choices,
+          ...(view.prompt !== undefined ? { prompt: view.prompt } : {}),
+        },
+        (index) => this.conversationDirector.choose(index),
+      ),
+    hideChoices: () => this.conversationOverlay?.hide(),
+  });
+  /** Unsubscribes the `start-conversation` script-message trigger (released on dispose). */
+  private conversationUnsub: (() => void) | null = null;
   private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
   /** Gamepad → action-map bridge (poll-only, fed once per frame in the loop). */
   private readonly gamepadInput = new GamepadInputSource(this.inputActions);
@@ -664,7 +705,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.gameStateStore = null;
     this.dialogueUnsub?.();
     this.dialogueUnsub = null;
+    this.conversationUnsub?.();
+    this.conversationUnsub = null;
+    this.conversationDirector.stop();
     this.subtitleOverlay?.dispose();
+    this.conversationOverlay?.dispose();
     this.keyboardInput.detach();
     this.gamepadInput.detach();
     this.touchInput?.detach();
@@ -1324,10 +1369,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Registers every `dialogueVoice` / `dialogueLine` manifest asset into the
-   * {@link dialogueSubsystem}, then subscribes the `play-dialogue` script message
-   * as the trigger. Gameplay/interactions emit `play-dialogue` with a `lineId`
-   * (and optional `speakerVoiceId` / `targetVoiceId` / `locale`) to start a line.
+   * Registers every `dialogueVoice` / `dialogueLine` / `conversation` manifest
+   * asset, then subscribes the `play-dialogue` and `start-conversation` script
+   * messages as triggers. Gameplay/interactions emit `play-dialogue` with a
+   * `lineId` (and optional `speakerVoiceId` / `targetVoiceId` / `locale`) to
+   * start a bark, or `start-conversation` with a `conversationId` to run a
+   * conversation graph.
    */
   private async setupDialogue(): Promise<void> {
     await this.loadDialogueAssets();
@@ -1350,16 +1397,33 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.dialogueSubsystem.playLine(lineId, context);
       },
     );
+
+    this.conversationUnsub?.();
+    this.conversationUnsub = this.behaviorSubsystem.subscribeScriptMessage(
+      "start-conversation",
+      (envelope) => {
+        const conversationId =
+          typeof envelope.payload.conversationId === "string"
+            ? envelope.payload.conversationId
+            : "";
+        if (conversationId) this.conversationDirector.start(conversationId);
+      },
+    );
   }
 
-  /** Fetches + registers dialogue voice/line assets from the manifest. */
+  /**
+   * Fetches + registers dialogue voice/line assets and conversation graphs from
+   * the manifest. Conversations are re-registered fresh each scene load (the
+   * director drops any running conversation and its stale registrations first).
+   */
   private async loadDialogueAssets(): Promise<void> {
     if (!this.assetLoader) return;
     const manifest = await this.assetLoader.loadManifest();
+    this.conversationDirector.clear();
     await Promise.all(
       manifest.assets.map(async (asset) => {
         const kind = assetType(asset);
-        if (kind !== "dialogueVoice" && kind !== "dialogueLine") return;
+        if (kind !== "dialogueVoice" && kind !== "dialogueLine" && kind !== "conversation") return;
         try {
           const response = await fetch(projectFileUrl(assetPath(asset)), { cache: "no-cache" });
           if (!response.ok) return;
@@ -1368,6 +1432,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
             this.dialogueSubsystem.registerVoice(data);
           } else if (kind === "dialogueLine" && isDialogueLineAsset(data)) {
             this.dialogueSubsystem.registerLine(data);
+          } else if (kind === "conversation" && isConversationAsset(data)) {
+            this.conversationDirector.register(data);
           }
         } catch {
           // Missing/malformed dialogue asset: skip it (the scene still plays).

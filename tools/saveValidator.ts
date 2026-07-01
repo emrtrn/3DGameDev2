@@ -3049,6 +3049,7 @@ const ASSET_TYPE_CATEGORY: Record<AssetType, string> = {
   soundCue: "soundCue",
   dialogueVoice: "dialogue",
   dialogueLine: "dialogue",
+  conversation: "dialogue",
   animation: "animation",
   prefab: "prefab",
   ui: "UI",

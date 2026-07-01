@@ -2337,6 +2337,33 @@
       "license": "Unknown"
     },
     {
+      "id": "conv-welcome",
+      "name": "CONV Welcome",
+      "assetType": "conversation",
+      "category": "Dialogue",
+      "path": "assets/starter-content/Dialogue/CONV_Welcome.conversation.json",
+      "tags": [
+        "starter",
+        "dialogue",
+        "conversation"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Dialogue",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 724
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "white-material",
       "name": "M_White",
       "assetType": "material",
