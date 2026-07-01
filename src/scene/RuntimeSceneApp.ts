@@ -364,6 +364,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private readonly dialogueSubsystem = new DialogueSubsystem({
     playAudio: (request) => this.playDialogueAudio(request),
+    // D4 localization: a line's localizationKey resolves its subtitle against the
+    // active `.loc.json` locale table (read live so a locale switch takes effect).
+    // Missing entries fall back to the authored text. Per-locale *audio* stays as
+    // context mappings, so no audio lookup is wired here.
+    localization: {
+      resolveSubtitle: (key) => this.localeRegistry?.resolveOptional(key),
+    },
     onSubtitleShow: (event) =>
       this.subtitleOverlay?.show({
         lineId: event.lineId,
@@ -1378,6 +1385,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private async setupDialogue(): Promise<void> {
     await this.loadDialogueAssets();
+    // Ensure subtitle localization works even for a scene with no HUD/menu (where
+    // `setupRuntimeUi` returns before loading locale tables). Reuses the registry
+    // already loaded for the UI when present; loads it on demand otherwise.
+    if (!this.localeRegistry) this.localeRegistry = await this.loadUiLocaleRegistry();
     // Re-subscribe from scratch: a scene rebuild clears message-bus subscriptions.
     this.dialogueUnsub?.();
     this.dialogueUnsub = this.behaviorSubsystem.subscribeScriptMessage(

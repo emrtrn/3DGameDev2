@@ -110,6 +110,18 @@ export class LocaleRegistry {
     return applyLocParams(template, params);
   }
 
+  /**
+   * Like {@link resolve} but returns `undefined` when the active locale's table
+   * has no entry for `key`, so callers that need a real fallback (e.g. dialogue
+   * subtitle localization) can tell "missing" apart from "resolved to the key".
+   */
+  resolveOptional(key: string, params?: Record<string, string>): string | undefined {
+    const table = this.active ? this.tables.get(this.active) : undefined;
+    const template = table?.strings[key];
+    if (template === undefined) return undefined;
+    return applyLocParams(template, params);
+  }
+
   /** Subscribes to active-locale changes; returns an unsubscribe handle. */
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);

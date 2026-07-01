@@ -2364,6 +2364,60 @@
       "license": "Unknown"
     },
     {
+      "id": "loc-en",
+      "name": "Localization EN",
+      "assetType": "ui",
+      "category": "Localization",
+      "path": "assets/starter-content/Localization/en.loc.json",
+      "tags": [
+        "starter",
+        "localization",
+        "locale"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 160
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "loc-tr",
+      "name": "Localization TR",
+      "assetType": "ui",
+      "category": "Localization",
+      "path": "assets/starter-content/Localization/tr.loc.json",
+      "tags": [
+        "starter",
+        "localization",
+        "locale"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 180
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "white-material",
       "name": "M_White",
       "assetType": "material",
@@ -20028,6 +20082,52 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 265
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "dialoguevoice001-dialoguevoice",
+      "name": "Dialoguevoice001.Dialoguevoice",
+      "assetType": "dialogueVoice",
+      "category": "Script",
+      "path": "assets/starter-content/Script/dialoguevoice001.dialoguevoice.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Script",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 126
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "line001-dialogue",
+      "name": "Line001.Dialogue",
+      "assetType": "dialogueLine",
+      "category": "Script",
+      "path": "assets/starter-content/Script/line001.dialogue.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Script",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 108
       },
       "license": "Unknown"
     }

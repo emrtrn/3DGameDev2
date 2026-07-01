@@ -86,7 +86,19 @@ import {
   resolveDialogueLine,
   validateDialogueLine,
   validateDialogueVoice,
+  type DialogueLocalizationSource,
 } from "../engine/dialogue/dialogueResolver";
+import {
+  buildRecordingSheet,
+  recordingSheetToCsv,
+  parseRecordingSheetCsv,
+  recordingSheetToJson,
+  parseRecordingSheetJson,
+  findMissingRecordings,
+  collectVoiceDirections,
+  findMissingLocalizedSubtitles,
+  buildLocaleTableFromSheet,
+} from "./dialoguePipeline";
 import {
   DialogueSubsystem,
   type DialogueAudioPlayback,
@@ -2487,6 +2499,208 @@ check("starter dialogue assets classify, validate, and resolve", () => {
   assert.ok(
     assetManifest.assets.some((a) => a.id === "dl-welcome" && assetType(a) === "dialogueLine"),
   );
+});
+
+// --- Dialogue & Voice (D4: localization + production pipeline) ----------------
+
+check("resolveDialogueLine localizes the subtitle by localizationKey with authored fallback", () => {
+  const line: DialogueLineAsset = {
+    schema: 1,
+    type: "dialogueLine",
+    id: "loc-line",
+    spokenText: "Hello there.",
+    contexts: [{ speakerVoiceId: "narrator", locale: "en", localizationKey: "greet" }],
+  };
+  const tr: DialogueLocalizationSource = {
+    resolveSubtitle: (key) => (key === "greet" ? "Merhaba." : undefined),
+  };
+  assert.equal(resolveDialogueLine(line, {}, tr).subtitleText, "Merhaba.");
+  // A missing key leaves the authored text in place (fallback policy).
+  assert.equal(
+    resolveDialogueLine(line, {}, { resolveSubtitle: () => undefined }).subtitleText,
+    "Hello there.",
+  );
+  // No source at all → authored text (localization is optional).
+  assert.equal(resolveDialogueLine(line, {}).subtitleText, "Hello there.");
+});
+
+check("resolveDialogueLine applies a per-locale recording override, else keeps the mapping audio", () => {
+  const line: DialogueLineAsset = {
+    schema: 1,
+    type: "dialogueLine",
+    id: "loc-audio",
+    spokenText: "Hi",
+    contexts: [
+      { speakerVoiceId: "narrator", audioSourceId: "snd-en", localizationKey: "hi" },
+    ],
+  };
+  const override: DialogueLocalizationSource = {
+    resolveSubtitle: () => undefined,
+    resolveAudio: (key) => (key === "hi" ? { sourceId: "snd-tr", sourceType: "soundCue" } : undefined),
+  };
+  const localized = resolveDialogueLine(line, {}, override);
+  assert.equal(localized.audioSourceId, "snd-tr");
+  assert.equal(localized.audioSourceType, "soundCue");
+  // No override → the authored recording (and its type) survive.
+  const plain = resolveDialogueLine(line, {}, { resolveSubtitle: () => undefined });
+  assert.equal(plain.audioSourceId, "snd-en");
+  assert.equal(plain.audioSourceType, "sound");
+});
+
+check("DialogueSubsystem.playLine localizes the subtitle and setLocalization(undefined) reverts", () => {
+  const line: DialogueLineAsset = {
+    schema: 1,
+    type: "dialogueLine",
+    id: "l",
+    spokenText: "Hello.",
+    contexts: [{ speakerVoiceId: "narrator", localizationKey: "greet" }],
+  };
+  let shown: DialogueSubtitleEvent | null = null;
+  const subsystem = new DialogueSubsystem({
+    voices: [dvNarrator],
+    lines: [line],
+    localization: { resolveSubtitle: (key) => (key === "greet" ? "Merhaba." : undefined) },
+    onSubtitleShow: (event) => {
+      shown = event;
+    },
+  });
+  subsystem.playLine("l");
+  assert.equal((shown as DialogueSubtitleEvent | null)?.text, "Merhaba.");
+  subsystem.stopAll();
+  subsystem.setLocalization(undefined);
+  subsystem.playLine("l");
+  assert.equal((shown as DialogueSubtitleEvent | null)?.text, "Hello.");
+});
+
+check("LocaleRegistry.resolveOptional feeds the runtime dialogue localization adapter", () => {
+  const registry = new LocaleRegistry();
+  registry.register(normalizeUiLocaleTable({ locale: "en", strings: { "dialogue.welcome": "Welcome!" } }));
+  registry.register(normalizeUiLocaleTable({ locale: "tr", strings: { "dialogue.welcome": "Hoş geldin!" } }));
+  assert.equal(registry.resolveOptional("dialogue.welcome"), "Welcome!");
+  assert.equal(registry.resolveOptional("missing.key"), undefined);
+  registry.setActiveLocale("tr");
+  assert.equal(registry.resolveOptional("dialogue.welcome"), "Hoş geldin!");
+
+  // The exact adapter RuntimeSceneApp wires into the DialogueSubsystem.
+  const adapter: DialogueLocalizationSource = { resolveSubtitle: (key) => registry.resolveOptional(key) };
+  const line: DialogueLineAsset = {
+    schema: 1,
+    type: "dialogueLine",
+    id: "w",
+    spokenText: "Welcome.",
+    contexts: [{ speakerVoiceId: "narrator", localizationKey: "dialogue.welcome" }],
+  };
+  assert.equal(resolveDialogueLine(line, {}, adapter).subtitleText, "Hoş geldin!");
+});
+
+check("dialogue pipeline builds a recording sheet and round-trips CSV/JSON", () => {
+  const voiceless: DialogueLineAsset = {
+    schema: 1,
+    type: "dialogueLine",
+    id: "no-ctx",
+    spokenText: "Bark!",
+    contexts: [],
+  };
+  const rich: DialogueLineAsset = {
+    schema: 1,
+    type: "dialogueLine",
+    id: "rich",
+    spokenText: "Line, with comma",
+    subtitleText: 'Shown "quoted"\nsecond line',
+    voiceActorDirection: "Whisper",
+    mature: true,
+    contexts: [
+      {
+        speakerVoiceId: "narrator",
+        targetVoiceIds: ["player", "guard"],
+        locale: "en",
+        localizationKey: "k1",
+        audioSourceId: "snd-1",
+        audioSourceType: "sound",
+      },
+      { speakerVoiceId: "narrator", locale: "tr", localizationKey: "k1" },
+    ],
+  };
+  const rows = buildRecordingSheet([voiceless, rich]);
+  assert.equal(rows.length, 3);
+  assert.equal(rows[0]?.contextIndex, -1);
+  assert.equal(rows[1]?.targetVoiceIds, "player|guard");
+  assert.equal(rows[1]?.hasRecording, true);
+  assert.equal(rows[2]?.hasRecording, false);
+
+  // CSV round-trip survives commas, quotes and embedded newlines.
+  assert.deepEqual(parseRecordingSheetCsv(recordingSheetToCsv(rows)), rows);
+  // JSON round-trip too.
+  assert.deepEqual(parseRecordingSheetJson(recordingSheetToJson(rows)), rows);
+});
+
+check("dialogue pipeline reports missing recordings, directions, and missing localized subtitles", () => {
+  const line: DialogueLineAsset = {
+    schema: 1,
+    type: "dialogueLine",
+    id: "rep",
+    spokenText: "Hello.",
+    voiceActorDirection: "Warm.",
+    contexts: [
+      { speakerVoiceId: "narrator", locale: "en", localizationKey: "greet", audioSourceId: "snd" },
+      { speakerVoiceId: "narrator", locale: "tr", localizationKey: "greet" },
+    ],
+  };
+  const missing = findMissingRecordings([line]);
+  assert.equal(missing.length, 1);
+  assert.equal(missing[0]?.locale, "tr");
+
+  assert.deepEqual(collectVoiceDirections([line]), [
+    { lineId: "rep", spokenText: "Hello.", voiceActorDirection: "Warm." },
+  ]);
+
+  // Pre-build report: "greet" has no string in the tr table.
+  assert.deepEqual(
+    findMissingLocalizedSubtitles(
+      [line],
+      [
+        { locale: "en", strings: { greet: "Hello." } },
+        { locale: "tr", strings: {} },
+      ],
+    ),
+    [{ locale: "tr", localizationKey: "greet", lineIds: ["rep"] }],
+  );
+
+  // A translator fills the tr row → exports a tr locale string table.
+  const rows = buildRecordingSheet([line]);
+  const trRow = rows[1];
+  assert.ok(trRow);
+  trRow.subtitleText = "Merhaba.";
+  assert.equal(buildLocaleTableFromSheet(rows, "tr").greet, "Merhaba.");
+});
+
+check("starter localization tables classify as ui and localize the welcome line", () => {
+  assert.equal(inferAssetTypeFromPath("assets/x/en.loc.json"), "ui");
+  const enTable = JSON.parse(
+    readFileSync("public/assets/starter-content/Localization/en.loc.json", "utf8"),
+  ) as { strings: Record<string, string> };
+  const trTable = JSON.parse(
+    readFileSync("public/assets/starter-content/Localization/tr.loc.json", "utf8"),
+  ) as { strings: Record<string, string> };
+  const registry = new LocaleRegistry();
+  registry.register(normalizeUiLocaleTable(enTable));
+  registry.register(normalizeUiLocaleTable(trTable));
+  const dline = JSON.parse(
+    readFileSync("public/assets/starter-content/Dialogue/DL_Welcome.dialogue.json", "utf8"),
+  ) as DialogueLineAsset;
+  const adapter: DialogueLocalizationSource = { resolveSubtitle: (key) => registry.resolveOptional(key) };
+  // `en` active first (registration order).
+  assert.equal(
+    resolveDialogueLine(dline, { locale: "en" }, adapter).subtitleText,
+    enTable.strings["dialogue.welcome"],
+  );
+  registry.setActiveLocale("tr");
+  assert.equal(
+    resolveDialogueLine(dline, { locale: "en" }, adapter).subtitleText,
+    trTable.strings["dialogue.welcome"],
+  );
+  assert.ok(assetManifest.assets.some((a) => a.id === "loc-en" && assetType(a) === "ui"));
+  assert.ok(assetManifest.assets.some((a) => a.id === "loc-tr" && assetType(a) === "ui"));
 });
 
 // --- Conversation (D3: runner + director + validation) ------------------------

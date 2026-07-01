@@ -15,6 +15,7 @@ import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import {
   estimateSubtitleDurationSeconds,
   resolveDialogueLine,
+  type DialogueLocalizationSource,
   type ResolvedDialogueLine,
 } from "./dialogueResolver";
 import type {
@@ -81,6 +82,8 @@ export interface DialogueSubsystemOptions {
   voices?: Iterable<DialogueVoiceAsset>;
   lines?: Iterable<DialogueLineAsset>;
   playAudio?: DialogueAudioPlayer;
+  /** Per-locale subtitle/recording lookup (D4); absent = authored text/audio only. */
+  localization?: DialogueLocalizationSource;
   onSubtitleShow?: (event: DialogueSubtitleEvent) => void;
   onSubtitleHide?: (lineId: string) => void;
   onLineStart?: (info: DialogueLineStartInfo) => void;
@@ -99,6 +102,7 @@ export class DialogueSubsystem implements Subsystem {
   private readonly lines = new Map<string, DialogueLineAsset>();
   private readonly active = new Map<string, ActiveLine>();
   private playAudio?: DialogueAudioPlayer;
+  private localization: DialogueLocalizationSource | undefined = undefined;
   private onSubtitleShow?: (event: DialogueSubtitleEvent) => void;
   private onSubtitleHide?: (lineId: string) => void;
   private onLineStart?: (info: DialogueLineStartInfo) => void;
@@ -108,6 +112,7 @@ export class DialogueSubsystem implements Subsystem {
     for (const voice of options.voices ?? []) this.registerVoice(voice);
     for (const line of options.lines ?? []) this.registerLine(line);
     if (options.playAudio) this.playAudio = options.playAudio;
+    if (options.localization) this.localization = options.localization;
     if (options.onSubtitleShow) this.onSubtitleShow = options.onSubtitleShow;
     if (options.onSubtitleHide) this.onSubtitleHide = options.onSubtitleHide;
     if (options.onLineStart) this.onLineStart = options.onLineStart;
@@ -120,6 +125,11 @@ export class DialogueSubsystem implements Subsystem {
 
   registerLine(line: DialogueLineAsset): void {
     this.lines.set(line.id, line);
+  }
+
+  /** Sets (or clears) the per-locale subtitle/recording lookup used by `playLine`. */
+  setLocalization(localization: DialogueLocalizationSource | undefined): void {
+    this.localization = localization;
   }
 
   getVoice(id: string): DialogueVoiceAsset | undefined {
@@ -144,7 +154,7 @@ export class DialogueSubsystem implements Subsystem {
     const line = this.lines.get(lineId);
     if (!line) return { played: false, hasAudio: false, durationSeconds: 0 };
 
-    const resolved = resolveDialogueLine(line, context);
+    const resolved = resolveDialogueLine(line, context, this.localization);
 
     // Restart an already-active line without firing its end callbacks.
     const existing = this.active.get(lineId);

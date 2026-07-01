@@ -1,10 +1,11 @@
 # Diyalog ve Voice Araştırması ve Forge Planı
 
-> Tarih: 2026-06-23 (Faz D1/D2 uygulandı: 2026-07-01, Faz D3: 2026-07-01)
+> Tarih: 2026-06-23 (Faz D1/D2 uygulandı: 2026-07-01, Faz D3: 2026-07-01, Faz D4: 2026-07-01)
 > Kapsam: Unreal tarzı author edilmiş diyalog, dialogue voice metadata, altyazı, localization ve Sound Cue Lite ile ilişkisi.
-> Durum: Faz D1 (Dialogue Line + subtitle), D2 (Dialogue editörü) ve D3 (Conversation
-> manager) main üzerinde tamamlandı ve `build:verify` yeşil (459 test). Faz D4
-> (localization/production pipeline) hâlâ planlama.
+> Durum: Faz D1 (Dialogue Line + subtitle), D2 (Dialogue editörü), D3 (Conversation
+> manager) ve D4 (localization + production pipeline) main üzerinde tamamlandı ve
+> `build:verify` yeşil (466 test). Kalan tek açık uç: D4 editör yüzeyi (localization
+> alanlarını Dialogue Line editöründe düzenleme henüz yok — bkz. D4 devir notları).
 
 ## Kısa sonuç
 
@@ -346,14 +347,56 @@ Minimum yararlı editor yüzeyi:
   bir "yeni conversation" stub'ı veya özel editör açmaz; `.conversation.json`
   şimdilik elle/starter olarak yazılır.
 
-### Faz D4 - Localization ve production pipeline
+### Faz D4 - Localization ve production pipeline (TAMAMLANDI 2026-07-01)
 
-- [ ] Localization key ve per-locale mapping desteği ekle.
-- [ ] Script/recording sheet için CSV/JSON import/export ekle.
-- [ ] Missing recording raporu ekle.
-- [ ] Voice actor direction export ekle.
-- [ ] Locale bazlı subtitle/audio fallback policy ekle.
-- [ ] Build öncesi missing localized asset raporu ekle.
+- [x] Localization key ve per-locale mapping desteği ekle.
+      (`resolveDialogueLine(line, context, localization?)` → seçilen context'in
+      `localizationKey`'i ile per-locale subtitle + opsiyonel per-locale kayıt
+      çözümü. `DialogueLocalizationSource` arayüzü `dialogueResolver.ts`'te;
+      `DialogueSubsystem` `localization` option'ı + `setLocalization()` ile taşır.)
+- [x] Script/recording sheet için CSV/JSON import/export ekle.
+      (`tools/dialoguePipeline.ts`: `buildRecordingSheet` → satır/context başına
+      düz satır; `recordingSheetToCsv`/`parseRecordingSheetCsv` RFC4180-vari
+      quote/virgül/newline kaçışıyla round-trip; `recordingSheetToJson`/
+      `parseRecordingSheetJson`.)
+- [x] Missing recording raporu ekle. (`findMissingRecordings` — `audioSourceId`
+      atanmamış her context.)
+- [x] Voice actor direction export ekle. (`collectVoiceDirections` — direction
+      notu olan her satır.)
+- [x] Locale bazlı subtitle/audio fallback policy ekle. (Subtitle: localized →
+      authored subtitle → spoken text; missing key `undefined` döndürünce authored
+      metin kalır — `LocaleRegistry.resolveOptional` bu ayrımı sağlar. Audio:
+      per-locale kayıt zaten D1 context scoring'iyle çözülüyor: locale-exact →
+      locale-agnostic; ek olarak `resolveAudio` per-locale override kancası var.)
+- [x] Build öncesi missing localized asset raporu ekle. (`findMissingLocalizedSubtitles`
+      pure fonksiyonu + `tools/dialogueReport.ts` / `tools/dialogue-report.mjs` CLI,
+      `npm run dialogue:report [-- --strict]`; manifest'ten dialogueLine + `.loc.json`
+      okur, eksik kayıt/localized subtitle/direction raporlar, `--strict` ile CI'da
+      fail eder.)
+
+**Uygulama notları / kalan iş:**
+
+- Runtime bağlama: `RuntimeSceneApp` DialogueSubsystem'e canlı bir adapter veriyor
+  (`{ resolveSubtitle: (key) => this.localeRegistry?.resolveOptional(key) }`), yani
+  bir satırın `localizationKey`'i aktif `.loc.json` locale tablosundan çözülür ve
+  locale değişince otomatik güncellenir. `setupDialogue` HUD/menü olmayan sahnede
+  bile locale tablolarını yükler (guard). Per-locale **audio** runtime'da context
+  mapping'lerle kalıyor; UI loc string tablosunda ses olmadığı için `resolveAudio`
+  runtime'da bağlanmadı (sadece resolver-seviyesi kanca + test).
+- `.loc.json` sınıflandırması: `engine/assets/manifest.ts` UI_EXTENSIONS'a
+  `loc.json` eklendi — artık hem UI hem dialogue localization tabloları manifest'te
+  `ui` tipine sınıflanır (`loadUiLocaleRegistry` zaten `.loc.json` süzer). Starter
+  `en.loc.json` / `tr.loc.json` (`assets/starter-content/Localization/`) manifest'e
+  `loc-en` / `loc-tr` olarak kaydedildi ve `dialogue.welcome` anahtarını çevirir.
+- Save-validator: D4 için dialogue-localization editör save akışı **yok**, bu yüzden
+  `tools/saveValidator.ts` sidecar allowlist'ine dokunulmadı. `.loc.json` tabloları
+  şimdilik elle/starter yazılır. Bir Dialogue Line editörü localization alanlarını
+  (veya bir loc-table editörü) save etmeye başlarsa CLAUDE.md save-validator
+  gotcha'sı geçerli olacak.
+- Kalan iş (editör): Dialogue Line editöründe henüz per-locale subtitle önizleme
+  veya loc-table düzenleme yüzeyi yok; pipeline şu an CLI + pure fonksiyonlar
+  düzeyinde. D3'te conversation editörü nasıl ertelendiyse, localization editör
+  yüzeyi de bilinçli ertelendi.
 
 ### Kapsam dışı / ayrı başlık
 

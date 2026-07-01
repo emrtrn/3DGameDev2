@@ -18,6 +18,24 @@ import {
   type DialogueVoiceAsset,
 } from "./dialogueTypes";
 
+/** Per-locale recording override returned by a {@link DialogueLocalizationSource}. */
+export interface DialogueLocalizedAudio {
+  sourceId: string;
+  sourceType?: DialogueAudioSourceType;
+}
+
+/**
+ * Injected localization lookup (D4). Resolves a context mapping's
+ * `localizationKey` to per-locale subtitle text and, optionally, a per-locale
+ * recording. Returning `undefined` means "no entry for this locale" — the
+ * resolver then keeps the authored text/recording, which is the fallback policy
+ * (localized → authored subtitle → spoken text; localized audio → mapping audio).
+ */
+export interface DialogueLocalizationSource {
+  resolveSubtitle(key: string, locale?: string): string | undefined;
+  resolveAudio?(key: string, locale?: string): DialogueLocalizedAudio | undefined;
+}
+
 /** A line resolved for playback: subtitle text plus the chosen audio source. */
 export interface ResolvedDialogueLine {
   lineId: string;
@@ -112,8 +130,9 @@ function scoreContextMapping(
 export function resolveDialogueLine(
   line: DialogueLineAsset,
   context: DialoguePlayContext = {},
+  localization?: DialogueLocalizationSource,
 ): ResolvedDialogueLine {
-  const subtitleText =
+  let subtitleText =
     line.subtitleText && line.subtitleText.length > 0 ? line.subtitleText : line.spokenText;
 
   let bestIndex = -1;
@@ -128,20 +147,43 @@ export function resolveDialogueLine(
   });
 
   const chosen = bestIndex >= 0 ? line.contexts[bestIndex] : undefined;
+
+  let audioSourceId = chosen?.audioSourceId;
+  let audioSourceType: DialogueAudioSourceType =
+    chosen?.audioSourceType && isDialogueAudioSourceType(chosen.audioSourceType)
+      ? chosen.audioSourceType
+      : "sound";
+
+  // D4 localization: the chosen mapping's localizationKey resolves per-locale
+  // subtitle text (and optionally a per-locale recording) through the injected
+  // source. A missing entry (undefined) leaves the authored text/recording in
+  // place, so a locale with no translation still shows the script text.
+  const localizationKey = chosen?.localizationKey;
+  if (localizationKey && localization) {
+    const localizedSubtitle = localization.resolveSubtitle(localizationKey, context.locale);
+    if (localizedSubtitle !== undefined && localizedSubtitle.length > 0) {
+      subtitleText = localizedSubtitle;
+    }
+    const localizedAudio = localization.resolveAudio?.(localizationKey, context.locale);
+    if (localizedAudio && localizedAudio.sourceId) {
+      audioSourceId = localizedAudio.sourceId;
+      if (localizedAudio.sourceType && isDialogueAudioSourceType(localizedAudio.sourceType)) {
+        audioSourceType = localizedAudio.sourceType;
+      }
+    }
+  }
+
   const resolved: ResolvedDialogueLine = {
     lineId: line.id,
     subtitleText,
-    audioSourceType:
-      chosen?.audioSourceType && isDialogueAudioSourceType(chosen.audioSourceType)
-        ? chosen.audioSourceType
-        : "sound",
+    audioSourceType,
     mature: line.mature === true,
     matchedContextIndex: bestIndex,
   };
   const speakerVoiceId = chosen?.speakerVoiceId ?? context.speakerVoiceId;
   if (speakerVoiceId) resolved.speakerVoiceId = speakerVoiceId;
-  if (chosen?.audioSourceId) resolved.audioSourceId = chosen.audioSourceId;
-  if (chosen?.localizationKey) resolved.localizationKey = chosen.localizationKey;
+  if (audioSourceId) resolved.audioSourceId = audioSourceId;
+  if (localizationKey) resolved.localizationKey = localizationKey;
   return resolved;
 }
 
