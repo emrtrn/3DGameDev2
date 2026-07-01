@@ -1,0 +1,54 @@
+name: CI
+
+# Automates the local `build:verify` discipline: every push/PR to main runs
+# type-check + engine tests + build + strict dist scan, plus asset-manifest
+# health. Mirrors the gate documented in
+# docs/ongoing/PLATFORM_FOUNDATIONS_CHECKLIST.md (P0).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A newer push to the same ref cancels an in-flight run for that ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: type-check · engine tests · build · dist scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # build:verify = build (tsc --noEmit + vite build) + test:engine
+      # (466 checks) + verify:dist -- --strict. Single gate, matches the
+      # local pre-`[x]` ritual.
+      - name: Verify (type-check, engine tests, build, strict dist scan)
+        run: npm run build:verify
+
+      - name: Asset manifest health
+        run: npm run check:assets
+
+      # P0.3 — proof that packaging works; short retention keeps storage light.
+      - name: Upload dist artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 7
+          if-no-files-found: error

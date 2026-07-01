@@ -197,6 +197,25 @@
         },
         {
           "position": [
+            4.01,
+            0,
+            -4
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            0,
+            90
+          ],
+          "scale": [
+            2,
+            1,
+            2
+          ]
+        },
+        {
+          "position": [
             -2.05,
             3.2,
             -2.65

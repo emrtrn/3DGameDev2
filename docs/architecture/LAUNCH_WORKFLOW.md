@@ -36,3 +36,23 @@ the production build.
 `npm run build` produces the game in `dist/`. The editor is a separate chunk that
 the default (game) route never loads, and the dev middleware is dev-only — so the
 package contains no editor UI or authoring server.
+
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs on every push and pull request to `main`. It is
+the automated mirror of the local pre-`[x]` gate:
+
+- `npm ci` on Node 24 (npm cache enabled via `actions/setup-node`).
+- `npm run build:verify` — `tsc --noEmit` + `vite build` + `test:engine`
+  (the engine test suite) + `verify:dist -- --strict` (production bundle must
+  contain no editor/dev-endpoint strings).
+- `npm run check:assets` — asset-manifest health.
+- On success, uploads `dist/` as a 7-day artifact (proof packaging works).
+
+Runs on the same ref cancel in-flight predecessors (`concurrency`). A deliberate
+type error or a leaked editor string turns CI red; fixing it turns it green.
+Deploy is intentionally **not** part of CI — each game fork picks its own deploy
+target (see `docs/planned/GAME_FORK_WORKFLOW.md`).
+
+Locally you can run the identical gate any time with `npm run build:verify`
+(add `npm run check:assets` for the asset check).

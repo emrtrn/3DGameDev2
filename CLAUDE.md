@@ -51,6 +51,10 @@ engine/editor.
   Manifest paths are relative to the public root.
 - After editing TypeScript, run `npx tsc --noEmit`; the dev server skips
   type-checking.
+- **CI** (`.github/workflows/ci.yml`) runs `build:verify`
+  (`tsc --noEmit` + `vite build` + `test:engine` + `verify:dist --strict`) and
+  `check:assets` on every push/PR to `main` — the automated mirror of the local
+  gate. Keep both green; deploy stays out of CI (per-fork concern).
 - **Save-validator allowlist gotcha:** any new `LayoutPlacement` /
   `LayoutCharacter` / `LayoutLightActor` / `LayoutReflectionPlane` /
   `LayoutBlockingVolume` field — or any new field on a singleton environment actor
